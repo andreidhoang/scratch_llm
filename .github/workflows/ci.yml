@@ -1,0 +1,38 @@
+name: ci
+
+# Green CI from day one (spec §5.1). Fast, CPU-only: lint + types + the smoke
+# test gate. GPU-marked tests are skipped here and run on the rented box.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install (dev, CPU-only)
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Ruff (lint + import order)
+        run: ruff check src tests
+
+      - name: Ruff (format check)
+        run: ruff format --check src tests
+
+      - name: Pyright (types)
+        run: pyright
+
+      - name: Pytest (CPU smoke gate)
+        run: pytest -m "not gpu and not slow" --cov=reasoning_llm

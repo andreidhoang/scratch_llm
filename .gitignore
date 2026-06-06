@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# OS
+.DS_Store
+
+# Data / artifacts — never commit weights, datasets, or raw rollouts
+data/raw/
+data/cache/
+*.bin
+*.safetensors
+*.pt
+*.gguf
+checkpoints/
+
+# Run outputs — manifests are committed, large logs/traces are not
+runs/**/rollouts/
+runs/**/*.log
+wandb/
+*.nsys-rep
+*.ncu-rep
+
+# Secrets
+.env
+*.key
+
+# Course reference PDFs — read-only material, not source
+docs/*.pdf
