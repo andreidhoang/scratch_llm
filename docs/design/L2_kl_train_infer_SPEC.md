@@ -22,22 +22,27 @@ genuinely different engines on the same model.
 - **Train = HF transformers eager** (`HFReferenceBackend`): teacher-forces the same (prompt,
   response) to the per-token policy log π under a plain eager forward — the "training" engine.
 
-## 3. The honest limitation (and why the estimator)
+## 3. Exact full-vocab KL (HF pair) vs sampled estimator (real SGLang)
 
-A serving engine returns only **taken-token** logprobs, not the full-vocab distribution — the caveat
-`utils/monitors.py` documents. So the full-vocab `monitors.mean_kl` (used by the CPU scaffold) is
-unavailable here. Instead `kl_train_infer` is the **sampled k3 estimator** over the rollout tokens:
-`r = exp(logp_train − logp_serve)`, `KL ≈ mean(r − 1 − log r) ≥ 0` (Schulman). The exact, rigorous
-per-token drift is the **IS ratio** `exp(logp_train − logp_serve)` + ESS (`monitors.importance_ratios`,
-`normalized_ess`). HALT@0.10 applies to the estimator.
+Because the Ada stand-in uses **two HF engines, both of which expose full logits**, `kl_train_infer`
+is the **EXACT full-vocab KL** via `monitors.mean_kl(train_rows, serve_rows)` — note the order:
+p = train first, so it is `KL(train‖infer)`, the metric's defined direction (not the reverse). No
+sampled estimator, no truncation bias, evaluated at every realized context. IS ratios + ESS
+(`monitors.importance_ratios`, `normalized_ess`) and the direction-independent `mean|Δlogp|`
+corroborate. HALT@0.10 applies to the exact KL.
+
+> **Why this matters / the deferred case:** a *real* serving engine (SGLang) returns only the
+> **taken-token** logprobs, not the full vocab — the caveat `monitors.py` flags. There `mean_kl` is
+> unavailable and `kl_train_infer` must be the sampled **k3** estimator `mean(r − 1 − log r)`,
+> `r = p_train/p_serve`, with the direction set by *which engine drew the tokens*. That path is
+> deferred to a Hopper box (ADR-0008); on the HF pair we get the exact number.
 
 ## 4. The falsifiable demonstration
 
-> Train in **bf16** (matches serve) ⇒ *kernel-only* drift ⇒ small `kl_train_infer` (HALT ok).
-> Train in **fp32** (≠ serve bf16) ⇒ *precision* drift ⇒ larger `kl_train_infer` (toward HALT).
-
-Same model, same tokenizer, same sampled tokens — so the only variables are kernels and precision,
-which is exactly what the metric must isolate.
+> Train in **bf16** (matches serve storage) vs **fp32** — predicted: fp32 drifts *more* (precision
+> mismatch). **This prediction is wrong** (see §5): the driver is *accumulation* precision + kernel,
+> not storage dtype. Same model / tokenizer / sampled tokens, so kernel and precision are the only
+> variables — exactly what the metric must isolate.
 
 ## 5. Result (measured, RTX 4090)
 
@@ -45,18 +50,20 @@ which is exactly what the metric must isolate.
 > via the HF engine pair: serve = sdpa/bf16, on Qwen2.5-0.5B-Instruct, 4 prompts / 185 response
 > tokens, temp 0.7. `sglang_client.py` stands ready for a Hopper box.
 
-| train engine | kl_train_infer (k3) | IS mean | ESS | mean \|Δlogp\| | HALT@0.10 |
+| train engine | kl_train_infer = KL(train‖infer), exact | IS mean | ESS | mean \|Δlogp\| | HALT@0.10 |
 |---|---|---|---|---|---|
-| eager / **bf16** (kernel only) | **0.0141** | 1.025 | 0.954 | 0.057 | ok |
-| eager / **fp32** (kernel + precision) | **0.0022** | 1.004 | 0.996 | 0.030 | ok |
+| eager / **bf16** (kernel only) | **0.00982** | 1.025 | 0.954 | 0.057 | ok |
+| eager / **fp32** (kernel + precision) | **0.00173** | 1.004 | 0.996 | 0.030 | ok |
 
 **Prediction FALSIFIED — and the falsification is the finding.** I predicted fp32-train would drift
-*more* from bf16-serve (precision mismatch). The opposite held: **eager/fp32 is ~6× closer to
+*more* from bf16-serve (precision mismatch). The opposite held: **eager/fp32 is ~5.7× closer to
 sdpa/bf16 than eager/bf16 is.** Mechanism: **`F.scaled_dot_product_attention` accumulates the
 softmax/PV in fp32 even when the tensors are bf16**, so sdpa/bf16 is effectively fp32-precision
 attention — and *eager/bf16* (true bf16 accumulation) is the real outlier, while *eager/fp32* nearly
 matches the serve engine. **The drift driver is accumulation precision + kernel choice, not the
 storage dtype.** That is precisely the mechanistic "why" of `kl_train_infer` (A2.3's teaching point).
+The direction-independent `mean|Δlogp|` (0.057 vs 0.030) corroborates the ordering, so it is not an
+artifact of the KL direction or estimator.
 
 Both values sit well under HALT@0.10 — expected for the same fp32-master weights with no quantized
 KV — yet are clearly nonzero, so the metric is live and sensitive. A real serving engine with fp8 /

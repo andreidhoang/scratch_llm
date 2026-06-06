@@ -77,17 +77,29 @@ class HFReferenceBackend:
         )
 
     @torch.no_grad()
-    def score(self, prompt_ids: Sequence[int], response_ids: Sequence[int]) -> list[float]:
-        """Teacher-forced per-token policy log π(response_t | prompt + response_<t>) of the taken
-        tokens — one engine's side of `kl_train_infer`. Diagnostic only (no grad)."""
+    def _response_logprob_rows(
+        self, prompt_ids: Sequence[int], response_ids: Sequence[int]
+    ) -> torch.Tensor:
+        """Full per-position ``log_softmax`` rows that predict each response token: (T_resp, vocab),
+        on CPU. Response token at sequence index p+i is predicted by the logit row at p+i-1."""
         if len(prompt_ids) == 0:
             raise ValueError("prompt_ids must be non-empty")
-        if not response_ids:
-            return []
         p = len(prompt_ids)
         seq = list(prompt_ids) + list(response_ids)
         x = torch.tensor([seq], dtype=torch.long, device=self.device)
-        logits = self.model(x).logits[0]  # (seq_len, vocab)
-        log_probs = torch.log_softmax(logits.float(), dim=-1)
-        # response token at sequence index p+i is predicted by the logit row at p+i-1.
-        return [float(log_probs[p + i - 1, tok]) for i, tok in enumerate(response_ids)]
+        log_probs = torch.log_softmax(self.model(x).logits[0].float(), dim=-1)
+        return log_probs[p - 1 : p - 1 + len(response_ids)].cpu()
+
+    def score(self, prompt_ids: Sequence[int], response_ids: Sequence[int]) -> list[float]:
+        """Teacher-forced per-token policy log π of the taken tokens (IS-ratio input). No grad."""
+        if not response_ids:
+            return []
+        rows = self._response_logprob_rows(prompt_ids, response_ids)
+        return [float(rows[i, tok]) for i, tok in enumerate(response_ids)]
+
+    def distribution_logprobs(
+        self, prompt_ids: Sequence[int], response_ids: Sequence[int]
+    ) -> torch.Tensor:
+        """Full ``log_softmax`` rows for the response positions — the input to the EXACT full-vocab
+        ``monitors.mean_kl`` (both HF engines expose full logits, so no sampled estimator needed)."""
+        return self._response_logprob_rows(prompt_ids, response_ids)

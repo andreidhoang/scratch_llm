@@ -9,10 +9,12 @@ train↔infer drift — **attention kernel** and **precision**:
   - serve = sdpa + bf16  (the fast inference path)
   - train = eager + {bf16, fp32}  (the reference forward; fp32 adds precision drift)
 
-For rollouts sampled by serve, each engine's teacher-forced per-token log π is compared with
-`utils/monitors` (IS ratios + ESS) and a sampled k3 KL estimator = `kl_train_infer` vs HALT@0.10.
-A serving engine exposes only taken-token logprobs, so this is the sampled estimator, not the
-full-vocab `monitors.mean_kl` — the honest limitation `monitors.py` flags.
+Both HF engines expose full logits, so `kl_train_infer = KL(train‖infer)` is the EXACT full-vocab
+KL via `monitors.mean_kl` (p=train first → correct direction), not a sampled estimator. IS ratios +
+ESS (`monitors`) and direction-independent mean|Δlogp| corroborate. HALT@0.10.
+
+(A real SGLang serve engine returns only taken-token logprobs — there the k3 sampled estimator and
+the truncation caveat in `monitors.py` would apply; that path is deferred to a Hopper box.)
 
 Run on the GPU box:  python bench/kl_train_infer.py
 """
@@ -26,6 +28,7 @@ from reasoning_llm.sampling import SamplingParams
 from reasoning_llm.utils.monitors import (
     KL_TRAIN_INFER_HALT,
     importance_ratios,
+    mean_kl,
     normalized_ess,
 )
 
@@ -38,15 +41,12 @@ PROMPTS = [
 ]
 
 
-def k3_kl(logp_train: list[float], logp_serve: list[float]) -> float:
-    """k3 estimator of KL(train‖serve) over tokens sampled from serve (Schulman):
-    r = exp(logp_train − logp_serve);  KL ≈ mean(r − 1 − log r) ≥ 0."""
-    d = np.asarray(logp_train, dtype=np.float64) - np.asarray(logp_serve, dtype=np.float64)
-    r = np.exp(d)
-    return float(np.mean(r - 1.0 - d))
+def _taken(rows: np.ndarray, ids: tuple[int, ...]) -> list[float]:
+    return [float(rows[i, t]) for i, t in enumerate(ids)]
 
 
 def main() -> None:
+    import torch
     from transformers import AutoTokenizer
 
     tok = AutoTokenizer.from_pretrained(MODEL)
@@ -55,26 +55,29 @@ def main() -> None:
 
     serve = HFReferenceBackend(MODEL, dtype="bfloat16", attn_implementation="sdpa")
     rollouts = [serve.generate(p, params) for p in prompt_ids]
-    serve_lp = [lp for r in rollouts for lp in r.logprobs]
-    print(
-        f"# serve=sdpa/bf16 | {len(rollouts)} rollouts, lengths {[len(r.response_ids) for r in rollouts]}"
-    )
-    print(f"# total scored tokens: {len(serve_lp)}")
-
-    import torch
+    serve_rows = [
+        serve.distribution_logprobs(r.prompt_ids, r.response_ids).numpy() for r in rollouts
+    ]
+    serve_lp = [lp for r, sr in zip(rollouts, serve_rows) for lp in _taken(sr, r.response_ids)]
+    n_tok = len(serve_lp)
+    print(f"# serve=sdpa/bf16 | {len(rollouts)} rollouts, {n_tok} response tokens (exact full-vocab KL)")
 
     for label, dtype, attn in [
         ("eager/bf16 (kernel only)", "bfloat16", "eager"),
         ("eager/fp32 (kernel+precision)", "float32", "eager"),
     ]:
         train = HFReferenceBackend(MODEL, dtype=dtype, attn_implementation=attn)
-        train_lp = [lp for r in rollouts for lp in train.score(r.prompt_ids, r.response_ids)]
+        kl_weighted, train_lp = 0.0, []
+        for r, s_rows in zip(rollouts, serve_rows):
+            t_rows = train.distribution_logprobs(r.prompt_ids, r.response_ids).numpy()
+            kl_weighted += mean_kl(t_rows, s_rows) * len(r.response_ids)  # KL(train‖infer)
+            train_lp += _taken(t_rows, r.response_ids)
+        kl = kl_weighted / n_tok
         is_r = importance_ratios(train_lp, serve_lp)
-        kl = k3_kl(train_lp, serve_lp)
-        halt = "TRIP" if kl > KL_TRAIN_INFER_HALT else "ok"
         mad = float(np.mean(np.abs(np.asarray(train_lp) - np.asarray(serve_lp))))
+        halt = "TRIP" if kl > KL_TRAIN_INFER_HALT else "ok"
         print(
-            f"train={label:<32} | kl_train_infer(k3)={kl:.5f} "
+            f"train={label:<32} | kl_train_infer=KL(train‖infer)={kl:.5f} "
             f"[HALT@{KL_TRAIN_INFER_HALT} -> {halt}] | "
             f"IS_mean={is_r.mean():.4f} ESS={normalized_ess(is_r):.3f} mean|Δlogp|={mad:.5f}"
         )
