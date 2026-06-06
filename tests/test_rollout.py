@@ -9,8 +9,8 @@ from reasoning_llm.sampling import SamplingParams
 from reasoning_llm.utils.monitors import mean_kl
 
 
-def _tiny_model() -> TransformerLM:
-    torch.manual_seed(0)
+def _tiny_model(seed: int = 0) -> TransformerLM:
+    torch.manual_seed(seed)
     cfg = ModelConfig(vocab_size=64, d_model=32, n_layers=2, n_heads=4, context_length=16)
     return TransformerLM(cfg)
 
@@ -74,3 +74,14 @@ def test_kl_train_infer_scaffold_zero_for_identical_engines() -> None:
     rows_train = train.distribution_logprobs(roll.prompt_ids, roll.response_ids).numpy()
     rows_infer = infer.distribution_logprobs(roll.prompt_ids, roll.response_ids).numpy()
     assert abs(mean_kl(rows_train, rows_infer)) < 1e-6
+
+
+def test_kl_train_infer_scaffold_detects_drift() -> None:
+    """Positive control: two engines with DIFFERENT weights ⇒ KL > 0. Proves the harness
+    actually detects drift — without this, the zero-drift test above would pass even if the
+    rollout→distribution_logprobs→mean_kl composition silently produced zero."""
+    train, infer = LocalBackend(_tiny_model(seed=0)), LocalBackend(_tiny_model(seed=1))
+    roll = train.generate([1, 2, 3], SamplingParams(temperature=0.0, max_tokens=5))
+    rows_train = train.distribution_logprobs(roll.prompt_ids, roll.response_ids).numpy()
+    rows_infer = infer.distribution_logprobs(roll.prompt_ids, roll.response_ids).numpy()
+    assert mean_kl(rows_train, rows_infer) > 0.0

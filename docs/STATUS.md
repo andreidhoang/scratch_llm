@@ -40,5 +40,5 @@ pyright 0 errors, suite ≈ 7s on CPU.**
 ## L3 Scaling (A3) · L4 Data (A4) — not started
 
 ## Decisions locked (`docs/adr/`)
-- ADR-0001 tokenizer of record · ADR-0002 GQA in substrate · ADR-0003 sampler parity · ADR-0004 dense v0.1.0
+- ADR-0001 tokenizer of record · ADR-0002 GQA in substrate · ADR-0003 sampler parity · ADR-0004 dense v0.1.0 · ADR-0006 rollout policy log-prob convention
 - *(L5 GRPO decisions — Dr.GRPO default, DPO scope, IS truncation — will be logged as ADRs when the RL spine lands.)*

@@ -52,7 +52,7 @@ class RolloutClient(Protocol):
 - **Logprob convention = raw policy log π(a|s) at temperature 1** (`log_softmax(logits)[a]`),
   *not* the post-temperature/top-p sampling distribution. Temperature/top-p stay pure exploration
   knobs; advantages/IS-ratios use the true policy logprob. This is the PPO/GRPO convention and
-  exactly the input `monitors.importance_ratios(logp_current, logp_old)` expects. → candidate ADR.
+  exactly the input `monitors.importance_ratios(logp_current, logp_old)` expects. → [ADR-0006](../adr/ADR-0006-policy-logprob-convention.md).
 - **Capture via a shared decode core, not a duplicated loop.** `sampling.py` factors a private
   `_decode(...)` returning `(ids, logprobs)`; `generate()` keeps its `list[int]` return (existing
   sampling + KV-cache tests unchanged), and `generate_with_logprobs()` exposes both. Single source

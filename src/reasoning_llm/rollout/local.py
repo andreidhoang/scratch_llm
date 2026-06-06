@@ -62,7 +62,10 @@ class LocalBackend:
 
     def score(self, prompt_ids: Sequence[int], response_ids: Sequence[int]) -> list[float]:
         """Teacher-forced per-token policy log π of the *taken* tokens (the IS-ratio input and
-        the contract-test oracle — independent of the decode path, so equality is a real check)."""
+        the contract-test oracle — independent of the decode path, so equality is a real check).
+
+        Diagnostic only: ``no_grad``. The grad-bearing current-policy logprob for the L5 policy
+        loss is recomputed inside the training step, not taken from here."""
         rows = self._response_logprob_rows(prompt_ids, response_ids)
         return [float(rows[i, tok]) for i, tok in enumerate(response_ids)]
 
