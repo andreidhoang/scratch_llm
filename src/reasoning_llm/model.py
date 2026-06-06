@@ -20,9 +20,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor, nn
+
+if TYPE_CHECKING:
+    from reasoning_llm.moe import AuxOutput, MoEConfig, MoEStats
 
 
 @dataclass(frozen=True)
@@ -39,6 +43,7 @@ class ModelConfig:
     context_length: int = 2048
     rope_theta: float = 10000.0
     tie_embeddings: bool = False
+    moe: MoEConfig | None = None  # None ⇒ dense SwiGLU (the v0.1.0 default); else opt-in MoE
 
     def __post_init__(self) -> None:
         if self.d_model % self.n_heads != 0:
@@ -285,14 +290,28 @@ class MultiHeadSelfAttention(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    """Pre-norm block: x + Attn(RMSNorm(x)); x + FFN(RMSNorm(x))."""
+    """Pre-norm block: x + Attn(RMSNorm(x)); x + FFN(RMSNorm(x)).
 
-    def __init__(self, cfg: ModelConfig, rope: RotaryPositionalEmbedding) -> None:
+    The FFN is dense ``SwiGLU`` unless the model opts into MoE *and* this layer is past the
+    leading dense layers (``cfg.moe.n_dense_layers``) — then it is a :class:`MoEFeedForward`.
+    A MoE FFN returns its contribution plus per-layer stats; ``forward`` surfaces those stats
+    (``None`` for a dense layer) so the LM can aggregate them. The residual add is identical
+    either way — the FFN returns the *delta only*."""
+
+    def __init__(self, cfg: ModelConfig, rope: RotaryPositionalEmbedding, layer_idx: int) -> None:
         super().__init__()
         self.attn_norm = RMSNorm(cfg.d_model)
         self.attn = MultiHeadSelfAttention(cfg, rope)
         self.ffn_norm = RMSNorm(cfg.d_model)
-        self.ffn = SwiGLU(cfg.d_model, cfg.ffn_dim)
+        self.is_moe = cfg.moe is not None and layer_idx >= cfg.moe.n_dense_layers
+        self.ffn: nn.Module
+        if self.is_moe:
+            assert cfg.moe is not None
+            from reasoning_llm.moe import MoEFeedForward
+
+            self.ffn = MoEFeedForward(cfg.d_model, cfg.moe)
+        else:
+            self.ffn = SwiGLU(cfg.d_model, cfg.ffn_dim)
 
     def forward(
         self,
@@ -300,10 +319,14 @@ class TransformerBlock(nn.Module):
         positions: Tensor,
         cache: KVCache | None = None,
         layer_idx: int | None = None,
-    ) -> Tensor:
+    ) -> tuple[Tensor, MoEStats | None]:
         x = x + self.attn(self.attn_norm(x), positions, cache, layer_idx)
-        x = x + self.ffn(self.ffn_norm(x))
-        return x
+        if self.is_moe:
+            delta, stats = self.ffn(self.ffn_norm(x))
+        else:
+            delta, stats = self.ffn(self.ffn_norm(x)), None
+        x = x + delta
+        return x, stats
 
 
 class TransformerLM(nn.Module):
@@ -322,23 +345,56 @@ class TransformerLM(nn.Module):
         self.token_emb = Embedding(cfg.vocab_size, cfg.d_model)
         # One RoPE instance shared across blocks (buffers are identical, saves memory).
         rope = RotaryPositionalEmbedding(cfg.head_dim, cfg.context_length, cfg.rope_theta)
-        self.blocks = nn.ModuleList([TransformerBlock(cfg, rope) for _ in range(cfg.n_layers)])
+        self.blocks = nn.ModuleList([TransformerBlock(cfg, rope, i) for i in range(cfg.n_layers)])
         self.final_norm = RMSNorm(cfg.d_model)
         self.lm_head = Linear(cfg.d_model, cfg.vocab_size)
         if cfg.tie_embeddings:
             self.lm_head.weight = self.token_emb.weight
 
-    def forward(self, token_ids: Tensor, cache: KVCache | None = None) -> Tensor:
+    def forward(
+        self, token_ids: Tensor, cache: KVCache | None = None, return_aux: bool = False
+    ) -> Tensor | tuple[Tensor, AuxOutput]:
+        """``return_aux=False`` (default, and the decode path) returns just logits — identical
+        to the dense build. ``return_aux=True`` returns ``(logits, AuxOutput)`` with the summed
+        MoE aux/z losses and per-layer routing diagnostics for the training objective."""
         s = token_ids.shape[1]
         start = 0 if cache is None else cache.length
         positions = torch.arange(start, start + s, device=token_ids.device)
         x = self.token_emb(token_ids)
+        layer_stats: list[MoEStats] = []
         for layer_idx, block in enumerate(self.blocks):
-            x = block(x, positions, cache, layer_idx)
+            x, stats = block(x, positions, cache, layer_idx)
+            if stats is not None:
+                layer_stats.append(stats)
         x = self.final_norm(x)
         if cache is not None:
             cache.advance(s)  # bump once, after all layers, so each layer saw the same start
-        return self.lm_head(x)
+        logits = self.lm_head(x)
+        if return_aux:
+            return logits, self._aggregate_aux(layer_stats)
+        return logits
+
+    def _aggregate_aux(self, layer_stats: list[MoEStats]) -> AuxOutput:
+        """Sum the MoE aux/z losses across layers (zeros on a dense model)."""
+        from reasoning_llm.moe import AuxOutput
+
+        if layer_stats:
+            aux_loss = torch.stack([s.aux_loss for s in layer_stats]).sum()
+            z_loss = torch.stack([s.z_loss for s in layer_stats]).sum()
+        else:
+            device = self.lm_head.weight.device
+            aux_loss = torch.zeros((), device=device)
+            z_loss = torch.zeros((), device=device)
+        return AuxOutput(aux_loss=aux_loss, z_loss=z_loss, layers=layer_stats)
+
+    def moe_update_biases(self) -> None:
+        """Aux-loss-free balancing step for every MoE layer — call after ``optimizer.step()``."""
+        from reasoning_llm.moe import MoEFeedForward
+
+        for block in self.blocks:
+            ffn = block.ffn  # type: ignore[union-attr]
+            if isinstance(ffn, MoEFeedForward):
+                ffn.router.update_bias(ffn.cfg.bias_update_speed)
 
 
 def cross_entropy(logits: Tensor, targets: Tensor) -> Tensor:

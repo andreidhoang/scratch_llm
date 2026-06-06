@@ -130,10 +130,18 @@ def train(
 
         inputs, targets = get_batch(train_data, cfg.batch_size, cfg.context_length, cfg.device)
         optimizer.zero_grad()
-        loss = cross_entropy(model(inputs), targets)
+        if model.cfg.moe is not None:
+            # MoE: add the sparse-regularization terms (seq-wise balance + router z-loss) to CE.
+            logits, aux = model(inputs, return_aux=True)
+            loss = cross_entropy(logits, targets) + aux.total
+        else:
+            loss = cross_entropy(model(inputs), targets)
         loss.backward()
         gradient_clipping(model.parameters(), cfg.grad_clip)
         optimizer.step()
+        if model.cfg.moe is not None:
+            # Aux-loss-free load balancing: nudge the router biases after the weight update.
+            model.moe_update_biases()
 
         if cfg.log_every and step % cfg.log_every == 0:
             history.append((step, loss.item()))
