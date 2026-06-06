@@ -37,8 +37,10 @@ protect this quantity. If a change does not move or defend the gap, question it.
 Module layout: `src/reasoning_llm/{algos,rewards,envs,rollout,scaling,data,utils}/` (plus
 flat `tokenizer.py`, `model.py`, `optim.py`, `train.py`, `sampling.py` for the L1 substrate).
 
-**Build status:** L1 substrate ✅ · `utils/monitors.py` ✅ · KV-cache ✅ · **rollout-client seam next**
-(CPU; FA2/SGLang/DDP scheduled on a rented vast.ai GPU — not skipped). See [`docs/STATUS.md`](docs/STATUS.md).
+**Build status:** L1 substrate ✅ · `utils/monitors.py` ✅ · KV-cache ✅ · rollout seam ✅ · FA2
+(oracle+Triton+roofline, 53% of SDPA) ✅ · `kl_train_infer` bridge ✅ (exact KL on a 4090; SGLang is
+Hopper-only on Ada — ADR-0008). **Next:** DDP-overlap + ZeRO-1 (CPU/gloo) · real SGLang on a Hopper
+box. See [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Engineering disciplines (these are how labs silently screen)
 
@@ -93,7 +95,7 @@ pytest -m "not gpu"                  # the CPU smoke gate (mirrors CI)
 | The public ship repo (do not copy from) | `../../reasoningLLM/` |
 | This repo's harness, explained | `docs/CONTEXT_ENGINEERING.md` |
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |
-| **Next-implementation spec** — L2 KV-cache design | `docs/design/L2_kv_cache_SPEC.md` |
+| **L2 design specs** — KV-cache · rollout seam · FA2 roofline · `kl_train_infer` bridge | `docs/design/` |
 
 ## Implementation rules
 
