@@ -3,8 +3,9 @@
 Single source of truth for what is built, tested, and green. Updated as modules land.
 Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m "not gpu"`.
 
-**As of last update: L1 substrate complete; L2 = `utils/monitors.py` + KV-cache complete.
-53 tests green, ruff clean, pyright 0 errors, suite ≈ 16s on CPU.**
+**As of last update: L1 substrate complete; L2 = `utils/monitors.py` + KV-cache + rollout seam
+complete. Repo now under git (green-CI pre-commit hook wired). 59 tests green, ruff clean,
+pyright 0 errors, suite ≈ 7s on CPU.**
 
 ## L1 — Substrate (A1) ✅ complete
 
@@ -18,14 +19,15 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 | `utils/seeding.py` | `seed_everything` (py/numpy/torch) | — |
 | `tests/test_integration_l1.py` | end-to-end: BPE→tokenize→train→sample | composes (1) |
 
-## L2 — Systems (A2) — in progress (NEXT)
+## L2 — Systems (A2) — in progress
 
 | Module | Status | Notes |
 |---|---|---|
 | `utils/monitors.py` | ✅ complete | three KLs, **`kl_train_infer` HALT@0.10**, IS ratios + ESS, reward/length stats (12 tests) |
 | KV-cache (incremental decode) | ✅ complete | `KVCache` + cache-aware attention/forward + `generate(use_cache=True)`; cached==recompute (MHA/GQA/batch, 6 tests). Spec: [`design/L2_kv_cache_SPEC.md`](design/L2_kv_cache_SPEC.md) |
-| `rollout/` client seam + local backend | ⬜ **next (CPU)** | defines the rollout contract over `generate`; SGLang backend slots in on a GPU box |
-| Triton FA2 kernel · DDP/ZeRO · SGLang serving | ⬜ GPU (rent vast.ai) | scheduled on a rented GPU — **not skipped** (no CUDA/Triton on this Mac); see CLAUDE.md "Follow the plan" |
+| `rollout/` client seam + `LocalBackend` | ✅ complete | `Rollout`/`RolloutClient` contract + CPU `LocalBackend` over `generate`; per-token policy log π (temp 1), `score`/`distribution_logprobs` feed `monitors` → the train↔infer (`kl_train_infer`) harness. Contract/seed/batch/stop/KL-scaffold (6 tests). Spec: [`design/L2_rollout_seam_SPEC.md`](design/L2_rollout_seam_SPEC.md) |
+| `rollout/sglang_client.py` (SGLang backend) — **NEXT, GPU** | ⬜ GPU (rent vast.ai) | slots behind the same `RolloutClient` Protocol; measures *real* `kl_train_infer` drift (kernels/precision). SGLang-vs-vLLM = ADR trigger (A2 guide §8 #2) |
+| Triton FA2 kernel + roofline · DDP-overlap/ZeRO-1 + 100B memory one-pager | ⬜ GPU (rent vast.ai) | the A2 "money layer" — scheduled on a rented GPU, **not skipped** (no CUDA/Triton on this Mac); see CLAUDE.md "Follow the plan" |
 
 ## L5 — RLVR engine (A5) — after L2
 

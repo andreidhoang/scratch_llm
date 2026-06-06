@@ -64,7 +64,66 @@ def _sample_next(logits: Tensor, params: SamplingParams) -> int:
     return int(torch.multinomial(probs, num_samples=1).item())
 
 
+def _logprob_of(logits: Tensor, token_id: int) -> float:
+    """Policy log π(token | context) at temperature 1 = log_softmax(logits)[token].
+
+    The taken token's log-prob under the *raw* model distribution (not temperature/top-p
+    scaled) — the PPO/GRPO convention that feeds advantages and IS-ratios (ADR / see
+    docs/design/L2_rollout_seam_SPEC.md §3)."""
+    return float(torch.log_softmax(logits, dim=-1)[token_id])
+
+
 @torch.no_grad()
+def _decode(
+    model: TransformerLM,
+    prompt_ids: Sequence[int],
+    params: SamplingParams,
+    device: str,
+    use_cache: bool,
+) -> tuple[list[int], list[float]]:
+    """Shared decode core: returns (generated_ids, per-token policy log π at temperature 1).
+
+    The single source of decode truth for both :func:`generate` and
+    :func:`generate_with_logprobs`. Each logprob is read from the *same* logits its token was
+    sampled from, so it is exact (and matches an independent teacher-forced re-score)."""
+    if len(prompt_ids) == 0:
+        raise ValueError("prompt_ids must be non-empty")
+    if params.seed is not None:
+        torch.manual_seed(params.seed)
+
+    model.eval()
+    context_length = model.cfg.context_length
+    ids = list(prompt_ids)
+    generated: list[int] = []
+    logprobs: list[float] = []
+
+    if use_cache:
+        cache = KVCache(len(model.blocks))
+        x = torch.tensor([ids[-context_length:]], dtype=torch.long, device=device)
+        logits = model(x, cache)[0, -1]  # prefill the prompt
+        for _ in range(params.max_tokens):
+            next_id = _sample_next(logits, params)
+            generated.append(next_id)
+            logprobs.append(_logprob_of(logits, next_id))
+            if next_id in params.stop_ids:
+                break
+            x = torch.tensor([[next_id]], dtype=torch.long, device=device)
+            logits = model(x, cache)[0, -1]  # decode one token against the cache
+        return generated, logprobs
+
+    for _ in range(params.max_tokens):
+        window = ids[-context_length:]
+        x = torch.tensor([window], dtype=torch.long, device=device)
+        logits = model(x)[0, -1]
+        next_id = _sample_next(logits, params)
+        ids.append(next_id)
+        generated.append(next_id)
+        logprobs.append(_logprob_of(logits, next_id))
+        if next_id in params.stop_ids:
+            break
+    return generated, logprobs
+
+
 def generate(
     model: TransformerLM,
     prompt_ids: Sequence[int],
@@ -82,36 +141,17 @@ def generate(
     the correctness oracle. The two paths must produce identical output. Both assume the whole
     sequence stays within ``model.cfg.context_length`` (no sliding-window eviction yet).
     """
-    if len(prompt_ids) == 0:
-        raise ValueError("prompt_ids must be non-empty")
-    if params.seed is not None:
-        torch.manual_seed(params.seed)
+    return _decode(model, prompt_ids, params, device, use_cache)[0]
 
-    model.eval()
-    context_length = model.cfg.context_length
-    ids = list(prompt_ids)
-    generated: list[int] = []
 
-    if use_cache:
-        cache = KVCache(len(model.blocks))
-        x = torch.tensor([ids[-context_length:]], dtype=torch.long, device=device)
-        logits = model(x, cache)[0, -1]  # prefill the prompt
-        for _ in range(params.max_tokens):
-            next_id = _sample_next(logits, params)
-            generated.append(next_id)
-            if next_id in params.stop_ids:
-                break
-            x = torch.tensor([[next_id]], dtype=torch.long, device=device)
-            logits = model(x, cache)[0, -1]  # decode one token against the cache
-        return generated
-
-    for _ in range(params.max_tokens):
-        window = ids[-context_length:]
-        x = torch.tensor([window], dtype=torch.long, device=device)
-        logits = model(x)[0, -1]
-        next_id = _sample_next(logits, params)
-        ids.append(next_id)
-        generated.append(next_id)
-        if next_id in params.stop_ids:
-            break
-    return generated
+def generate_with_logprobs(
+    model: TransformerLM,
+    prompt_ids: Sequence[int],
+    params: SamplingParams,
+    device: str = "cpu",
+    use_cache: bool = True,
+) -> tuple[list[int], list[float]]:
+    """Like :func:`generate`, but also returns the per-token policy log π(a_t|s_t) at
+    temperature 1. The rollout seam and RL spine need these logprobs for advantages and
+    IS-ratios; see ``rollout/local.py`` and ``utils/monitors.py``."""
+    return _decode(model, prompt_ids, params, device, use_cache)
