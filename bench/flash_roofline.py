@@ -32,11 +32,17 @@ def run(
 ) -> None:
     dev = torch.cuda.get_device_name(0)
     print(f"# FA2-Triton vs SDPA | {dev} | B={b} H={h} d={d} causal={causal} dtype={dtype}")
-    print(f"{'seq':>6} {'triton_ms':>10} {'sdpa_ms':>9} {'tri_TFLOPs':>11} {'sdpa_TFLOPs':>12} {'%SDPA':>7}")
+    print(
+        f"{'seq':>6} {'triton_ms':>10} {'sdpa_ms':>9} {'tri_TFLOPs':>11} {'sdpa_TFLOPs':>12} {'%SDPA':>7}"
+    )
     for n in seqs:
         q, k, v = (torch.randn(b, h, n, d, device="cuda", dtype=dtype) for _ in range(3))
-        t_tri = triton.testing.do_bench(lambda: flash_attention_triton_forward(q, k, v, is_causal=causal))
-        t_sdpa = triton.testing.do_bench(lambda: F.scaled_dot_product_attention(q, k, v, is_causal=causal))
+        t_tri = triton.testing.do_bench(
+            lambda: flash_attention_triton_forward(q, k, v, is_causal=causal)
+        )
+        t_sdpa = triton.testing.do_bench(
+            lambda: F.scaled_dot_product_attention(q, k, v, is_causal=causal)
+        )
         tf_tri = _tflops(b, h, n, d, t_tri, causal)
         tf_sdpa = _tflops(b, h, n, d, t_sdpa, causal)
         pct = 100.0 * tf_tri / tf_sdpa
