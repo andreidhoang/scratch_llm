@@ -58,8 +58,16 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]  # line length enforced softly; long math/comments allowed
 
+[tool.ruff.lint.per-file-ignores]
+# The Triton kernel import must follow `pytest.importorskip("triton")` (so the module skips on a
+# CPU box) — that intentionally breaks import-at-top (E402) and the import sorter (I001).
+"tests/test_flash_attention_triton.py" = ["E402", "I001"]
+
 [tool.pyright]
 include = ["src", "tests"]
+# Triton kernels use the `kernel[grid](...)` launch syntax static checkers can't model, and run
+# only on a GPU box — type-checked there by execution, not here.
+exclude = ["src/reasoning_llm/kernels/flash_attention_triton.py"]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
 reportMissingImports = false   # GPU-only deps absent in CI
