@@ -5,6 +5,10 @@ tiles maintaining the online-softmax running max / denominator / accumulator in 
 tile and L = logsumexp. This is the kernel the A2.1 roofline benchmarks against
 `F.scaled_dot_product_attention`; it must equal the pure-PyTorch oracle in `flash_attention.py`.
 
+`triton.autotune` picks block sizes / num_warps / num_stages per sequence length — a fair-comparison
+necessity, since SDPA dispatches a tuned kernel and an untuned single-config Triton kernel is not a
+like-for-like roofline baseline.
+
 GPU-only (imports Triton). Not imported by `kernels/__init__.py`, so importing the package on a
 CPU/CI box never pulls Triton; tests gate on `pytest.importorskip("triton")` + the `gpu` marker.
 Forward + causal only — the backward is the torch.compile recomputation path, not a hand-rolled
@@ -20,7 +24,15 @@ import triton
 import triton.language as tl
 from torch import Tensor
 
+_CONFIGS = [
+    triton.Config({"BLOCK_Q": bq, "BLOCK_K": bk}, num_warps=w, num_stages=s)
+    for bq, bk in [(64, 64), (128, 64), (64, 128), (128, 128)]
+    for w in (4, 8)
+    for s in (2, 3)
+]
 
+
+@triton.autotune(configs=_CONFIGS, key=["n_ctx", "D"])
 @triton.jit
 def _fa2_fwd_kernel(
     q_ptr,
@@ -46,9 +58,9 @@ def _fa2_fwd_kernel(
     scale,
     IS_CAUSAL: tl.constexpr,
     ALLOW_TF32: tl.constexpr,
+    D: tl.constexpr,
     BLOCK_Q: tl.constexpr,
     BLOCK_K: tl.constexpr,
-    D: tl.constexpr,
 ):
     pid_q = tl.program_id(0)
     pid_b = tl.program_id(1)
@@ -107,14 +119,13 @@ def flash_attention_triton_forward(
     *,
     is_causal: bool = False,
     allow_tf32: bool = True,
-    block_q: int = 64,
-    block_k: int = 64,
 ) -> tuple[Tensor, Tensor]:
     """Triton FA2 forward. ``q,k,v``: ``(..., N, d)`` self-attention (key length == query length).
 
     Returns ``(O, L)`` matching :func:`reasoning_llm.kernels.flash_attention.flash_attention_forward`.
     ``allow_tf32=False`` makes the matmuls bit-faithful to the fp32 oracle (used in the correctness
-    test); the default ``True`` is the fast path for the roofline benchmark."""
+    test); the default ``True`` is the fast path for the roofline benchmark. Block sizes / warps /
+    stages are chosen by ``triton.autotune``."""
     *lead, n, d = q.shape
     if k.shape[-2] != n:
         raise ValueError(f"kernel assumes self-attention (key len {k.shape[-2]} != query len {n})")
@@ -127,7 +138,9 @@ def flash_attention_triton_forward(
     lse = torch.empty((b, n), dtype=torch.float32, device=q.device)
     scale = 1.0 / math.sqrt(d)
 
-    grid = (triton.cdiv(n, block_q), b)
+    def grid(meta: dict) -> tuple[int, int]:
+        return (triton.cdiv(n, meta["BLOCK_Q"]), b)
+
     _fa2_fwd_kernel[grid](
         qf,
         kf,
@@ -152,8 +165,6 @@ def flash_attention_triton_forward(
         scale,
         IS_CAUSAL=is_causal,
         ALLOW_TF32=allow_tf32,
-        BLOCK_Q=block_q,
-        BLOCK_K=block_k,
         D=d,
     )
     return o.reshape(*lead, n, d), lse.reshape(*lead, n)

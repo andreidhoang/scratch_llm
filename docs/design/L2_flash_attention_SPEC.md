@@ -65,6 +65,30 @@ tuning — ship the roofline plot + the honest gap (a well-analyzed negative is 
 records TFLOP/s and % of SDPA, and emits the roofline (arithmetic intensity vs % peak, BW- vs
 compute-bound boundary). Report the GPU honestly (4090, not B200).
 
+### Result — prediction FALSIFIED, honest gap shipped (RTX 4090, d=64, causal, bf16, B·H=16)
+
+| seq | Triton TFLOP/s | SDPA TFLOP/s | % of SDPA (single-config → **autotuned**) |
+|---|---|---|---|
+| 512  | 18.8 | 25.5  | 73.6 → **73.7 %** |
+| 2048 | 44.5 | 66.9  | 58.6 → **66.6 %** |
+| **4096** | **55.3** | **104.2** | 44.6 → **53.0 %** |
+| 8192 | 63.4 | 130.4 | 38.9 → **48.6 %** |
+| 16384| 68.5 | 148.4 | 36.1 → **46.1 %** |
+
+**Predicted ≈65 % at seq 4k; measured 53 % (autotuned), below the 60 % kill line.** Autotune
+(`triton.autotune` over BLOCK_Q/BLOCK_K ∈ {64,128}² × num_warps ∈ {4,8} × num_stages ∈ {2,3})
+moved 4k from 44.6 → 53.0 %, but the gap is real and **widens with sequence length** — the Triton
+kernel plateaus at ~68 TFLOP/s while SDPA's flash backend scales to ~148.
+
+**Analysis (the value of the negative):** the bottleneck is the kernel, not the algorithm
+(correctness is exact vs the oracle). PyTorch SDPA on Ada dispatches a hand-tuned flash/cuDNN
+kernel with deeper software pipelining and scheduling than this single-key-loop Triton kernel.
+Documented next levers (not pursued — kill-criterion + "don't let tuning eat the session"):
+(1) **exp2 softmax** — scale by log₂e and use `tl.exp2` (faster hardware path) for ~10–15 %;
+(2) wider autotune (num_stages ≥ 4, num_warps 16); (3) split-K / persistent-kernel scheduling.
+**Shipped as-is**: a correct, autotuned, from-scratch FA2 forward at ~53 % of SDPA — a fair,
+honest roofline (a well-analyzed negative is a valued artifact, A2 §6).
+
 ## 5. Scope / deferred
 
 - **In:** pure-PyTorch oracle (✅), Triton FA2 **forward** + causal flag, the roofline doc.
