@@ -58,9 +58,13 @@ def main() -> None:
     serve_rows = [
         serve.distribution_logprobs(r.prompt_ids, r.response_ids).numpy() for r in rollouts
     ]
-    serve_lp = [lp for r, sr in zip(rollouts, serve_rows) for lp in _taken(sr, r.response_ids)]
+    serve_lp = [
+        lp for r, sr in zip(rollouts, serve_rows, strict=True) for lp in _taken(sr, r.response_ids)
+    ]
     n_tok = len(serve_lp)
-    print(f"# serve=sdpa/bf16 | {len(rollouts)} rollouts, {n_tok} response tokens (exact full-vocab KL)")
+    print(
+        f"# serve=sdpa/bf16 | {len(rollouts)} rollouts, {n_tok} response tokens (exact full-vocab KL)"
+    )
 
     for label, dtype, attn in [
         ("eager/bf16 (kernel only)", "bfloat16", "eager"),
@@ -68,7 +72,7 @@ def main() -> None:
     ]:
         train = HFReferenceBackend(MODEL, dtype=dtype, attn_implementation=attn)
         kl_weighted, train_lp = 0.0, []
-        for r, s_rows in zip(rollouts, serve_rows):
+        for r, s_rows in zip(rollouts, serve_rows, strict=True):
             t_rows = train.distribution_logprobs(r.prompt_ids, r.response_ids).numpy()
             kl_weighted += mean_kl(t_rows, s_rows) * len(r.response_ids)  # KL(train‖infer)
             train_lp += _taken(t_rows, r.response_ids)

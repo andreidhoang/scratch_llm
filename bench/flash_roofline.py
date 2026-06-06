@@ -38,10 +38,10 @@ def run(
     for n in seqs:
         q, k, v = (torch.randn(b, h, n, d, device="cuda", dtype=dtype) for _ in range(3))
         t_tri = triton.testing.do_bench(
-            lambda: flash_attention_triton_forward(q, k, v, is_causal=causal)
+            lambda q=q, k=k, v=v: flash_attention_triton_forward(q, k, v, is_causal=causal)
         )
         t_sdpa = triton.testing.do_bench(
-            lambda: F.scaled_dot_product_attention(q, k, v, is_causal=causal)
+            lambda q=q, k=k, v=v: F.scaled_dot_product_attention(q, k, v, is_causal=causal)
         )
         tf_tri = _tflops(b, h, n, d, t_tri, causal)
         tf_sdpa = _tflops(b, h, n, d, t_sdpa, causal)
