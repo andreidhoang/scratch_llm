@@ -90,6 +90,7 @@ pytest -m "not gpu"                  # the CPU smoke gate (mirrors CI)
 |---|---|
 | Sprint cockpit (tracker, `/morning`, `/ship`, gates) | `../../daily/` |
 | **Master plan** — §2 stack · §3 per-layer briefs (add-ons + kill criteria) · §5 role map | `../UNIFIED_FRONTIER_PROJECT_SPEC.md` |
+| **Implementation plan** — the integration spine: reconciled contracts · cross-layer DAG · keystone-first build order · smoke run · VERA | `docs/IMPLEMENTATION_PLAN.md` |
 | **Per-layer build guides** — the load-bearing 20% per assignment → `src/reasoning_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
 | Capstone scope + VERA study | `../CAPSTONE_AND_STUDY_PLAN.md` |
 | The public ship repo (do not copy from) | `../../reasoningLLM/` |
