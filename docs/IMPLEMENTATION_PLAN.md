@@ -14,6 +14,14 @@
 > of this plan. **Scope** (locked, per `CLAUDE.md`): build the engine + CPU smoke run to the
 > **Day-14 ship test (v0.1.0)**, then **VERA (v0.1.x)** as the post-sprint finding. MoE×RL and
 > multimodal stay **v0.2.0, ADR-stub only** — never in v0.1.0.
+>
+> **Repo consolidation (ADR-0009, 2026-06-08).** This repo — `reasoningLLM_scratch` — is the
+> **single public artifact**. The older `Desktop/reasoningLLM/` repo (an overlapping verl-glued RL
+> stack: 46 % duplicate files, no CI, **no completed VERA runs**) is demoted to a private **design
+> reference** — harvest its ADRs as prior art, never its code. Rebuilding the *algorithm* (GRPO) +
+> dial + oracle here **is** CS336 mastery and the only honest way to own the finding; the
+> *infrastructure* (verl / async-orchestrator / r2e_gym) is **not** rebuilt. The build-ADR block
+> (§9) is renumbered 0010–0015 to seat this strategy ADR at 0009.
 
 ---
 
@@ -72,7 +80,7 @@ DAG below starts from exactly this state — **not** the documented A2-first Day
 ## 3. The reconciled contract layer (resolves the 5 blockers) — **build these first**
 
 The seven parallel designs diverged on exactly the cross-cutting contracts. These are pinned here
-and become **ADR-0009** (the four-metric + ownership ADR), which lands *with* the keystone leaves.
+and become **ADR-0010** (the four-metric + ownership ADR), which lands *with* the keystone leaves.
 
 ### 3.1 Keystone leaves (zero upstream deps — Tier 0)
 
@@ -92,7 +100,7 @@ class HardeningLevel(IntEnum):
 SMOKE_LEVELS = (HardeningLevel.L1_EXTENSIONAL, HardeningLevel.L3_NORMALIZED, HardeningLevel.L5_PERTURBATION)
 ```
 
-> The exact L2–L4 matcher semantics are finalized against the grader in **ADR-0009**; the names +
+> The exact L2–L4 matcher semantics are finalized against the grader in **ADR-0010**; the names +
 > ordering + the 3-of-5 `SMOKE_LEVELS` span are pinned now so every package imports one truth.
 
 **`src/reasoning_llm/envs/protocol.py`** — the contracts every reward/env/algo builds into;
@@ -114,7 +122,7 @@ class VerifiableEnv(Protocol):
     def grade(self, task: Task, rollout: Rollout) -> Graded: ...  # decode → reward_fn under its level
 ```
 
-### 3.2 The five pinned contracts (the ADR-0009 body)
+### 3.2 The five pinned contracts (the ADR-0010 body)
 
 | # | Blocker the review caught | **Pinned contract** |
 |---|---|---|
@@ -146,7 +154,7 @@ Tags: **[CPU]** green-CI-buildable now · **[GPU]** resource on vast.ai (per `CL
 never drop") · **★** = on the smoke-run critical path.
 
 ```
-Tier 0  ★ envs/levels.py · envs/protocol.py                         [CPU]  + commit ADR-0009
+Tier 0  ★ envs/levels.py · envs/protocol.py                         [CPU]  + commit ADR-0010
             │  (keystone — 4 blockers resolve here; nothing precedes it)
 Tier 1  ★ utils/run_record.py (LevelRecord, frozen Day-14 schema)   [CPU]
         ★ rewards/parsing.py                                        [CPU]   ┐ no cross-deps:
@@ -316,7 +324,7 @@ The first scientific finding *on* the shipped engine — the "replicate-then-bre
 **The grid:** spurious-rewards battery = 5 reward conditions (ground-truth / format-only / random
 / incorrect-label / majority-vote) × 3 families (Qwen2.5-1.5B / Llama-3.2-1B / OLMo-2-1B);
 HardeningLevel sweep (H2); inference-compute sweep (H3, best-of-n **or** CoT length — pin in
-ADR-0014).
+ADR-0015).
 
 **Hard precondition (Phase 3, non-negotiable):** `data/contamination.assert_eval_set_clean(...)`
 on MATH-500 / AIME held-out **before any `true_quality_gap` number is reported**.
@@ -332,19 +340,21 @@ SGLang-served rollouts or the `kl_train_infer`-drift demonstration.
 
 ---
 
-## 9. The ADR block to write (contiguous, no collisions)
+## 9. The ADR block (0009–0010 written; 0011–0015 as their layer lands)
 
-The review caught all six packages claiming ADR-0009. Assigned block (0009 lands *with* the
-keystone; the rest as their layer lands):
+The 7-package design pass had all six build-packages collide on ADR-0009; the block below
+de-collides them, and the 2026-06-08 consolidation decision (§intro) seats a strategy ADR at 0009,
+shifting the build block to 0010–0015:
 
-| ADR | Decision | Default (per guide §8) |
+| ADR | Decision | Status / default |
 |---|---|---|
-| **0009** | four-metric definitions + `HardeningLevel` ownership/semantics (**the keystone**) | §3.2 as pinned |
-| **0010** | Dr.GRPO default + the two levers (`normalize_by_std` *and* `masked_mean` vs `masked_normalize`) | Dr.GRPO default, toggle exposed |
-| **0011** | train loop in `algos/grpo_trainer.py`, **synchronous-only** for v0.1.0 | one-step staleness + epochs>1 deferred |
-| **0012** | `true_quality` leakage guard (held-out + isomorphic perturbation, `assert_no_leakage`) | disjoint-by-construction |
-| **0013** | contamination n-gram size for short/templated MATH/AIME | pin n + exact-vs-fuzzy before VERA |
-| **0014** | VERA axis-3 `(N, C_infer)` grid + `C_infer` operationalization (best-of-n vs CoT length) | fix grid when budget-bound |
+| **0009** | `reasoningLLM_scratch` is the artifact; older repo = design reference; "rebuild=no" retired | ✅ written |
+| **0010** | four-metric definitions + `HardeningLevel`/`RewardFn` ownership (**the keystone**) | ✅ written (lands with `levels.py`/`protocol.py`) |
+| **0011** | Dr.GRPO default + the two levers (`normalize_by_std` *and* `masked_mean` vs `masked_normalize`) | Dr.GRPO default, toggle exposed |
+| **0012** | train loop in `algos/grpo_trainer.py`, **synchronous-only** for v0.1.0 | one-step staleness + epochs>1 deferred |
+| **0013** | `true_quality` leakage guard (held-out + isomorphic perturbation, `assert_no_leakage`) | disjoint-by-construction |
+| **0014** | contamination n-gram size for short/templated MATH/AIME | pin n + exact-vs-fuzzy before VERA |
+| **0015** | VERA axis-3 `(N, C_infer)` grid + `C_infer` operationalization (best-of-n vs CoT length) | fix grid when budget-bound |
 | note | **DPO**: build `dpo_loss` to mastery (interview staple) but **keep it out of the shipped engine** | GRPO-only ships |
 
 **v0.2.0 ADR stubs (do not build):** MoE×RL collapse (GSPO/R3) and multimodal-VLM remain
@@ -378,8 +388,8 @@ GPU items are `@pytest.mark.gpu` (skipped in CI), exercised on rented hardware.
 | Smoke run can't log a metric (esp. missing toy `true_quality` oracle) | **blocker** | §6 table verified CPU-computable; `envs/true_quality.py` is Tier 5, before the runner. |
 | HF-path mask shift from re-tokenization | **blocker** | `tokenized_batch_from_rollouts` (B5) — id-based, boundary = `len(prompt_ids)`. |
 | GRPO doesn't converge on a real model | high | TinyZero gate (Tier 7) **before** VERA; single-family Qwen fallback. |
-| `true_quality` oracle leakage → fake-small gap | high | `assert_no_leakage` gate (ADR-0012); isomorphic perturbation. |
-| VERA eval contamination → dishonest number | high | `assert_eval_set_clean` precondition (ADR-0013). |
+| `true_quality` oracle leakage → fake-small gap | high | `assert_no_leakage` gate (ADR-0013); isomorphic perturbation. |
+| VERA eval contamination → dishonest number | high | `assert_eval_set_clean` precondition (ADR-0014). |
 | L2-finish / contamination block the spine | medium | Both are off the smoke-run critical path (§4); run in parallel. |
 | Cross-family RL finicky (Llama/OLMo LR/KL) | medium | ADR fallback to single-family Qwen-1.5B grid (<$120, still the artifact). |
 | Scope creep (v0.2.0 into v0.1.0) | medium | §2.4 + §9 stubs; the smoke run is the anti-gold-plating guard. |
@@ -390,9 +400,9 @@ GPU items are `@pytest.mark.gpu` (skipped in CI), exercised on rented hardware.
 
 - **v0.1.0 (ships):** Tiers 0–6 green; `tests/test_smoke_run.py` passes in CI; `scripts/smoke_run.py`
   writes a JSONL log with `reward / hack_rate / true_quality_gap / kl_train_infer` across L1/L3/L5;
-  public repo, green CI; ADRs 0009–0011 logged. **= the Day-14 mechanical test.**
+  public repo, green CI; ADRs 0010–0012 logged. **= the Day-14 mechanical test.**
 - **v0.1.x (VERA):** TinyZero gate passed; contamination gate clean; H1–H3 pre-registered and run;
-  the cross-family × hardening `true_quality_gap` table + H3 plot; blog + paper draft. ADRs 0012–0014.
+  the cross-family × hardening `true_quality_gap` table + H3 plot; blog + paper draft. ADRs 0013–0015.
 - **Credentialing (parallel):** DDP/ZeRO-1 gloo tests green; 100B one-pager; SGLang-on-Hopper drift
   measured.
 
@@ -407,7 +417,7 @@ GPU items are `@pytest.mark.gpu` (skipped in CI), exercised on rented hardware.
 - Build status (single source of truth): `docs/STATUS.md`.
 - Constitution + disciplines + frozen scope: `CLAUDE.md`.
 
-> **The plan in one line:** land the two keystone leaves + ADR-0009, walk the CPU DAG to a $0
+> **The plan in one line:** land the two keystone leaves + ADR-0010, walk the CPU DAG to a $0
 > green-CI smoke run that logs all four metrics across three HardeningLevels (v0.1.0 ships), gate
 > on a $30 TinyZero "aha," then run VERA across three families and publish the honest
 > `true_quality_gap`.
