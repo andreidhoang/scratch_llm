@@ -1,86 +1,66 @@
-# reasoningLLM
+# scratch_llm
 
-> Open, trustworthy verifier-and-environment harness for reasoning-model RLVR —
-> **the first open implementation of verifier exploitability as a controlled
-> independent variable.**
+> A from-scratch, production-grade implementation of the **CS336** stack
+> ("Language Modeling from Scratch", Stanford) — every layer owned end to end,
+> from the byte to the RL update.
 
-One vertically-integrated reasoning-model stack, built from the kernel up
-(BPE → kernels → scaling → data → RLVR), shipping **one honest finding**: the
-gap between what a verifier *rewards* and what a model is *truly worth*, measured
-as a controlled experiment.
+This is the **mastery vehicle**: built by hand to the engineering standard a frontier lab
+screens for, not glued together from libraries. The official course — lecture code plus the
+five assignment scaffolds with their `tests/adapters.py` — lives in [`../lectures/`](../lectures/)
+and is the **spec + test oracle**: the PDFs define each deliverable, the adapter tests verify
+your implementation is correct.
 
-The through-line metric owned end-to-end, from the token to the reward:
+## The five assignments → this repo
 
-```
-true_quality_gap = reward − true_quality      (+ hack_rate, kl_train_infer)
-```
+| CS336 assignment | What you build (load-bearing core) | Source | Status |
+|---|---|---|---|
+| **A1** Basics | BPE · Transformer (RMSNorm·RoPE·SwiGLU·GQA) · AdamW · training loop · sampling | `tokenizer/model/moe/optim/train/sampling.py` | ✅ |
+| **A2** Systems | FlashAttention-2 (Triton) + roofline · KV-cache · DDP/ZeRO-1/FSDP · monitors | `kernels/`, `rollout/`, `utils/` | 🟡 FA2 + KV-cache + monitors + rollout done; DDP/ZeRO/FSDP next |
+| **A3** Scaling | IsoFLOP / Chinchilla fits (compute-optimal N, D) | `scaling/` | ⬜ |
+| **A4** Data | filter → quality-classify → exact + MinHash/LSH dedup | `data/` | ⬜ |
+| **A5** Alignment | SFT · Expert Iteration · GRPO/Dr.GRPO · DPO | `algos/`, `rewards/`, `envs/` | ⬜ |
 
-See [`../UNIFIED_FRONTIER_PROJECT_SPEC.md`](../UNIFIED_FRONTIER_PROJECT_SPEC.md)
-(positioning / job-market map) and
-[`../CAPSTONE_AND_STUDY_PLAN.md`](../CAPSTONE_AND_STUDY_PLAN.md) (capstone scope +
-VERA study). This repo implements the `src/reasoning_llm/` files those docs name.
+See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the A1→A5 build spine and
+[`docs/assignment_guides/`](docs/assignment_guides/) for the per-assignment guides — every
+deliverable tagged **LOAD-BEARING / COURSE-ROTE / SKIP** and mapped to a source file. Live status:
+[`docs/STATUS.md`](docs/STATUS.md). The 2026 **frontier-practice layer** — per-pillar modern-default
+upgrades, opt-in build labs, and interview-awareness items (fact-checked) — is in
+[`docs/FRONTIER_PRACTICE_2026.md`](docs/FRONTIER_PRACTICE_2026.md).
 
----
+**Capstone — DELTA** (the barbell *spike*, sitting on the A2/A5 base): a fused **GatedDeltaNet-2
+decode-step** kernel (target ≥85% of the H100 memory roofline; the "erase/write decoupling is free at
+decode" thesis). Design + dated 4-week plan live in the workspace root —
+[`../DELTA.md`](../DELTA.md) (merged design RFC + 4-week plan) — and are tracked in
+[`docs/STATUS.md`](docs/STATUS.md) and [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) §7.
 
-## The five layers → this repo
+## Engineering disciplines (baked into the tests)
 
-The five CS336 assignments are the five **subsystems** of one stack. Data flows
-top-to-bottom; each layer feeds a real source file here.
-
-| Layer | CS336 | Subsystem | Source it feeds | Status |
-|---|---|---|---|---|
-| **L5** RLVR engine | A5 | GRPO/Dr.GRPO · reward · verifier-exploitability | `algos/`, `rewards/`, `envs/exploitability.py`, `envs/true_quality.py` | ⬜ |
-| **L4** Data | A4 | reward/verifier-data curation · dedup · contamination | `data/curation.py`, `data/contamination.py` | ⬜ |
-| **L3** Scaling | A3 | IsoFLOP machinery repurposed to fit `hack_rate` vs compute | `scaling/hack_rate_fit.py` | ⬜ |
-| **L2** Systems | A2 | Triton FA2 · DDP/ZeRO · KV-cache · SGLang client | `rollout/sglang_client.py`, `utils/monitors.py` | 🟡 `monitors.py` ✅ · KV-cache ✅ · rollout seam next |
-| **L1** Substrate | A1 | BPE · Transformer · GQA/RoPE/SwiGLU · (MoE) | `tokenizer/model/optim/train/sampling.py` | ✅ complete |
-
-> **Build status** is tracked in [`docs/STATUS.md`](docs/STATUS.md): L1 substrate + `utils/monitors.py`
-> + KV-cache done, 53 tests green. **Next: the rollout-client seam** (CPU); Triton FA2 / SGLang
-> serving / DDP wait for a GPU box.
-
-## Scope discipline
-
-- **v0.1.0** (frozen 14-day sprint): the engine + a tiny R2E smoke run
-  (≤100 problems, 3 of 5 `HardeningLevel`s, 1 seed — proves the plumbing).
-- **VERA** (`v0.1.x`, post-sprint): the first *scientific finding* on the engine
-  — `true_quality_gap` across model families × hardening levels on a cheap
-  math/1.5B env (`envs/math_verifiable.py`).
-- **v0.2.0** (additive): MoE×RL collapse, multimodal (`envs/vlm_verifiable.py`).
-
-MoE/VLM axes are tracked as ADR stubs in [`docs/adr/`](docs/adr/), **not** smuggled
-into v0.1.0.
-
-## The Day-14 ship test (mechanical, unchanged)
-
-> Does it run, is it public, is the smoke run logged with
-> `reward / hack_rate / true_quality_gap / kl_train_infer` across 3
-> `HardeningLevel`s?
+loss-at-init ≈ `log(vocab)` · overfit-one-batch · fixed-seed reproducibility · mandatory RL logging
+(entropy + KL divergences + reward/length stats) · predict-before-you-run. These *are* the hiring
+signal — clean, reproducible code that you can defend from first principles.
 
 ## Develop
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"      # CPU core: numpy/pydantic only
-# uv pip install -e ".[gpu]"    # on the rented A100/4090: torch/transformers
-
+uv pip install -e ".[dev]"      # CPU core: numpy/pydantic/pyyaml/regex
+# uv pip install -e ".[gpu]"    # on a rented GPU: torch/transformers
 ruff check src tests && ruff format --check src tests
 pyright
-pytest -m "not gpu"             # the CPU smoke gate (mirrors CI)
+pytest -m "not gpu"             # the CPU gate (mirrors CI)
 ```
 
 ## Layout
 
 ```
-src/reasoning_llm/
-├── algos/        L5  advantage estimation (RLOO + sign-robust clip), off-policy (IS+ESS)
-├── rewards/      L5  reward composition under the 5 levels, anti-hack detector catalog
-├── envs/         L5  the exploitability dial, the true-quality oracle, env interface, tasks
-├── rollout/      L2  SGLang rollout client (cheap rollouts = affordable ablation grid)
-├── scaling/      L3  hack_rate-vs-compute fitter (IsoFLOP machinery, repurposed)
-├── data/         L4  reward-data curation + train↔eval contamination check
-└── utils/        L2  the three-KL monitor (incl. kl_train_infer HALT@0.10), metrics, manifests
+src/scratch_llm/
+├── tokenizer.py model.py moe.py optim.py train.py sampling.py   A1  substrate
+├── kernels/     A2  FlashAttention-2 (oracle + Triton) + roofline
+├── rollout/     A2  serving seam (LocalBackend now; SGLang client)
+├── utils/       A2  training monitors (entropy, KLs, IS/ESS), seeding
+├── scaling/     A3  IsoFLOP / Chinchilla fitter
+├── data/        A4  filtering, dedup, quality classification
+├── algos/       A5  SFT, Expert Iteration, GRPO/Dr.GRPO, DPO
+├── rewards/     A5  verifiable-reward grading (r1-zero: format + answer)
+└── envs/        A5  verifiable task environments + the env/grader protocol
 ```
-
-Every stub names its §3 brief, falsifiable prediction, and kill criterion in its
-docstring. Fill them in as the corresponding CS336 assignment lands.

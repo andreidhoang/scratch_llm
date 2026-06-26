@@ -6,7 +6,7 @@ the cheapest correctness oracle for the merge core (counting + lexicographic tie
 
 from pathlib import Path
 
-from reasoning_llm.tokenizer import (
+from scratch_llm.tokenizer import (
     Tokenizer,
     _compute_merges,
     _pretokenize_counts,

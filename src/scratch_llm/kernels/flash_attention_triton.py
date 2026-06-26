@@ -122,7 +122,7 @@ def flash_attention_triton_forward(
 ) -> tuple[Tensor, Tensor]:
     """Triton FA2 forward. ``q,k,v``: ``(..., N, d)`` self-attention (key length == query length).
 
-    Returns ``(O, L)`` matching :func:`reasoning_llm.kernels.flash_attention.flash_attention_forward`.
+    Returns ``(O, L)`` matching :func:`scratch_llm.kernels.flash_attention.flash_attention_forward`.
     ``allow_tf32=False`` makes the matmuls bit-faithful to the fp32 oracle (used in the correctness
     test); the default ``True`` is the fast path for the roofline benchmark. Block sizes / warps /
     stages are chosen by ``triton.autotune``."""

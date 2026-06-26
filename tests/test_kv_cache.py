@@ -6,8 +6,8 @@ between the cached path and the recompute oracle, for MHA and GQA, single- and m
 
 import torch
 
-from reasoning_llm.model import KVCache, ModelConfig, TransformerLM
-from reasoning_llm.sampling import SamplingParams, generate
+from scratch_llm.model import KVCache, ModelConfig, TransformerLM
+from scratch_llm.sampling import SamplingParams, generate
 
 
 def _model(n_kv_heads: int = 2) -> TransformerLM:

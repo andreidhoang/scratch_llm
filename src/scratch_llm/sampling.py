@@ -21,7 +21,7 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 
-from reasoning_llm.model import KVCache, TransformerLM, softmax
+from scratch_llm.model import KVCache, TransformerLM, softmax
 
 
 @dataclass(frozen=True)

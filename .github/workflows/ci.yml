@@ -1,7 +1,7 @@
 name: ci
 
-# Green CI from day one (spec §5.1). Fast, CPU-only: lint + types + the smoke
-# test gate. GPU-marked tests are skipped here and run on the rented box.
+# Green CI from day one. Fast, CPU-only: lint + types + tests.
+# GPU-marked tests are skipped here and run on a rented GPU box.
 on:
   push:
     branches: [main]
@@ -34,5 +34,5 @@ jobs:
       - name: Pyright (types)
         run: pyright
 
-      - name: Pytest (CPU smoke gate)
-        run: pytest -m "not gpu and not slow" --cov=reasoning_llm
+      - name: Pytest (CPU gate)
+        run: pytest -m "not gpu and not slow" --cov=scratch_llm

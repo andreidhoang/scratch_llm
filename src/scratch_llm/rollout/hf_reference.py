@@ -19,8 +19,8 @@ from collections.abc import Sequence
 
 import torch
 
-from reasoning_llm.rollout.types import Rollout, StopReason
-from reasoning_llm.sampling import SamplingParams
+from scratch_llm.rollout.types import Rollout, StopReason
+from scratch_llm.sampling import SamplingParams
 
 
 class HFReferenceBackend:

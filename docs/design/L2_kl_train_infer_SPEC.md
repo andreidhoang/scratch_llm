@@ -1,18 +1,24 @@
-# Design spec — L2 kl_train_infer bridge (SGLang serve vs HF train)
+# Design spec — L2 kl_train_infer (training-engine vs inference-engine KL)
 
 > **Status:** building on the rented 4090 (SGLang serving).
-> **Layer:** L2 Systems (A2.3) — **the single most load-bearing thing in A2** (A2 guide §6): the
-> repo's discipline pillar made concrete. Realizes the through-line `kl_train_infer` HALT@0.10.
-> **Files:** `src/reasoning_llm/rollout/sglang_client.py` (serve), `rollout/hf_reference.py` (train),
+> **Layer:** L2 Systems (A2.3) — an A2 systems measurement of the gap between the training and
+> serving engines. See [`../IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md) and
+> [`../STATUS.md`](../STATUS.md) for where it sits in the build.
+> **Files:** `src/scratch_llm/rollout/sglang_client.py` (serve), `rollout/hf_reference.py` (train),
 > `bench/kl_train_infer.py` (the measurement), reuses `utils/monitors.py`.
 
 ## 1. Why
 
-`kl_train_infer = KL(train‖infer)` measures the divergence between the **training-engine** logits
-and the **serving-engine** logits. If they disagree, every gradient is computed against a policy that
-isn't the one being served — the failure R3/GSPO document for MoE-RL. The CPU rollout seam built the
-*scaffold* (LocalBackend vs LocalBackend ⇒ KL≈0); this spec measures the **real** drift between two
-genuinely different engines on the same model.
+`kl_train_infer` is the KL divergence between the **training-engine** and the
+**inference/serving-engine** next-token distributions over the same vocabulary, evaluated on the
+same realized contexts. It is nonzero even for the *same weights* because the two engines differ in
+two ways that matter numerically: **mixed precision** (bf16 storage vs fp32 accumulation) and
+**different attention kernels** (a hand-tuned fused/flash kernel vs an eager reference). This is a
+legitimate A2 systems measurement in its own right, and it becomes practically important when doing
+RL with a separate serving engine: if the two engines disagree, every gradient is computed against a
+policy that isn't the one actually being served. The CPU rollout seam built the *scaffold*
+(LocalBackend vs LocalBackend ⇒ KL≈0); this spec measures the **real** drift between two genuinely
+different engines on the same model.
 
 ## 2. The two engines (same model: Qwen2.5-0.5B-Instruct)
 

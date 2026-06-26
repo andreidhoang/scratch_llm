@@ -4,7 +4,7 @@
 > **Layer:** L2 Systems (A2.1) — the headline systems artifact. **The deliverable is the roofline
 > number, not the kernel** (A2 guide §6/§8): a slow-but-correct kernel + an honest "% of SDPA" is
 > complete.
-> **Files:** `src/reasoning_llm/kernels/flash_attention.py` (pure-PyTorch oracle ✅),
+> **Files:** `src/scratch_llm/kernels/flash_attention.py` (pure-PyTorch oracle ✅),
 > `kernels/flash_attention_triton.py` (Triton fwd, next), `tests/test_flash_attention.py` (✅) +
 > `tests/test_flash_attention_triton.py` (gpu), `bench/flash_roofline.py`, this spec.
 
@@ -12,15 +12,17 @@
 
 Vanilla attention materializes the `N×N` score matrix → `Θ(N²)` HBM traffic and peak memory.
 FlashAttention-2 tiles Q and K and runs an **online softmax**, so it never materializes `N×N`:
-memory drops to `Θ(Nd)` and the kernel becomes bandwidth-efficient. Two payoffs for this repo:
+memory drops to `Θ(Nd)` and the kernel becomes bandwidth-efficient. Two reasons to build it here:
 
-1. **Cheap rollouts = a bigger ablation grid** — every attention speedup buys more VERA runs.
-2. **It is the mechanistic root of `kl_train_infer`.** The train engine (our kernels/precision) and
-   the serve engine (SGLang's fused attention, possibly low-bit KV) compute *different logits*.
-   Building the kernel is how we learn *why* that gap exists — the discipline pillar A2 feeds.
+1. **It is the headline A2 systems artifact** — writing a fused attention kernel from scratch and
+   measuring it against a hand-tuned baseline is the core A2.1 deliverable.
+2. **It is the mechanistic root of train↔inference logit drift.** The training engine (our kernels
+   and precision) and a serving engine (e.g. SGLang's fused attention, possibly low-bit KV) compute
+   *different logits*. Building the kernel by hand is how we learn *why* that gap exists — the
+   `kl_train_infer` measurement of A2.3 quantifies it.
 
-This is the **A2 systems benchmark, not the dense v0.1.0 policy path** — `model.py` keeps the plain
-`scaled_dot_product_attention`. Do not block v0.1.0 on kernel speed.
+This is the **A2 systems benchmark, not the main model's attention path** — `model.py` keeps the
+plain `scaled_dot_product_attention`. Do not block the model on kernel speed.
 
 ## 2. The mechanics (Algorithm 1, forward only)
 

@@ -5,15 +5,15 @@ Intentionally trivial: real coverage arrives with the first load-bearing module
 collection exits 5, which the CI gate reads as failure).
 """
 
-import reasoning_llm
+import scratch_llm
 
 
 def test_package_imports_with_version() -> None:
-    assert reasoning_llm.__version__ == "0.1.0"
+    assert scratch_llm.__version__ == "0.1.0"
 
 
 def test_all_layer_subpackages_importable() -> None:
     import importlib
 
     for sub in ("algos", "rewards", "envs", "rollout", "scaling", "data", "utils"):
-        assert importlib.import_module(f"reasoning_llm.{sub}") is not None
+        assert importlib.import_module(f"scratch_llm.{sub}") is not None

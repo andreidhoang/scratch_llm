@@ -2,8 +2,8 @@
 
 import torch
 
-from reasoning_llm.model import ModelConfig, TransformerLM
-from reasoning_llm.sampling import SamplingParams, _top_p_filter, generate
+from scratch_llm.model import ModelConfig, TransformerLM
+from scratch_llm.sampling import SamplingParams, _top_p_filter, generate
 
 
 def _tiny_model() -> TransformerLM:

@@ -1,50 +1,87 @@
-# Build status — reasoningLLM v0.1.0
+# Build status — scratch_llm (CS336 from-scratch)
 
 Single source of truth for what is built, tested, and green. Updated as modules land.
 Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m "not gpu"`.
 
-**As of last update: L1 substrate complete (+ A1.1 MoE pulled forward, opt-in); L2 =
-`utils/monitors.py` + KV-cache + rollout seam complete. Repo now under git (green-CI pre-commit
-hook wired). L5 keystone leaves (`envs/levels.py` + `envs/protocol.py`) landed. 93 tests green,
-ruff clean, pyright 0 errors, suite ≈ 16s on CPU.**
+**As of 2026-06-20: A1 substrate complete; A2 systems partial (FlashAttention-2 + KV-cache +
+monitors + rollout seam done; DDP/ZeRO-1/FSDP + the memory one-pager remain). A3/A4/A5 are clean
+stubs. 92 tests green, ruff clean, pyright 0 errors, CPU suite ≈ 16 s; last code commit Jun 8.**
 
-## L1 — Substrate (A1) ✅ complete
+**Next ship — EV-ranked, not numeric (per [`../STRATEGY.md`](../STRATEGY.md) §8): the A5 RL "aha".**
+`algos/` SFT masked-CE → GRPO/Dr.GRPO wired to `utils/monitors.py` → reproduce the R1-Zero "aha" on
+Countdown (Qwen2.5-1.5B; CPU-scaffolded + one ~$30–100 burst). The A2 distributed finish + OSS Rung-1
+run in parallel; **DELTA is base-first** — its kernel is gated behind the A5 ship + the Step-0 gate.
+
+**Capstone — DELTA (GDN-2 decode kernel):** design doc + 4-week barbell plan written & fact-checked
+against primary sources (2026-06-14); **no kernel code yet** — build gated on the Step-0 dependency
+gate. Tracked in the Capstone section below; the build spine is in
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7.
+
+**Frontier CORE-defaults to adopt** (the cheap, high-value 2026 upgrades — see
+[`FRONTIER_PRACTICE_2026.md`](FRONTIER_PRACTICE_2026.md)): A1 — output z-loss · WSD
+schedule · depth-scaled init (QK-norm ✅ landed, opt-in); A2 — selective recompute · FSDP2; A3 — inference-aware allocation ·
+robust Huber+bootstrap fit; A4 — decontamination gate · DCLM-style classifier positives; A5 — KL k3
+estimator · RLOO · off-policy epochs>1. *Adoption is tracked as green commits in the build state above
+— no separate ledger (build state + git is the source of truth).*
+
+## A1 — Basics (substrate) ✅ complete
 
 | Module | What it owns | Tests |
 |---|---|---|
-| `tokenizer.py` | byte-level BPE train + encode/decode/`from_files` | bpe_example exact repro, round-trip, specials, tie-break (8) |
-| `model.py` | GQA-ready decoder LM (RMSNorm·RoPE·SwiGLU·MHA) + `cross_entropy` | loss-at-init≈logV, causal-no-leak, RoPE-relative, shapes, config (10) |
-| `moe.py` (A1.1, **opt-in**) | DeepSeek-V3 MoE FFN: sigmoid gate · aux-loss-free bias · shared+routed experts · z-loss · seq-aux · entropy diag ([ADR-0007](adr/ADR-0007-moe-pulled-forward.md); traced end-to-end in [`design/L1_moe_WALKTHROUGH.md`](design/L1_moe_WALKTHROUGH.md)). Dense default unchanged | **dense-equiv**, **decode/cache parity**, loss-at-init≈logV, overfit-one-batch, bias-update dir, entropy>0.9·logNᵣ, **balancer-overcomes-preference**, train-loop, ckpt-bias-roundtrip (16) |
-| `optim.py` | AdamW (decoupled wd, β₂=0.95) + global-ℓ₂ clip + cosine LR | quadratic, decoupled-wd, clip, schedule, **overfit-one-batch** (5) |
-| `train.py` | `np.memmap` batches + checkpoint + loop | next-token align, ckpt round-trip, **seed-repro**, learns (6) |
-| `sampling.py` | temperature/top-p decode (shared `SamplingParams`, ADR-0003) | greedy=argmax, nucleus, stop, budget, seed-repro (7) |
+| `tokenizer.py` | byte-level BPE train + encode/decode/`from_files`, special-token boundaries | `bpe_example` exact repro, round-trip, specials, lexicographic tie-break |
+| `model.py` | decoder LM (RMSNorm · RoPE · SwiGLU · GQA-ready MHA · opt-in QK-norm) + `cross_entropy` | **loss-at-init ≈ log V**, causal-no-leak, RoPE-relative, shapes, config, **QK-norm off=identity / bounds logits** |
+| `moe.py` (opt-in) | DeepSeek-style MoE FFN (sigmoid gate · aux-loss-free balancing · shared+routed experts · z-loss) | dense-equiv, decode/cache parity, loss-at-init, **balancer-overcomes-preference**, ckpt round-trip |
+| `optim.py` | AdamW (decoupled wd, β₂=0.95) + global-ℓ₂ clip + cosine schedule | quadratic, decoupled-wd, clip, schedule, **overfit-one-batch** |
+| `train.py` | `np.memmap` batches + checkpoint + loop | next-token align, ckpt round-trip, **seed-repro**, learns |
+| `sampling.py` | temperature / top-p (nucleus) decode | greedy=argmax, nucleus, stop, budget, seed-repro |
 | `utils/seeding.py` | `seed_everything` (py/numpy/torch) | — |
-| `tests/test_integration_l1.py` | end-to-end: BPE→tokenize→train→sample | composes (1) |
+| `tests/test_integration_l1.py` | end-to-end: BPE → tokenize → train → sample | composes |
 
-## L2 — Systems (A2) — in progress
+## A2 — Systems — partial
 
 | Module | Status | Notes |
 |---|---|---|
-| `utils/monitors.py` | ✅ complete | three KLs, **`kl_train_infer` HALT@0.10**, IS ratios + ESS, reward/length stats (12 tests) |
-| KV-cache (incremental decode) | ✅ complete | `KVCache` + cache-aware attention/forward + `generate(use_cache=True)`; cached==recompute (MHA/GQA/batch, 6 tests). Spec: [`design/L2_kv_cache_SPEC.md`](design/L2_kv_cache_SPEC.md) |
-| `rollout/` client seam + `LocalBackend` | ✅ complete | `Rollout`/`RolloutClient` contract + CPU `LocalBackend` over `generate`; per-token policy log π (temp 1), `score`/`distribution_logprobs` feed `monitors` → the train↔infer (`kl_train_infer`) harness. Contract/seed/batch/stop/KL-scaffold (6 tests). Spec: [`design/L2_rollout_seam_SPEC.md`](design/L2_rollout_seam_SPEC.md) |
-| `kernels/` FA2 forward (oracle + Triton) + roofline (A2.1) | ✅ complete | pure-PyTorch tiled oracle (8 CPU tests) + autotuned Triton fwd+causal, validated on a 4090 vs oracle/SDPA (10 gpu tests). **Roofline: 53 % of SDPA @ seq 4k (predicted 65 %) — honest gap shipped per kill-criterion.** Spec: [`design/L2_flash_attention_SPEC.md`](design/L2_flash_attention_SPEC.md) |
-| `kl_train_infer` bridge (A2.3) — serve vs train | ✅ measured | **exact full-vocab `KL(train‖infer)` on a 4090** (`monitors.mean_kl`): serve=sdpa/bf16 vs train=eager/{bf16,fp32} on Qwen2.5-0.5B → 0.0098 / 0.0017 (HALT ok); falsified prediction → **drift = accumulation-precision + kernel, not storage dtype**. `SGLangBackend` written but **sgl_kernel is sm90/sm100-only, no sm89** → SGLang can't run on Ada ([ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md)); HF engine-pair stand-in used. Spec: [`design/L2_kl_train_infer_SPEC.md`](design/L2_kl_train_infer_SPEC.md) |
-| Real SGLang serving (fp8/INT4-KV drift) | ⬜ Hopper box | `sglang_client.py` ready; needs sm90+ (rent H100) to exercise SGLang's fused kernels / quantized KV — the toward-HALT demonstration |
-| DDP-overlap/ZeRO-1 + 100B memory one-pager | ⬜ GPU/CPU-gloo | remaining A2 "money layer" — DDP/ZeRO are CPU-buildable via the gloo backend; **not skipped** (CLAUDE.md "Follow the plan") |
+| `kernels/` FA2 (oracle + Triton) + roofline | ✅ | pure-PyTorch tiled oracle (CPU tests) + autotuned Triton fwd+causal, validated on a 4090 vs oracle/SDPA. **Roofline: 53 % of SDPA @ seq 4k** (honest gap shipped). Spec: [`design/L2_flash_attention_SPEC.md`](design/L2_flash_attention_SPEC.md) |
+| KV-cache (incremental decode) | ✅ | `KVCache` + cache-aware attention/forward; cached == recompute (MHA/GQA/batch). Spec: [`design/L2_kv_cache_SPEC.md`](design/L2_kv_cache_SPEC.md) |
+| `utils/monitors.py` | ✅ | entropy, the KL divergences, IS ratios + ESS, reward/length stats |
+| `rollout/` client seam + `LocalBackend` | ✅ | `Rollout`/`RolloutClient` contract + CPU `LocalBackend`; per-token log-probs feed `monitors`. Spec: [`design/L2_rollout_seam_SPEC.md`](design/L2_rollout_seam_SPEC.md) |
+| DDP (naive → flat-bucket → overlap) | ⬜ | CPU-buildable via the gloo backend |
+| ZeRO-1 optimizer-state sharding | ⬜ | CPU/gloo |
+| FSDP | ⬜ | CPU/gloo; a full graded A2 deliverable |
+| 100B memory-math one-pager | ⬜ | the verbatim "train a 100B model" answer (params+grads+Adam ≈ 16–20 B/param) |
+| real serving (SGLang, fp8/INT4-KV) | ⬜ Hopper box | `rollout/sglang_client.py` ready; SGLang needs sm90+ ([ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md)) |
 
-## L5 — RLVR engine (A5) — keystone landed; spine next
+## A3 Scaling · A4 Data · A5 Alignment — to build (clean stubs)
 
-| Module | Status |
-|---|---|
-| **`envs/levels.py` + `envs/protocol.py`** (keystone leaves, [ADR-0010](adr/ADR-0010-four-metric-and-hardening-ownership.md)) | ✅ one `HardeningLevel` + `RewardFn`/`DecodeFn`/`Task`/`Graded`/`VerifiableEnv`; breaks the `reward↔exploitability` import cycle; text-in/dict-out reward contract pinned. Tests: ordered levels, 3/5 smoke span, frozen dataclasses, structural `VerifiableEnv` (9) |
-| `algos/` scoring/masking primitives + SFT step (CPU) | ⬜ after L2 inference (next: `envs/levels.py`/`protocol.py` unblock all of L5) |
-| `algos/advantage.py` (GRPO/Dr.GRPO/RLOO) · `algos/off_policy.py` (clip, truncated-IS + ESS) | ⬜ after L2 inference |
-| `rewards/*`, `envs/exploitability.py`, `envs/true_quality.py` | ⬜ after the RL spine |
+- **A3** — `scaling/`: the IsoFLOP / Chinchilla fitter (CPU/numpy: min-picking, `N_opt ∝ C^a`, `C=6ND`, `a+b≈1`, extrapolation). The Stanford training-API leaderboard runs in `../lectures/assignment3-scaling`.
+- **A4** — `data/`: extract → filter → quality-classify → exact + MinHash/LSH dedup; pipeline order + discard accounting.
+- **A5** — `algos/`, `rewards/`, `envs/`: SFT → Expert Iteration → GRPO/Dr.GRPO + DPO; the env/grader protocol (`envs/protocol.py`) is already in place. Frontier lab (GDM-aligned): `algos/distill.py` — knowledge distillation (logit / on-policy reverse-KL / sequence-level), the serve-cheap student track (see `FRONTIER_PRACTICE_2026.md` A5 🔵).
 
-## L3 Scaling (A3) · L4 Data (A4) — not started
+## Capstone — DELTA (GDN-2 decode kernel · the barbell *spike*) — designed, build pending
+
+The portfolio **spike** that sits on the A2/A5 **base** (the barbell: one deep differentiating artifact +
+the broad CS336 base — see [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7). A fused **decode-step**
+kernel for **GatedDeltaNet-2** (NVIDIA, arXiv 2605.22791), targeting ≥85% of the measured H100 memory
+roofline and the "erase/write decoupling is free at decode" thesis. Design + plan live in the **workspace
+root** (one dir up from this repo).
+
+| Artifact | State | Where |
+|---|---|---|
+| Design doc (RFC) — hypothesis · P1–P7 · scope · kill criteria | ✅ written, fact-checked 2026-06-14 | `../../DELTA.md` (Part I) |
+| Execution plan — 4-week barbell schedule · rental-compute discipline | ✅ written | `../../DELTA.md` (Part II) |
+| Step-0 dependency gate (rental H100 + checkpoint story) | ⬜ **next action** | RFC §10 / plan §2 |
+| Phase-1 harness (`fla` baseline + Nsight roofline + correctness oracle) | ⬜ **= the A2 inference-systems finish** | `src/scratch_llm/kernels/` |
+| Decode kernel (Triton-first) + ablations + forensic postmortem | ⬜ build | new |
+| A5 RL "aha" (GRPO/Dr.GRPO) — the barbell's *base* track, interleaved | ⬜ (see A5 above) | `algos/`, `rewards/`, `envs/` |
+
+**Scope-shaping facts (verified):** NVlabs released **training code only — no checkpoint** (so
+correctness/roofline run architecture-only; e2e is *projected* via Amdahl); config 16 heads,
+`d_k=d_v=128` → **32 KB/head** state; non-linear hybrid layers are **2K sliding-window attention**;
+**NVIDIA Source-Code-NC** (non-commercial) license. The Phase-1 harness **is** the A2 deliverable — spike
+and base share infrastructure, they do not compete.
 
 ## Decisions locked (`docs/adr/`)
-- ADR-0001 tokenizer of record · ADR-0002 GQA in substrate · ADR-0003 sampler parity · ADR-0004 dense v0.1.0 · ADR-0006 rollout policy log-prob convention · ADR-0007 MoE (A1.1) pulled forward, opt-in (supersedes ADR-0004 sequencing) · ADR-0008 SGLang Hopper-only on Ada
-- **ADR-0009 reasoningLLM_scratch is the artifact** (older repo = design reference; "rebuild=no" retired) · **ADR-0010 four-metric defs + `HardeningLevel`/`RewardFn` ownership** (the L5 keystone; breaks the reward↔exploitability cycle)
-- *(L5 GRPO decisions — Dr.GRPO default, DPO scope, IS truncation — will be logged as ADRs when the RL spine lands.)*
+
+ADR-0001 tokenizer of record · ADR-0002 GQA in the substrate · ADR-0003 sampler parity · ADR-0004
+dense default / MoE opt-in · ADR-0006 rollout log-prob convention · ADR-0007 MoE FFN (opt-in A1
+extension) · ADR-0008 SGLang is Hopper-only on Ada.

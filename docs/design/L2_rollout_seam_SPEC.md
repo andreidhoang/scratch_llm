@@ -2,9 +2,10 @@
 
 > **Status:** spec / building now. The CPU-buildable step after the KV-cache (see
 > [`L2_kv_cache_SPEC.md`](L2_kv_cache_SPEC.md) §6).
-> **Layer:** L2 Systems (A2.3) — the rollout/inference engine the `kl_train_infer` pillar monitors.
-> **Files touched:** new `src/reasoning_llm/rollout/types.py`, `src/reasoning_llm/rollout/local.py`,
-> `src/reasoning_llm/rollout/__init__.py` (exports); `src/reasoning_llm/sampling.py` (add a
+> **Layer:** L2 Systems (A2.3) — the rollout/inference engine over which the `kl_train_infer`
+> measurement compares training-engine and serving-engine logits.
+> **Files touched:** new `src/scratch_llm/rollout/types.py`, `src/scratch_llm/rollout/local.py`,
+> `src/scratch_llm/rollout/__init__.py` (exports); `src/scratch_llm/sampling.py` (add a
 > logprob-returning decode variant, `generate` unchanged); new `tests/test_rollout.py`.
 
 ## 1. Why (the problem this solves)

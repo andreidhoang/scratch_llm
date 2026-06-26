@@ -4,7 +4,7 @@
 same ``RolloutClient`` Protocol later. See docs/design/L2_rollout_seam_SPEC.md.
 """
 
-from reasoning_llm.rollout.local import LocalBackend
-from reasoning_llm.rollout.types import Rollout, RolloutClient, StopReason
+from scratch_llm.rollout.local import LocalBackend
+from scratch_llm.rollout.types import Rollout, RolloutClient, StopReason
 
 __all__ = ["LocalBackend", "Rollout", "RolloutClient", "StopReason"]

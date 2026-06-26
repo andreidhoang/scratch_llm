@@ -7,7 +7,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from reasoning_llm.kernels import flash_attention_forward
+from scratch_llm.kernels import flash_attention_forward
 
 
 @pytest.mark.parametrize("is_causal", [False, True])

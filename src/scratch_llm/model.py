@@ -1,8 +1,8 @@
 """Decoder-only Transformer LM, from scratch — the policy we own end-to-end.
 
-L1 substrate (A1). 2026-default decoder: pre-norm, RMSNorm, RoPE, SwiGLU, GQA-ready
-multi-head attention, no biases. This is the model whose logits the RLVR engine inspects;
-owning it is the precondition for measuring `kl_train_infer` and `true_quality_gap`.
+A1 substrate. 2026-default decoder: pre-norm, RMSNorm, RoPE, SwiGLU, GQA-ready
+multi-head attention, no biases. Owning the model end-to-end — every logit, every mask —
+is what lets you inspect, debug, and trust everything built on top of it.
 
 Correctness invariants (tested in tests/test_model.py):
 - **Loss at init:** a fresh LM's cross-entropy on random data is ≈ ``log(vocab_size)``
@@ -26,7 +26,7 @@ import torch
 from torch import Tensor, nn
 
 if TYPE_CHECKING:
-    from reasoning_llm.moe import AuxOutput, MoEConfig, MoEStats
+    from scratch_llm.moe import AuxOutput, MoEConfig, MoEStats
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,10 @@ class ModelConfig:
     context_length: int = 2048
     rope_theta: float = 10000.0
     tie_embeddings: bool = False
-    moe: MoEConfig | None = None  # None ⇒ dense SwiGLU (the v0.1.0 default); else opt-in MoE
+    qk_norm: bool = (
+        False  # RMSNorm on q,k per head before RoPE — bounds attention logits (Qwen3/Gemma3/OLMo2)
+    )
+    moe: MoEConfig | None = None  # None ⇒ dense SwiGLU (the default); else opt-in MoE
 
     def __post_init__(self) -> None:
         if self.d_model % self.n_heads != 0:
@@ -241,6 +244,11 @@ class MultiHeadSelfAttention(nn.Module):
         self.k_proj = Linear(cfg.d_model, self.n_kv * self.head_dim)
         self.v_proj = Linear(cfg.d_model, self.n_kv * self.head_dim)
         self.o_proj = Linear(self.n_heads * self.head_dim, cfg.d_model)
+        # QK-norm (Qwen3/Gemma3/OLMo2): RMSNorm each head's q,k over head_dim *before* RoPE, so the
+        # attention logit q·kᵀ/√d cannot run away — the #1 large-model bf16 instability. When off,
+        # these are nn.Identity ⇒ the path is byte-identical to the no-QK-norm model.
+        self.q_norm: nn.Module = RMSNorm(self.head_dim) if cfg.qk_norm else nn.Identity()
+        self.k_norm: nn.Module = RMSNorm(self.head_dim) if cfg.qk_norm else nn.Identity()
 
     def forward(
         self,
@@ -254,6 +262,10 @@ class MultiHeadSelfAttention(nn.Module):
         q = self.q_proj(x).view(b, s, self.n_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(b, s, self.n_kv, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(b, s, self.n_kv, self.head_dim).transpose(1, 2)
+
+        # QK-norm before RoPE (no-op unless cfg.qk_norm): unit-RMS each head's q,k over head_dim.
+        q = self.q_norm(q)
+        k = self.k_norm(k)
 
         # RoPE rotates Q, K at their ABSOLUTE positions — so a cached token at position t is
         # rotated correctly even when only one new token is processed this step.
@@ -307,7 +319,7 @@ class TransformerBlock(nn.Module):
         self.ffn: nn.Module
         if self.is_moe:
             assert cfg.moe is not None
-            from reasoning_llm.moe import MoEFeedForward
+            from scratch_llm.moe import MoEFeedForward
 
             self.ffn = MoEFeedForward(cfg.d_model, cfg.moe)
         else:
@@ -376,7 +388,7 @@ class TransformerLM(nn.Module):
 
     def _aggregate_aux(self, layer_stats: list[MoEStats]) -> AuxOutput:
         """Sum the MoE aux/z losses across layers (zeros on a dense model)."""
-        from reasoning_llm.moe import AuxOutput
+        from scratch_llm.moe import AuxOutput
 
         if layer_stats:
             aux_loss = torch.stack([s.aux_loss for s in layer_stats]).sum()
@@ -389,7 +401,7 @@ class TransformerLM(nn.Module):
 
     def moe_update_biases(self) -> None:
         """Aux-loss-free balancing step for every MoE layer — call after ``optimizer.step()``."""
-        from reasoning_llm.moe import MoEFeedForward
+        from scratch_llm.moe import MoEFeedForward
 
         for block in self.blocks:
             ffn = block.ffn  # type: ignore[union-attr]

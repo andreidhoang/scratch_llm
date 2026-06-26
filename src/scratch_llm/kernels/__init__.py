@@ -11,6 +11,6 @@ Only the pure-PyTorch reference is exported here so importing this package never
 a GPU box.
 """
 
-from reasoning_llm.kernels.flash_attention import flash_attention_forward
+from scratch_llm.kernels.flash_attention import flash_attention_forward
 
 __all__ = ["flash_attention_forward"]

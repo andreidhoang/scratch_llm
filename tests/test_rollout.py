@@ -3,10 +3,10 @@ seed reproducibility, batch parity, stop_reason, and the kl_train_infer comparis
 
 import torch
 
-from reasoning_llm.model import ModelConfig, TransformerLM
-from reasoning_llm.rollout import LocalBackend, Rollout, RolloutClient
-from reasoning_llm.sampling import SamplingParams
-from reasoning_llm.utils.monitors import mean_kl
+from scratch_llm.model import ModelConfig, TransformerLM
+from scratch_llm.rollout import LocalBackend, Rollout, RolloutClient
+from scratch_llm.sampling import SamplingParams
+from scratch_llm.utils.monitors import mean_kl
 
 
 def _tiny_model(seed: int = 0) -> TransformerLM:

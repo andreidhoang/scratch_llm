@@ -23,9 +23,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from reasoning_llm.rollout.hf_reference import HFReferenceBackend
-from reasoning_llm.sampling import SamplingParams
-from reasoning_llm.utils.monitors import (
+from scratch_llm.rollout.hf_reference import HFReferenceBackend
+from scratch_llm.sampling import SamplingParams
+from scratch_llm.utils.monitors import (
     KL_TRAIN_INFER_HALT,
     importance_ratios,
     mean_kl,

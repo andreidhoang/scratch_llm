@@ -6,12 +6,15 @@ in a way that would silently corrupt every downstream measurement.
 """
 
 import math
+from typing import cast
 
 import torch
 
-from reasoning_llm.model import (
+from scratch_llm.model import (
     ModelConfig,
+    MultiHeadSelfAttention,
     RotaryPositionalEmbedding,
+    TransformerBlock,
     TransformerLM,
     cross_entropy,
     scaled_dot_product_attention,
@@ -130,3 +133,44 @@ def test_config_rejects_bad_shapes() -> None:
         except ValueError:
             continue
         raise AssertionError(f"expected ValueError for {bad}")
+
+
+def _block0_attn(model: TransformerLM) -> MultiHeadSelfAttention:
+    """White-box accessor: torch types Module attributes as Tensor|Module, so cast for the checker."""
+    return cast(TransformerBlock, model.blocks[0]).attn
+
+
+def test_qk_norm_off_is_identity() -> None:
+    # Default (qk_norm=False) MUST be byte-identical to the no-QK-norm model: the norms are Identity.
+    attn = _block0_attn(TransformerLM(_small_cfg()))
+    assert isinstance(attn.q_norm, torch.nn.Identity)
+    assert isinstance(attn.k_norm, torch.nn.Identity)
+
+
+def test_qk_norm_loss_at_init_holds() -> None:
+    # QK-norm must not break the uniform-prediction init: loss is still ≈ log(vocab).
+    torch.manual_seed(0)
+    cfg = _small_cfg(qk_norm=True)
+    model = TransformerLM(cfg)
+    ids = torch.randint(0, cfg.vocab_size, (8, 32))
+    targets = torch.randint(0, cfg.vocab_size, (8, 32))
+    loss = cross_entropy(model(ids), targets).item()
+    assert abs(loss - math.log(cfg.vocab_size)) < 0.3, f"loss {loss:.3f} vs log V"
+
+
+def test_qk_norm_bounds_query_magnitude() -> None:
+    # WHY QK-norm exists: it bounds each head's q,k vector magnitude so the attention logit
+    # q·kᵀ/√d cannot explode with input scale (the #1 bf16 instability). With QK-norm the per-head
+    # RMS is ≈ 1 regardless of input scale; without it (Identity) the RMS scales WITH the input.
+    cfg_on = _small_cfg(qk_norm=True)
+    q_on = _block0_attn(TransformerLM(cfg_on)).q_norm  # RMSNorm(head_dim)
+    q_off = _block0_attn(TransformerLM(_small_cfg())).q_norm  # Identity
+    torch.manual_seed(0)
+    x = torch.randn(2, cfg_on.n_heads, 6, cfg_on.head_dim)  # (B, H, S, head_dim)
+    for scale in (1.0, 100.0):  # scale-invariant: each q vector is renormalized to unit RMS
+        rms = q_on(x * scale).pow(2).mean(dim=-1).sqrt()
+        torch.testing.assert_close(rms, torch.ones_like(rms), atol=1e-2, rtol=0)
+    # Identity path: magnitude scales linearly with the input, so logits would blow up at scale.
+    rms1 = q_off(x).pow(2).mean(dim=-1).sqrt()
+    rms100 = q_off(x * 100).pow(2).mean(dim=-1).sqrt()
+    torch.testing.assert_close(rms100, rms1 * 100, rtol=1e-4, atol=0)

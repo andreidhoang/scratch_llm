@@ -8,14 +8,14 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from reasoning_llm.kernels import flash_attention_forward  # CPU oracle, no Triton
+from scratch_llm.kernels import flash_attention_forward  # CPU oracle, no Triton
 
 pytest.importorskip("triton")
 if not torch.cuda.is_available():  # pragma: no cover - environment guard
     pytest.skip("CUDA required for the Triton kernel", allow_module_level=True)
 
 # Imported only after the Triton/CUDA guard (this module pulls `import triton`).
-from reasoning_llm.kernels.flash_attention_triton import flash_attention_triton_forward  # noqa: E402
+from scratch_llm.kernels.flash_attention_triton import flash_attention_triton_forward  # noqa: E402
 
 pytestmark = pytest.mark.gpu
 

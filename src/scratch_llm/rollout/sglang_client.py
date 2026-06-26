@@ -18,8 +18,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from reasoning_llm.rollout.types import Rollout, StopReason
-from reasoning_llm.sampling import SamplingParams
+from scratch_llm.rollout.types import Rollout, StopReason
+from scratch_llm.sampling import SamplingParams
 
 
 class SGLangBackend:

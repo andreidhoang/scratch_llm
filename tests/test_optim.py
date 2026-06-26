@@ -5,8 +5,8 @@ import math
 
 import torch
 
-from reasoning_llm.model import ModelConfig, TransformerLM, cross_entropy
-from reasoning_llm.optim import AdamW, cosine_lr, gradient_clipping
+from scratch_llm.model import ModelConfig, TransformerLM, cross_entropy
+from scratch_llm.optim import AdamW, cosine_lr, gradient_clipping
 
 
 def test_adamw_minimizes_quadratic() -> None:

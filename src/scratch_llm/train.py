@@ -22,9 +22,9 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from reasoning_llm.model import TransformerLM, cross_entropy
-from reasoning_llm.optim import AdamW, cosine_lr, gradient_clipping
-from reasoning_llm.utils.seeding import seed_everything
+from scratch_llm.model import TransformerLM, cross_entropy
+from scratch_llm.optim import AdamW, cosine_lr, gradient_clipping
+from scratch_llm.utils.seeding import seed_everything
 
 
 def get_batch(

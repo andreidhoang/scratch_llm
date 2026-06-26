@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from reasoning_llm.sampling import SamplingParams
+from scratch_llm.sampling import SamplingParams
 
 StopReason = Literal["stop", "length"]
 

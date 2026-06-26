@@ -19,10 +19,10 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from reasoning_llm.model import KVCache, ModelConfig, SwiGLU, TransformerLM, cross_entropy
-from reasoning_llm.moe import MoEConfig, MoEFeedForward, Router, _default_expert_ffn
-from reasoning_llm.optim import AdamW
-from reasoning_llm.train import TrainConfig, load_checkpoint, save_checkpoint, train
+from scratch_llm.model import KVCache, ModelConfig, SwiGLU, TransformerLM, cross_entropy
+from scratch_llm.moe import MoEConfig, MoEFeedForward, Router, _default_expert_ffn
+from scratch_llm.optim import AdamW
+from scratch_llm.train import TrainConfig, load_checkpoint, save_checkpoint, train
 
 
 def _moe_routers(model: TransformerLM) -> list[Router]:

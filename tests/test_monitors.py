@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from reasoning_llm.utils.monitors import (
+from scratch_llm.utils.monitors import (
     KL_TRAIN_INFER_HALT,
     MonitorSnapshot,
     build_snapshot,

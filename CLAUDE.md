@@ -1,107 +1,142 @@
-# reasoningLLM — Operating Constitution
+# scratch_llm — CS336 From-Scratch · Operating Constitution
 
-> **What this repo is.** A clean, independent implementation of the reasoningLLM stack,
-> built to production engineering standards. It is **separate from the ship repo** at
-> `../../reasoningLLM` (mature, the public v0.1.0 artifact); do not copy code between them —
-> this is its own implementation, not a transcription.
+> **What this repo is.** A from-scratch, production-grade implementation of the **CS336
+> (Stanford, "Language Modeling from Scratch")** stack — every layer owned end to end, from the
+> byte to the RL update. It is the *mastery vehicle*: you build it yourself, to engineering
+> standards a frontier lab screens for. The **official course materials live in `../lectures/`**
+> (lecture code + the five assignment scaffolds with their `tests/adapters.py`) — that is the
+> **spec and the test oracle**: the PDFs define each deliverable, the adapter tests verify your
+> implementation is correct. This repo is *your* implementation, not a transcription.
 >
-> **Harness manual:** [`docs/CONTEXT_ENGINEERING.md`](docs/CONTEXT_ENGINEERING.md) explains
-> *why every file under `.claude/` exists and on which context lever*. Read it once.
+> **Harness manual:** [`docs/CONTEXT_ENGINEERING.md`](docs/CONTEXT_ENGINEERING.md) explains why
+> every file under `.claude/` exists. Read it once.
 
-## The one number (the through-line)
+## The organizing principle
 
-```
-true_quality_gap = reward − true_quality        (+ hack_rate, kl_train_infer)
-```
-Owned end-to-end, from the token to the reward. Every subsystem exists to measure or
-protect this quantity. If a change does not move or defend the gap, question it.
+> **Own every layer of a language model — byte → BPE → Transformer → systems → scaling → data →
+> RL post-training — to production engineering standard, and be able to whiteboard and defend each
+> piece cold in a frontier-lab interview.**
 
-## Frozen v0.1.0 scope (do not relitigate — log an ADR in `docs/adr/` instead)
+The engineering disciplines below *are* the hiring signal: weak engineering is the most common
+silent rejection of otherwise-strong candidates. Mastery is the means; a clean, public, green-CI
+repo that you can explain from first principles is the end.
 
-- **Ship:** the engine + a tiny smoke run (≤100 problems, 3 of 5 `HardeningLevel`s, 1 seed —
-  proves the plumbing). Day-14 test: *does it run, is it public, is the smoke run logged with
-  `reward / hack_rate / true_quality_gap / kl_train_infer` across 3 `HardeningLevel`s?*
-- **VERA** (`v0.1.x`, post-sprint): the first scientific finding on the engine (math/1.5B).
-- **v0.2.0** (additive): MoE×RL collapse, multimodal. ADR stubs only — **never smuggle into v0.1.0.**
+## How we build — forced first-principles mastery × relentless execution
 
-## The five layers → CS336 assignment → source file
+Two mandates, every session. The Navigator (the user) is leveling to senior frontier-RE; treat
+every load-bearing concept as something they must own, not just ship.
 
-| Layer | A# | Subsystem | Source it feeds |
+**Master understanding (forced).** For each load-bearing concept, before/while we build it:
+1. **First principles** — derive the mechanism (don't assert it): the problem, the math, why this design.
+2. **Visualize, three lenses** — the **tensor shapes** through the op (+ the exact `src/scratch_llm/…` lines), the **system/data-flow** (ASCII), and a **tiny worked numeric example** (hand-traced small numbers).
+3. **Predict-before-run** — the user writes the falsifiable number/shape first (debugging *and* learning anchor).
+4. **Build test-first** — the invariant as a test, then make it pass, green-CI.
+5. **Teach-back — the gate** — the user explains it back in their own words + modifies-and-predicts one variation. **We do not advance to the next concept until they can teach the current one back.** This is the *force*: a concept gate, **not** a commit gate — no F-IDs, no ceremony (that was retired; understanding is the working *mode*, not paperwork).
+6. **Connect to frontier** — tie it to `docs/FRONTIER_PRACTICE_2026.md` (what 2026 labs do / the interview question).
+
+The full generic learning protocol (pair-programming, Socratic, question-everything) lives in the
+global `~/.claude/CLAUDE.md` and loads every turn — the above is only its **repo binding** to the
+A1→A5 build, not a duplicate.
+
+**Execute relentlessly.** Always know the current pillar + the next load-bearing step (`docs/STATUS.md`
++ `docs/IMPLEMENTATION_PLAN.md`); never leave the build idle; resource GPU steps (vastai), don't drop
+them. Use **`/master <concept>`** to go deep on one concept and **`/next`** to orient + start the next
+step test-first. Treat each *optional* path (a `🔵` build-lab, an ablation) as a **research-taste** call —
+an a-priori EV(success ÷ time) bet on a stochastic DAG whose nodes fail, gated by a predict-before-run
+invariant and a kill-criterion (`docs/CONTEXT_ENGINEERING.md` §3.9).
+
+## Scope — master CS336, from first principles, scratch → production
+
+Build the five assignments A1 → A5 to the *load-bearing 20%* (the per-assignment
+guides tag every deliverable LOAD-BEARING / COURSE-ROTE / SKIP). **Build-order is numeric (each layer
+builds on the last); ship-order is EV-ranked.** With A1 ✅ done, the next artifact to *ship* is the
+**A5 RL "aha"** (scarcest 2026 cluster, highest-EV), with the A2 systems finish + OSS Rung-1 in parallel,
+then DELTA on that base — the one canonical sequence is **`../STRATEGY.md` §8** (it wins over any other
+doc's ordering). "Production" means: green CI,
+tests as executable spec, design docs and ADRs for non-obvious decisions, reproducible runs.
+GPU-bound steps are **resourced** (rented), never silently dropped (see "Follow the plan").
+
+## The five assignments → layer → source files
+
+| CS336 assignment | Layer | What you build (the load-bearing core) | Lives in |
 |---|---|---|---|
-| **L5** RLVR engine | A5 | GRPO/Dr.GRPO · reward · verifier-exploitability | `algos/`, `rewards/`, `envs/exploitability.py`, `envs/true_quality.py` |
-| **L4** Data | A4 | reward/verifier-data curation · dedup · contamination | `data/curation.py`, `data/contamination.py` |
-| **L3** Scaling | A3 | IsoFLOP machinery repurposed to fit `hack_rate` vs compute | `scaling/hack_rate_fit.py` |
-| **L2** Systems | A2 | Triton FA2 · DDP/ZeRO · KV-cache · SGLang client | `rollout/sglang_client.py`, `utils/monitors.py` |
-| **L1** Substrate | A1 | BPE · Transformer · GQA/RoPE/SwiGLU · (MoE) | the policy served in rollouts |
+| **A1** Basics | Substrate | byte-level BPE · Transformer (RMSNorm·RoPE·SwiGLU·MHA) · cross-entropy · AdamW · cosine schedule · grad clip · data loading · checkpoint · decoding | `tokenizer.py`, `model.py`, `moe.py`, `optim.py`, `train.py`, `sampling.py` |
+| **A2** Systems | Systems | Triton FlashAttention-2 (fwd+bwd) + roofline · DDP (naive→overlap) · ZeRO-1 · FSDP · gradient checkpointing · mixed precision · the 100B memory math | `kernels/`, `rollout/`, `utils/monitors.py`, `utils/` (DDP/ZeRO to build) |
+| **A3** Scaling | Scaling | IsoFLOP / Chinchilla fit (compute-optimal N, D) + the budget-constrained training-API leaderboard | `scaling/` (IsoFLOP fitter); the Stanford-API leaderboard runs in `../lectures/assignment3-scaling` |
+| **A4** Data | Data | CommonCrawl pipeline: extract → filter → **quality classifier** → exact + **MinHash/LSH dedup**; pipeline order + discard accounting | `data/` |
+| **A5** Alignment | Post-training | SFT → Expert Iteration → **GRPO / Dr.GRPO** + the verifiable-reward grader; supplement: **DPO**, reward modeling, safety | `algos/`, `rewards/`, `envs/` |
 
-Module layout: `src/reasoning_llm/{algos,rewards,envs,rollout,scaling,data,utils}/` (plus
-flat `tokenizer.py`, `model.py`, `optim.py`, `train.py`, `sampling.py` for the L1 substrate).
+Module layout: `src/scratch_llm/{algos,rewards,envs,rollout,scaling,data,utils,kernels}/` plus the
+flat A1 substrate (`tokenizer.py`, `model.py`, `moe.py`, `optim.py`, `train.py`, `sampling.py`).
 
-**Build status:** L1 substrate ✅ · `utils/monitors.py` ✅ · KV-cache ✅ · rollout seam ✅ · FA2
-(oracle+Triton+roofline, 53% of SDPA) ✅ · `kl_train_infer` bridge ✅ (exact KL on a 4090; SGLang is
-Hopper-only on Ada — ADR-0008). **Next:** DDP-overlap + ZeRO-1 (CPU/gloo) · real SGLang on a Hopper
-box. See [`docs/STATUS.md`](docs/STATUS.md).
+**Build status (2026-06-20):** A1 substrate ✅ (BPE · model · MoE opt-in · AdamW · train · sampling) ·
+A2 partial (FlashAttention-2 oracle+Triton+roofline ✅ · KV-cache ✅ · `utils/monitors.py` ✅ · rollout
+seam ✅; **DDP/ZeRO-1/FSDP + the memory one-pager remain**) · A3/A4/A5 to build. 92 tests green,
+ruff/pyright clean; last code commit Jun 8. **Next ship (EV-ranked): the A5 RL "aha"** (GRPO/Dr.GRPO) ·
+**Capstone DELTA** (GDN-2 decode kernel): design + plan written, **base-first** — gated behind the A5
+ship + the Step-0 gate. See [`docs/STATUS.md`](docs/STATUS.md) and `../STRATEGY.md` §8.
 
-## Engineering disciplines (these are how labs silently screen)
+## Engineering disciplines (how labs silently screen — bake these into tests)
 
-1. **Loss-at-init check** — a fresh LM's cross-entropy must be ≈ `log(vocab_size)`. If not, the
-   head/embedding/masking is wrong. Assert it in the model's first test.
-2. **Overfit-one-batch** — before any real training, drive train loss to ~0 on a single batch.
-   If it can't, the optimizer/data/loss wiring is broken, not the data.
-3. **Fixed-seed reproducibility** — seed python/numpy/torch; a re-run reproduces the metric.
-4. **Mandatory RL logging** (any RL run; absence = the run is uninterpretable):
-   log the **three KL divergences separately** — `KL(current‖ref)`, `KL(current‖old)`,
-   **`kl_train_infer = KL(train‖infer)`** — plus IS-ratio histograms, reward distribution stats,
-   and **length stats** (catches verbosity reward-hacking). `kl_train_infer` HALT threshold = **0.10**.
-5. **Predict before you run** — write the falsifiable number first; it is the debugging anchor.
+1. **Loss-at-init ≈ log(vocab_size).** A fresh LM's cross-entropy on random data must be ≈ uniform
+   (`log V`). Off ⇒ head/embedding/masking bug. The cheapest correctness oracle in the stack.
+2. **Overfit-one-batch.** Before any real run, drive train loss → ~0 on a single batch. If it
+   can't, the optimizer/data/loss wiring is broken — not the data.
+3. **Fixed-seed reproducibility.** Seed python/numpy/torch; a re-run reproduces the metric.
+4. **Mandatory RL logging** (any RL run; absence = an uninterpretable run): log **entropy**, the
+   **KL divergences separately** — `KL(current‖ref)`, `KL(current‖old)` (and, when train and
+   inference engines differ, the train↔infer drift) — plus IS-ratio histograms, reward-distribution
+   stats, and **length stats** (catches verbosity reward-hacking).
+5. **Predict before you run.** Write the falsifiable number first; it is the debugging anchor.
 
 ## Follow the plan — never skip a step
 
 Build the plan's steps **in order and in full**. A step that needs hardware is **not** a step to
-skip or silently drop — it is a step to *resource*. If a step requires a GPU (Triton/FA2 kernels,
-DDP/ZeRO/FSDP, real SGLang serving, the TinyZero/VERA RL runs), **rent one on vast.ai** (use the
-`vastai` skill) and complete it. "GPU-deferred" means *scheduled on rented hardware*, never
-*abandoned*. Order CPU-buildable steps first when that is cheaper, but CPU-vs-GPU is never an
-excuse to drop scope. The only legitimate non-builds are items the plan itself tags **SKIP** (e.g.
-leaderboards) or **v0.2.0** (MoE/multimodal, per ADR-0004/0005). Everything else gets built.
+skip — it is a step to *resource*. If a step requires a GPU (Triton/FA2 kernels, DDP/ZeRO/FSDP,
+real serving, RL runs), **rent one on vast.ai** (use the `vastai` skill) and complete it.
+"GPU-deferred" means *scheduled on rented hardware*, never *abandoned*. Order CPU-buildable steps
+first when cheaper, but CPU-vs-GPU is never an excuse to drop scope. The only legitimate non-builds
+are items the guides tag **SKIP** (e.g. the perplexity/8B/Paloma leaderboards — capped, GPU-dollar
+sinks with no mastery carry).
 
 ## Green-CI rule (enforced, not requested)
 
-A commit is shipped only if green: `ruff check` + `ruff format --check` + `pyright` + `pytest -m "not gpu"`.
+A commit ships only if green: `ruff check` + `ruff format --check` + `pyright` + `pytest -m "not gpu"`.
 `.claude/hooks/green-ci-gate.sh` enforces this as a Claude Code `PreToolUse` hook — a red `git commit`
-issued **through Claude Code** is blocked (exit 2), not merely discouraged. For enforcement on *every*
-commit path (external terminal included), symlink the same script as a git-native hook at `git init`:
-`ln -s ../../.claude/hooks/green-ci-gate.sh .git/hooks/pre-commit`. Commit messages are conventional and
-scoped: `<area>: <imperative>` (e.g. `tokenizer: add byte-level BPE trainer`).
+through Claude Code is blocked (exit 2). For every commit path (external terminal included), symlink
+it as a git hook: `ln -s ../../.claude/hooks/green-ci-gate.sh .git/hooks/pre-commit`. Commit messages
+are conventional and scoped: `<area>: <imperative>` (e.g. `tokenizer: add byte-level BPE trainer`).
 
 ## Build / test
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"          # CPU core: numpy/pydantic
+uv pip install -e ".[dev]"          # CPU core: numpy/pydantic/pyyaml/regex
 ruff check src tests && ruff format --check src tests
 pyright
-pytest -m "not gpu"                  # the CPU smoke gate (mirrors CI)
+pytest -m "not gpu"                  # the CPU gate (mirrors CI); src/ layout via pytest pythonpath
 ```
 
 ## Where things live (read on-demand, not auto-loaded)
 
 | Need | Path |
 |---|---|
-| Sprint cockpit (tracker, `/morning`, `/ship`, gates) | `../../daily/` |
-| **Master plan** — §2 stack · §3 per-layer briefs (add-ons + kill criteria) · §5 role map | `../UNIFIED_FRONTIER_PROJECT_SPEC.md` |
-| **Implementation plan** — the integration spine: reconciled contracts · cross-layer DAG · keystone-first build order · smoke run · VERA | `docs/IMPLEMENTATION_PLAN.md` |
-| **Per-layer build guides** — the load-bearing 20% per assignment → `src/reasoning_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
-| Capstone scope + VERA study | `../CAPSTONE_AND_STUDY_PLAN.md` |
-| The public ship repo (do not copy from) | `../../reasoningLLM/` |
-| This repo's harness, explained | `docs/CONTEXT_ENGINEERING.md` |
+| Workspace map + CS336→interview-readiness | `../README.md` |
+| **The build plan** — A1→A5 spine, load-bearing 20%, discipline gates, build order | `docs/IMPLEMENTATION_PLAN.md` |
+| **Per-assignment build guides** — every deliverable tagged + mapped to `src/scratch_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |
-| **L2 design specs** — KV-cache · rollout seam · FA2 roofline · `kl_train_infer` bridge | `docs/design/` |
+| Design specs — KV-cache · rollout seam · FA2 roofline · MoE walkthrough | `docs/design/` |
+| **Frontier practice (2026)** — per-pillar modern-default upgrades · build labs · know-it items (fact-checked; + tagged GDM-aligned additions) | `docs/FRONTIER_PRACTICE_2026.md` |
+| Architecture decisions | `docs/adr/` |
+| **The official course (spec + test oracle)** — lectures + the 5 assignment scaffolds | `../lectures/` |
+| **Capstone — DELTA** (GDN-2 decode-kernel *spike*; merged RFC + 4-week barbell plan) | `../DELTA.md` |
 
 ## Implementation rules
 
-- This is its own clean implementation — **do not copy code from `../../reasoningLLM`** (the ship repo).
-- Every module's docstring names its §3 brief, falsifiable prediction, and kill criterion — the engineering
-  intent is documented in the code, not just in the guides.
-- Land changes test-first where practical: write the invariant (loss-at-init, decode round-trip,
+- **Own every line.** This is your from-scratch implementation. The official `../lectures/assignment*`
+  scaffolds are the **spec + test oracle** — implement against their `tests/adapters.py`; do not copy
+  solutions.
+- Every module's docstring states its intent, the key invariant it must satisfy, and (where relevant)
+  the interview question it answers — the engineering rationale lives in the code, not only the guides.
+- Land changes **test-first** where practical: write the invariant (loss-at-init, decode round-trip,
   causal-no-leak, overfit-one-batch) as a test, then make it pass.

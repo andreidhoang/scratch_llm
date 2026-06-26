@@ -1,8 +1,9 @@
 # Context Engineering for Claude Code — a Lead Harness Engineer's Field Manual
 
-> Written 2026-06-05 as the teaching artifact for the `reasoningLLM` clean-room harness.
-> The harness under `.claude/` *is* the worked example for everything here. Read this once
-> end-to-end; thereafter it is reference.
+> The teaching artifact for the `scratch_llm` harness. The mission of this repo is **mastering
+> CS336 (A1→A5) from scratch to production** — own every layer of a language model, to engineering
+> standards a frontier lab screens for. The harness under `.claude/` *is* the worked example for
+> everything here. Read this once end-to-end; thereafter it is reference.
 
 ---
 
@@ -44,7 +45,7 @@ The objective is not "maximal information." It is the **smallest high-signal set
 Prompt engineering optimizes one string you write. Context engineering optimizes the **entire token
 stream across a long, multi-turn, tool-using session** — what auto-loads, what the model pulls in
 just-in-time, what tool outputs return, what survives compaction. For an agent that runs for hours
-over a 14-day sprint, the prompt is a rounding error; the *context strategy* is the system.
+across the A1→A5 build, the prompt is a rounding error; the *context strategy* is the system.
 
 ---
 
@@ -81,21 +82,22 @@ This is the heart of the manual: for each file we authored, *why it exists*, *wh
 *what the wrong lever would have cost*. Reading this is how you learn to make these calls yourself.
 
 ### `CLAUDE.md` (repo root) — Lever 1
-- **What:** the constitution — the through-line metric, frozen v0.1.0 scope, L1–L5↔assignment↔file
-  map, the engineering disciplines (loss-at-init, overfit-one-batch, seeds, the 3-KL logging), the
-  green-CI rule, build commands, and a pointer table to on-demand docs.
+- **What:** the constitution — the organizing principle (own every layer, byte → RL post-training),
+  the A1→A5↔layer↔file map, the engineering disciplines (loss-at-init ≈ log(vocab), overfit-one-batch,
+  fixed-seed reproducibility, the mandatory RL logging, predict-before-you-run), the green-CI rule,
+  build commands, and a pointer table to on-demand docs.
 - **Why lever 1:** these are the facts the model must apply on *every* decision in this repo —
-  forgetting the metric or the frozen scope mid-task is catastrophic. They are small and stable, so
+  forgetting the scope map or a discipline mid-task is catastrophic. They are small and stable, so
   they earn always-on residence.
 - **Wrong-lever cost:** as a skill (lever 2) the model might not load it before acting and would
   drift on scope. As prose-enforcement of green-CI it would be ignorable — so that *one* rule was
   pushed down to lever 4 (the hook), and CLAUDE.md only *describes* it.
-- **Discipline:** kept ≤ ~150 lines. Depth — this manual, the [master plan](../../UNIFIED_FRONTIER_PROJECT_SPEC.md),
-  the [per-layer build guides](assignment_guides/INDEX.md) — is *referenced*, not inlined (see the
+- **Discipline:** kept lean. Depth — this manual, the [build plan](IMPLEMENTATION_PLAN.md),
+  the [per-assignment build guides](assignment_guides/INDEX.md) — is *referenced*, not inlined (see the
   `docs/` knowledge-base entry below for why that's Lever 2, not Lever 1).
 
 ### `.claude/settings.json` — Lever 4 (permissions) + wiring for Lever 4 (hooks)
-- **What:** pre-approves the safe, frequent sprint commands (`uv`, `pytest`, `ruff`, `pyright`,
+- **What:** pre-approves the safe, frequent build commands (`uv`, `pytest`, `ruff`, `pyright`,
   read-only `git`) and registers the three hooks.
 - **Why lever 4:** permissions shape the *action space* deterministically — you stop being prompted
   50×/day for `pytest` (which would be pure friction) without granting anything destructive.
@@ -128,7 +130,7 @@ This is the heart of the manual: for each file we authored, *why it exists*, *wh
 
 ### `.claude/hooks/session-start.sh` — Lever 4 feeding Lever 1
 - **What:** a `SessionStart` hook whose stdout is injected into context: current branch, uncommitted
-  file count, venv presence, and the cockpit pointer.
+  file count, and venv presence.
 - **Why this is subtle and good:** CLAUDE.md is *static* — it cannot know your branch right now. The
   hook supplies the small slice of *dynamic* state worth always-on residence. Keep it ~2 lines:
   every line is paid once per session, so it must out-earn its tokens. (Don't echo what CLAUDE.md
@@ -147,67 +149,85 @@ delegation, so it is written to trigger on exactly the right request.
   trust in any RL number.
 
 ### `.claude/commands/*.md` — Lever 2
-You-triggered macros, **zero context cost until typed**, that expand into precise prompts delegating
-to the agents. `/ship` (reviews the diff, runs green-CI, then hands *you* the commit command — never
-auto-commits) and `/audit-rl` (routes RL run logs to the auditor). **Command vs skill vs agent:**
-command = you always invoke it manually; skill = model auto-loads when relevant; agent = isolated
-context + restricted tools. We use commands for deliberate, author-driven gates.
+You-triggered macros, **zero context cost until typed**, that expand into precise prompts. Two are
+deliberate gates delegating to the agents: `/ship` (reviews the diff, runs green-CI, then hands *you*
+the commit command — never auto-commits) and `/audit-rl` (routes RL run logs to the auditor). Two
+drive the build: **`/master <concept>`** (the forced first-principles + three-lens-visualize +
+teach-back mentor loop) and **`/next`** (orient → start the next load-bearing step test-first).
+- **Why the mentor is a command, not a subagent.** Teaching is an *interactive Socratic dialogue* —
+  it pauses for the user's prediction and teach-back. A subagent returns exactly **one** final message
+  and cannot hold a back-and-forth, so mentor mode runs in the **main thread** (the user is in the
+  loop). Subagents stay for *mechanical, one-shot* work (diff review, log audit) where no dialogue is
+  needed. This is the load-bearing design call of this refactor.
+- **Command vs skill vs agent:** command = you invoke it manually; skill = model auto-loads when
+  relevant; agent = isolated context + restricted tools, one-shot.
 
 ### Project memory (`~/.claude/projects/.../memory/`) — Lever 1 index + Lever 2 bodies
 `MEMORY.md` (always-on, one line each) + topic files (recalled on relevance). Seeded with the
-*non-obvious, hard-won* facts — above all the three-repo topology I had to discover — and explicitly
-*not* with what the repo already encodes (code structure, git history). **Why this matters:** memory
-is the only context that survives `/clear` between sprint days. A fresh session reads `MEMORY.md` and
-instantly knows not to confuse the clean-room with the ship repo.
+*non-obvious, hard-won* facts — above all the workspace topology (which repo is which, and that this
+one is the from-scratch implementation) — and explicitly *not* with what the repo already encodes
+(code structure, git history). **Why this matters:** memory is the only context that survives
+`/clear` between build sessions. A fresh session reads `MEMORY.md` and instantly re-orients to where
+this repo sits in the workspace.
 
-### `cs336/CLAUDE.md` (umbrella) — Lever 1, thin
-A ~30-line bridge so that launching from the umbrella root still orients you across the three repos.
-Thin on purpose: the real constitutions live in the sub-repos; duplicating them here would create
-*conflicting* always-on instructions (a real failure mode — when two CLAUDE.md files disagree, the
-model picks one arbitrarily).
+### `cs336/README.md` (workspace entry point) — Lever 2, *not* Lever 1
+The top of the workspace is a plain `README.md` (the workspace map + CS336→interview-readiness),
+read on demand — deliberately **not** an umbrella `CLAUDE.md`. A second always-on `CLAUDE.md` at the
+parent would *conflict* with this repo's constitution (when two CLAUDE.md files disagree, the model
+picks one arbitrarily — a real failure mode). So there is exactly **one** always-on constitution:
+this sub-repo's `CLAUDE.md`; the parent orients via a README you pull in when you need it.
 
 ### `docs/` — the on-demand knowledge base (Lever 2)
 The `.claude/` harness decides *how* the agent acts; the `docs/` tree supplies *what* to build and
 *why each piece is load-bearing*. It is deliberately **Lever 2** — referenced just-in-time, never
 auto-loaded — so all of its depth costs ~zero on a normal turn.
 
-- **[`../../UNIFIED_FRONTIER_PROJECT_SPEC.md`](../../UNIFIED_FRONTIER_PROJECT_SPEC.md)** — the master plan:
-  §1 thesis, §2 five-layer stack, §3 per-layer briefs (core + senior add-ons, each with its falsifiable
-  prediction + kill criterion), §5 evidence ledger / role map, frozen scope. This is the *source of
-  truth for the project's content*; the root `CLAUDE.md` (Lever 1) is only its lean, always-on summary —
-  the L1–L5↔assignment↔file map there is the spec's §2 table compressed to fit always-on residence.
+- **[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)** — the build spine: the A1→A5 build order, the
+  load-bearing 20% of each assignment, the discipline gates, and the definition of done per step. This is
+  the *source of truth for what to build and in what sequence*; the root `CLAUDE.md` (Lever 1) is only its
+  lean, always-on summary — the A1→A5↔layer↔file map there is the plan's spine compressed to fit always-on
+  residence.
+- **Capstone — DELTA** (`../../DELTA.md`, in the
+  workspace root) — the barbell *spike* (a GDN-2 decode kernel) that sits on the A2/A5 base. Lever 2,
+  on-demand depth like the rest of `docs/`; tracked from [`STATUS.md`](STATUS.md) and
+  [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7 so it is **not an orphan** (the discipline below).
 - **[`assignment_guides/`](assignment_guides/INDEX.md)** — five senior reviews of the CS336 PDFs, each
-  mapping the load-bearing 20% of an assignment onto `src/reasoning_llm/`, tagged
-  LOAD-BEARING / COURSE-ROTE / SKIP, with the A2-first build order and per-day schedule. Enter at
-  `INDEX.md`; pull the one guide for the layer you're building, when you build it.
-- **Why Lever 2, not Lever 1:** spec + guides are thousands of lines. Inlining them into `CLAUDE.md`
+  mapping the load-bearing 20% of an assignment onto `src/scratch_llm/`, tagged
+  LOAD-BEARING / COURSE-ROTE / SKIP, with the linear A1→A5 build order. Enter at
+  `INDEX.md`; pull the one guide for the assignment you're building, when you build it.
+- **[`FRONTIER_PRACTICE_2026.md`](FRONTIER_PRACTICE_2026.md)** — the 2026 frontier layer *on top of* the
+  guides: per-pillar 🟢 modern-defaults / 🔵 build-labs / ⚪ know-it items (+ the DELTA capstone awareness
+  set), each with a falsifiable invariant and a dated source. Lever 2 like the rest of `docs/`: `CLAUDE.md`
+  holds the pointer, this doc holds the depth, and 🟢-adoption is tracked back in `STATUS.md`'s build state
+  (no separate ledger). Its provenance header records the fact-check pass + the later GDM-alignment batch.
+- **Why Lever 2, not Lever 1:** plan + guides are thousands of lines. Inlining them into `CLAUDE.md`
   would pay for *all* of it on *every* turn (§0.1) and trigger context rot (§0.2) — to surface a single
-  per-layer brief the model needs only while working that layer. Progressive disclosure (§1) is exactly
+  per-assignment brief the model needs only while working that layer. Progressive disclosure (§1) is exactly
   the right tool: the model reads the pointer always-on, the depth on demand.
 - **The discipline (bidirectional pointers, no orphans):** `CLAUDE.md` and `MEMORY.md` hold only the
-  pointers *into* `docs/`; the spec and guides hold the depth and point *back* (the guides' §"Source-of-truth
-  pointers" cite the spec and `CLAUDE.md`). So whichever file you enter from, you can reach the rest —
-  and no copy of the L1–L5 map is the authoritative one twice (which would re-create the conflicting-
+  pointers *into* `docs/`; the plan and guides hold the depth and point *back* (the guides' source-of-truth
+  pointers cite the plan and `CLAUDE.md`). So whichever file you enter from, you can reach the rest —
+  and no copy of the A1→A5 map is the authoritative one twice (which would re-create the conflicting-
   duplicate failure mode above). One source of truth per fact; everything else links to it.
 
 ---
 
-## 3. The Lead-Harness-Engineer operating manual (how to *drive* this across the sprint)
+## 3. The Lead-Harness-Engineer operating manual (how to *drive* this across the build)
 
 The files above are the static harness. This section is the dynamic discipline — how you run Claude
 Code day to day so context stays high-signal.
 
 ### 3.1 Launch from the right directory
-The clean-room harness (settings, hooks, CLAUDE.md) only loads when cwd is inside
-`reasoningLLM_scratch/`, because configuration is discovered by walking **up** from cwd. `cd` into
+This harness (settings, hooks, CLAUDE.md) only loads when cwd is inside
+`scratch_llm/`, because configuration is discovered by walking **up** from cwd. `cd` into
 the repo before `claude`. (This is also what makes `$CLAUDE_PROJECT_DIR` in the hook commands
 resolve to the repo root.)
 
 ### 3.2 Context hygiene: `/clear` vs compaction
 - **`/clear`** wipes the conversation. Use it **between tasks/days** — the moment the current thread's
-  content stops paying rent. Your external memory (tracker, `MEMORY.md`, the repo) carries state, so
-  clearing is cheap and *good*: it resets you to a clean, high-signal window. Frozen decision #8 in
-  the daily contract says exactly this: "External memory > chat memory; `/clear` between days is fine."
+  content stops paying rent. Your external memory (`MEMORY.md`, `docs/STATUS.md`, the repo itself)
+  carries state, so clearing is cheap and *good*: it resets you to a clean, high-signal window. The
+  governing rule: external memory > chat memory, so `/clear` between build sessions is fine.
 - **Compaction** is the harness auto-summarizing when the window fills. It is lossy. Prefer to
   `/clear` deliberately *before* you'd hit compaction, so you control what survives rather than
   letting a summarizer guess.
@@ -241,6 +261,34 @@ once. We did this here: we executed all three hooks and watched their output bef
 Before a long advisor call, a big agent run, or anything that might be interrupted, make the
 deliverable durable (write the file, commit). If the session ends mid-operation, a durable result
 persists; an in-flight one is lost. This is why every file in this build was written, not described.
+
+### 3.8 Mentor mode + relentless execution — and why understanding is a *mode*, not ceremony
+The `CLAUDE.md` "How we build" loop binds two mandates: **forced first-principles mastery** (derive →
+visualize three ways → predict → test-first → **teach-back gate** → connect-to-frontier) and
+**relentless execution** (always build the next load-bearing step; never idle). `/master` runs the
+first on one concept; `/next` runs the second.
+
+**The reconciliation (recorded so it is not re-litigated).** On 2026-06-05 the Feynman *ceremony* was
+retired — F-ID gating, explain-back as a *commit* blocker — because it distracted from building. On
+2026-06-09 the user reversed the *spirit*: forced first-principles understanding (and visualizing
+everything — math, systems, code) is wanted again, but as the **working mode**, not paperwork. So the
+teach-back is a **concept gate** (don't advance until you can explain it), never a **commit gate** —
+green-CI remains the only thing that blocks a commit. Hold both truths: understanding is forced;
+bureaucracy is not. The standing risk is the **treadmill** — scaffolding instead of building (this
+session ran several meta-tasks before the first line of CS336 code) — which is exactly why `/next`
+and the "execute relentlessly" mandate exist: to keep the mode pointed at real code.
+
+### 3.9 Research taste — the build as a stochastic MDP (not a deterministic DAG)
+A SWE project is a *deterministic* DAG of milestones: storage layer → service A → service B, monotone
+progress to a finish line. A research build is a **stochastic MDP** — nodes (an architecture tweak, an
+ablation, a kernel idea) *fail*, and the next state is uncertain until you run it. The skill frontier labs
+screen for is **research taste**: *a priori* estimating success-rate ÷ time-investment across several
+unproven paths and picking the highest-expected-value one **before** writing the code. This is the operating
+discipline behind the `🔵 build-lab` choices in `FRONTIER_PRACTICE_2026.md` — each lab is an EV bet, where
+**predict-before-you-run is the cheap state-estimate that collapses the uncertainty fastest**, with a stated
+kill-criterion so a failed node is abandoned rather than sunk-cost. "What would falsify this?" is the same
+gate that runs the DELTA capstone. *(Framing: Jacob Steinhardt's research-as-MDP — the EV-under-uncertainty
+view of a research career.)*
 
 ---
 
@@ -313,11 +361,11 @@ Authoritative schemas, confirmed against on-disk files + `code.claude.com` docs 
 
 ### How to verify *this* harness loaded (do this once now)
 ```
-/memory     # expect: reasoningLLM_scratch/CLAUDE.md + the MEMORY.md entries
+/memory     # expect: scratch_llm/CLAUDE.md + the MEMORY.md entries
 /agents     # expect: ship-reviewer, rl-run-auditor
 /hooks      # expect: SessionStart, PostToolUse(Edit|Write), PreToolUse(git commit)
 ```
-(Run Claude from inside `reasoningLLM_scratch/`, or these won't be in scope.)
+(Run Claude from inside `scratch_llm/`, or these won't be in scope.)
 
 ---
 
@@ -325,13 +373,15 @@ Authoritative schemas, confirmed against on-disk files + `code.claude.com` docs 
 
 Sanity questions on the context-engineering choices above — if any answer is shaky, re-read that section:
 
-1. **Lever placement.** "No red commits" is on lever 4 (a hook), but "the through-line metric is
-   `true_quality_gap`" is on lever 1 (CLAUDE.md). Why is each on its lever and not the other's?
+1. **Lever placement.** "No red commits" is on lever 4 (a hook), but "the A1→A5↔layer↔file scope map"
+   and "loss-at-init ≈ log(vocab)" are on lever 1 (CLAUDE.md). Why is each on its lever and not the
+   other's? (Hint: one is a *guarantee* that must be unrationalizable; the others are *facts* the model
+   must recall on every decision.)
 2. **Modify-and-predict.** If we moved the entire 1,913 lines of dormant framework docs into
    `@import`s in `~/.claude/CLAUDE.md`, predict the effect on (a) per-turn token cost, (b) the
    model's adherence to your *specific* rules, (c) context rot on a long session.
-3. **Subagent economics.** You need to find every place `kl_train_infer` is computed across both
-   reasoningLLM repos. Why send a subagent rather than grep-and-read in the main thread? What exactly
+3. **Subagent economics.** You need to find every place `kl_train_infer` is computed across
+   `src/scratch_llm/`. Why send a subagent rather than grep-and-read in the main thread? What exactly
    does your main window gain?
 4. **The independence point.** `git commit` is *not* on the permission allow-list, yet the
    green-CI hook still fires on it. Explain why permissions and hooks are orthogonal levers.

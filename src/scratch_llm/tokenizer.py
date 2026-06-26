@@ -1,8 +1,8 @@
 """Byte-level BPE tokenizer — train it, then encode/decode with it.
 
-L1 substrate (A1). The tokenizer defines the vocabulary axis of every logit and every
-KL we ever compute, so owning it is the precondition for measuring
-`true_quality_gap = reward - true_quality (+ hack_rate, kl_train_infer)`.
+A1 substrate. The tokenizer defines the vocabulary axis of every logit, so owning it
+end-to-end — the merges, the special-token boundaries, the encode/decode round-trip — is
+the foundation the rest of the stack is built on.
 
 Two correctness invariants this module must satisfy (tested in tests/test_tokenizer.py):
 - **Round-trip:** ``decode(encode(s)) == s`` for any valid UTF-8 string.

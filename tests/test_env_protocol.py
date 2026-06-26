@@ -1,11 +1,11 @@
-"""Keystone leaf — the L5 contracts: text-in RewardFn, frozen Task/Graded, structural
-VerifiableEnv (ADR-0010). Imports no torch (Rollout is a TYPE_CHECKING-only annotation)."""
+"""The A5 verifiable-env contract: text-in RewardFn, frozen Task/Graded, structural
+VerifiableEnv. Imports no torch (Rollout is a TYPE_CHECKING-only annotation)."""
 
 import dataclasses
 
 import pytest
 
-from reasoning_llm.envs.protocol import (
+from scratch_llm.envs.protocol import (
     DecodeFn,
     Graded,
     RewardDict,

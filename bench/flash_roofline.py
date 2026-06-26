@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 import triton
 
-from reasoning_llm.kernels.flash_attention_triton import flash_attention_triton_forward
+from scratch_llm.kernels.flash_attention_triton import flash_attention_triton_forward
 
 
 def _tflops(b: int, h: int, n: int, d: int, ms: float, causal: bool) -> float:

@@ -2,7 +2,7 @@
 
 > **Status:** spec / not yet built. The next implementation after L1 substrate + `utils/monitors.py`.
 > **Layer:** L2 Systems (A2) — the CPU-buildable half (FA2/SGLang/DDP need a GPU box).
-> **Files touched:** `src/reasoning_llm/model.py` (cache-aware attention + forward), `src/reasoning_llm/sampling.py`
+> **Files touched:** `src/scratch_llm/model.py` (cache-aware attention + forward), `src/scratch_llm/sampling.py`
 > (cache-driven `generate`), new `tests/test_kv_cache.py`.
 
 ## 1. Why (the problem this solves)

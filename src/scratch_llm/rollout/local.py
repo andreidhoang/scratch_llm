@@ -15,9 +15,9 @@ from collections.abc import Sequence
 import torch
 from torch import Tensor
 
-from reasoning_llm.model import TransformerLM
-from reasoning_llm.rollout.types import Rollout, StopReason
-from reasoning_llm.sampling import SamplingParams, generate_with_logprobs
+from scratch_llm.model import TransformerLM
+from scratch_llm.rollout.types import Rollout, StopReason
+from scratch_llm.sampling import SamplingParams, generate_with_logprobs
 
 
 class LocalBackend:

@@ -8,11 +8,11 @@ from pathlib import Path
 
 import numpy as np
 
-from reasoning_llm.model import ModelConfig, TransformerLM
-from reasoning_llm.sampling import SamplingParams, generate
-from reasoning_llm.tokenizer import Tokenizer, train_bpe
-from reasoning_llm.train import TrainConfig, train
-from reasoning_llm.utils.seeding import seed_everything
+from scratch_llm.model import ModelConfig, TransformerLM
+from scratch_llm.sampling import SamplingParams, generate
+from scratch_llm.tokenizer import Tokenizer, train_bpe
+from scratch_llm.train import TrainConfig, train
+from scratch_llm.utils.seeding import seed_everything
 
 
 def test_l1_substrate_composes_end_to_end(tmp_path: Path) -> None:

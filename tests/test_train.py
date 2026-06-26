@@ -5,16 +5,16 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from reasoning_llm.model import ModelConfig, TransformerLM
-from reasoning_llm.optim import AdamW
-from reasoning_llm.train import (
+from scratch_llm.model import ModelConfig, TransformerLM
+from scratch_llm.optim import AdamW
+from scratch_llm.train import (
     TrainConfig,
     get_batch,
     load_checkpoint,
     save_checkpoint,
     train,
 )
-from reasoning_llm.utils.seeding import seed_everything
+from scratch_llm.utils.seeding import seed_everything
 
 
 def test_get_batch_shapes_and_next_token_alignment() -> None:

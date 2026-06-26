@@ -1,18 +1,38 @@
-# A1 — Basics · BUILD GUIDE (CS336 → reasoningLLM L1 Substrate)
+# A1 — Basics · BUILD GUIDE (CS336 → the LM substrate)
 
-> **STATUS: ✅ L1 substrate complete** — `tokenizer.py`, `model.py`, `optim.py`, `train.py`,
-> `sampling.py`, `utils/seeding.py` built, tested, green (see [`../STATUS.md`](../STATUS.md)).
+> **📖 Read first (slides → this build):** Lectures **1 → 2 → 3 → 4** — tokenization (py) · resource
+> accounting (py) · architecture (pdf) · attention alternatives + MoE (pdf). Full map + read-order:
+> [`../LECTURE_MAP.md`](../LECTURE_MAP.md).
+
+> **STATUS: ✅ A1 substrate complete** — `tokenizer.py`, `model.py`, `moe.py`, `optim.py`,
+> `train.py`, `sampling.py`, `utils/seeding.py` built, tested, green (see [`../STATUS.md`](../STATUS.md)).
 > Discipline tests baked in: loss-at-init≈logV, causal-no-leak, overfit-one-batch, seed-repro.
 
-> **One-liner.** CS336 A1 ("Building a Transformer LM") makes you build, from scratch, the *entire policy substrate* — a byte-level BPE tokenizer, a pre-norm decoder Transformer (RMSNorm · RoPE · SwiGLU · causal MHA), cross-entropy, AdamW, the cosine+warmup schedule, gradient clipping, a memory-mapped training loop, checkpointing, and a temperature/top-p decoder — and train a tiny LM on TinyStories. This is **Layer L1 (Substrate)** of the reasoningLLM stack. It feeds **"the policy served in rollouts"**: the model whose logits the RLVR engine inspects, the tokenizer the env encodes with, the sampler the rollout client calls. **The through-line tie:** you cannot measure `true_quality_gap = reward − true_quality` (or `hack_rate`, or `kl_train_infer`) on a policy you do not own end-to-end. `kl_train_infer` is *literally* a KL between two engines' next-token distributions over your tokenizer's vocab; `hack_rate` is read off length/logit statistics; sampling temperature/top-p is the exploration knob of every rollout. Owning A1 is the precondition for every diagnosis downstream. L1 is table-stakes ("implement a Transformer from scratch in ~45 min") — necessary but, on its own, commoditized. The scarce part is what you bake *into* your own substrate (the discipline harness, and the MoE add-on), not the vanilla forward pass.
+> **One-liner.** CS336 A1 ("Building a Transformer LM") makes you build, from scratch, the *entire
+> language-model substrate* — a byte-level BPE tokenizer, a pre-norm decoder Transformer (RMSNorm ·
+> RoPE · SwiGLU · causal MHA), cross-entropy, AdamW, the cosine+warmup schedule, gradient clipping,
+> a memory-mapped training loop, checkpointing, and a temperature/top-p decoder — and train a tiny
+> LM on TinyStories. This is the **foundation layer**: every later assignment (systems kernels,
+> scaling laws, data pipelines, RL post-training) sits on top of a model, a tokenizer, and an
+> optimizer you own line by line. **The organizing principle:** own every primitive to production
+> standard and be able to whiteboard it cold — "implement a Transformer from scratch in ~45 min" is
+> table-stakes for a frontier-lab interview, so the bar is not "it passes tests" but "you can derive
+> it, predict its loss at init, and defend every shape and mask." The commoditized part is the
+> vanilla forward pass; the scarce part is what you bake *around* it — the discipline harness
+> (loss-at-init, overfit-one-batch, fixed-seed) and the completed extensions (GQA, MoE with
+> aux-loss-free balancing) that turn a rote build into an engineering signal.
 
 ---
 
 ## 1. What CS336 actually requires (every deliverable)
 
-Priority key: **LOAD-BEARING** = the engine depends on it (logits/sampling/tokenizer/optimizer that L5 inspects). **COURSE-ROTE** = required to pass tests, but a means to the substrate, not a differentiator — implement correctly, do not over-invest. **SKIP** = do the minimum to get a working LM; do not chase.
+Priority key: **LOAD-BEARING** = a primitive every later assignment depends on; you must own it to
+mastery and be able to whiteboard it cold (the model, tokenizer, optimizer, sampler). **COURSE-ROTE**
+= required to pass tests or the handout, but a means to the substrate, not a differentiator —
+implement correctly, do not over-invest. **SKIP** = do the minimum to get a working LM; do not chase.
 
-All adapter functions live in `tests/adapters.py` (the assignment's glue layer; named per the PDF "implement the test adapter at [`adapters.X`]"). Point totals are the PDF's.
+All adapter functions live in `tests/adapters.py` (the assignment's glue layer; named per the PDF
+"implement the test adapter at [`adapters.X`]"). Point totals are the PDF's.
 
 | # | Deliverable (PDF task name) | PDF section | Adapter / test fn | Est. effort | Priority |
 |---|---|---|---|---|---|
@@ -36,7 +56,7 @@ All adapter functions live in `tests/adapters.py` (the assignment's glue layer; 
 | 18 | **`cross_entropy`** — stable CE from logits (cancel log-exp, average over batch) | §4.1 | `run_cross_entropy` | 0.5 h | **LOAD-BEARING** |
 | 19 | `sgd` / `learning_rate_tuning` — toy SGD optimizer + LR-divergence written Q | §4.2 | (SGD class; written) | 0.5 h | COURSE-ROTE |
 | 20 | **`adamw`** — AdamW as `torch.optim.Optimizer` subclass (decoupled wd, bias-corrected α_t) | §4.3 | `get_adamw_cls` | 1.5 h | **LOAD-BEARING** |
-| 21 | `adamw_accounting` — peak-memory & FLOPs algebra for training (written) | §4.3 | — (written) | 1.5 h | COURSE-ROTE (high-signal; same memory math as A2.2 "train a 100B model") |
+| 21 | `adamw_accounting` — peak-memory & FLOPs algebra for training (written) | §4.3 | — (written) | 1.5 h | COURSE-ROTE (high-signal; same memory math as the A2 "train a 100B model" interview answer) |
 | 22 | **`learning_rate_schedule`** — cosine schedule w/ linear warmup (3-phase) | §4.4 | `get_lr_cosine_schedule` | 0.5 h | **LOAD-BEARING** |
 | 23 | **`gradient_clipping`** — clip by global ℓ₂-norm (ε=1e-6) | §4.5 | `run_gradient_clipping` | 0.5 h | **LOAD-BEARING** |
 | 24 | **`data_loading`** — sample (input, next-token) batches from a token array, to device | §5.1 | `run_get_batch` | 0.5 h | **LOAD-BEARING** |
@@ -51,109 +71,228 @@ All adapter functions live in `tests/adapters.py` (the assignment's glue layer; 
 
 ## 2. The equations/algorithms that matter (senior extraction)
 
-Six load-bearing primitives. State them cold; this is the 45-minute whiteboard set.
+Seven load-bearing primitives. State them cold; this is the 45-minute whiteboard set. Each "why"
+clause names the subtle bug an interviewer probes for — that is the actual signal.
 
-1. **BPE merge rule (greedy, deterministic).** Initialize vocab = 256 bytes (+ specials). Repeat until `|vocab| = vocab_size`: count every adjacent byte-pair frequency *within pre-tokens* (never across pre-token or special-token boundaries); merge the most frequent pair, **breaking ties by the lexicographically greater pair**; append the new token; record the merge. Pre-tokenize with the GPT-2 regex and **split on special tokens first** so no merge crosses a document boundary. *Why it matters for the engine:* the tokenizer defines the vocab axis of every logit and every KL; `kl_train_infer` and `true_quality` are computed over exactly these token IDs. A wrong merge order = a different policy.
+1. **BPE merge rule (greedy, deterministic).** Initialize vocab = 256 bytes (+ specials). Repeat
+   until `|vocab| = vocab_size`: count every adjacent byte-pair frequency *within pre-tokens* (never
+   across pre-token or special-token boundaries); merge the most frequent pair, **breaking ties by
+   the lexicographically greater pair**; append the new token; record the merge. Pre-tokenize with
+   the GPT-2 regex and **split on special tokens first** so no merge crosses a document boundary.
+   *Why it matters:* the merge order is the one place where a "looks correct" tokenizer silently
+   diverges from the reference — a wrong tie-break or a merge that crosses a boundary yields a
+   different vocab and fails the determinism test. The tokenizer defines the token axis of every
+   logit downstream, so a wrong merge order is a wrong model.
 
-2. **RoPE rotation.** For query/key at position `i`, rotate each 2-D coordinate pair `k` by `θ_{i,k} = i / Θ^{(2k−2)/d}` using the 2×2 block `[[cos, −sin],[sin, cos]]`; apply to Q and K only (not V), independently per head. No learnable parameters; cos/sin are a precomputed `persistent=False` buffer sliced by `token_positions`. *Why:* relative positional encoding is the 2026 default; getting the per-head batching and the position slice right is the most common subtle bug, and position handling is what makes KV-cache / multi-turn rollouts correct.
+2. **RoPE rotation.** For query/key at position `i`, rotate each 2-D coordinate pair `k` by
+   `θ_{i,k} = i / Θ^{(2k−2)/d}` using the 2×2 block `[[cos, −sin],[sin, cos]]`; apply to Q and K
+   only (not V), independently per head. No learnable parameters; cos/sin are a precomputed
+   `persistent=False` buffer sliced by `token_positions`. *Why:* relative positional encoding is the
+   2026 default, and the per-head batching plus the `token_positions` slice are the single most
+   common subtle bug — the classic interview trap. Correct position handling is also what makes a
+   KV-cache (incremental decoding, the A2 deliverable) produce identical logits to a full forward.
 
-3. **Scaled dot-product attention.** `Attention(Q,K,V) = softmax(QKᵀ/√d_k + mask)V`, where the boolean mask adds `−∞` to disallowed `(i,j)` (causal: `j ≤ i`). Subtract row-max before `exp` for stability. *Why:* the core mixing operation; causal masking *is* the autoregressive pretraining objective — a leak trivializes next-token prediction and silently inflates any reward.
+3. **Scaled dot-product attention.** `Attention(Q,K,V) = softmax(QKᵀ/√d_k + mask)V`, where the
+   boolean mask adds `−∞` to disallowed `(i,j)` (causal: `j ≤ i`). Subtract row-max before `exp` for
+   stability. *Why:* the core mixing operation, and the canonical "your training blew up" bug —
+   masked positions must become `−∞` *before* softmax (not zeroed after), and the mask must broadcast
+   to the score shape. A causal leak trivializes next-token prediction: the loss falls implausibly
+   fast because the model can see the answer. (This is also the kernel A2's FlashAttention reimplements
+   — owning the naïve form is the prerequisite for owning the tiled one.)
 
-4. **SwiGLU FFN.** `FFN(x) = W2 · (SiLU(W1 x) ⊙ W3 x)`, `SiLU(x) = x·σ(x)`, `d_ff ≈ (8/3)·d_model` rounded to a multiple of 64, no bias. *Why:* the 2026-default activation (Llama/Qwen/PaLM); the gating is where most of the non-attention FLOPs and params live, which the FLOPs-accounting and `adamw_accounting` problems force you to quantify.
+4. **SwiGLU FFN.** `FFN(x) = W2 · (SiLU(W1 x) ⊙ W3 x)`, `SiLU(x) = x·σ(x)`,
+   `d_ff ≈ (8/3)·d_model` rounded to a multiple of 64, no bias. *Why:* the 2026-default activation
+   (Llama/Qwen/PaLM); the gating is where most of the non-attention FLOPs and params live, which the
+   FLOPs-accounting (#17) and `adamw_accounting` (#21) problems force you to quantify — and which the
+   "how many params/FLOPs in your model?" interview question expects you to derive on the spot.
 
-5. **AdamW update (decoupled weight decay).** `m ← β₁m + (1−β₁)g`; `v ← β₂v + (1−β₂)g²`; bias-corrected step `α_t = α·√(1−β₂ᵗ)/(1−β₁ᵗ)`; `θ ← θ − α_t · m/(√v + ε)`; **then** `θ ← θ − αλθ` (decay decoupled from the gradient, *not* added to `g`). Defaults: `β₂=0.95, wd=0.1` for LMs. *Why:* the optimizer you own; its state is 2×params of memory (the dominant term in the training memory budget) and the thing whose moments you'd checkpoint/restore in any resumed RL run.
+5. **AdamW update (decoupled weight decay).** `m ← β₁m + (1−β₁)g`; `v ← β₂v + (1−β₂)g²`;
+   bias-corrected step `α_t = α·√(1−β₂ᵗ)/(1−β₁ᵗ)`; `θ ← θ − α_t · m/(√v + ε)`; **then**
+   `θ ← θ − αλθ` (decay decoupled from the gradient, *not* added to `g`). Defaults: `β₂=0.95, wd=0.1`
+   for LMs. *Why:* the optimizer you own; "what does the W in AdamW change vs Adam, and why?" is a
+   stock question. Its state is 2×params of memory (`m` and `v`), the dominant term in the training
+   memory budget you compute in #21 and re-derive for the A2 100B-model answer.
 
-6. **Cross-entropy / loss-at-init.** `ℓ_i = −log softmax(o_i)[x_{i+1}]`, computed by cancelling log and exp (`logsumexp(o) − o[target]`), averaged over batch. **At initialization, a correct LM has CE ≈ log(vocab_size)** (uniform prediction). For vocab 10K, that is `log(10000) ≈ 9.21` nats. *Why:* this single number is the cheapest correctness oracle in the whole stack (discipline #1); it catches head/embedding/masking bugs before you waste a training run, and it is the baseline against which every reward/quality number is read.
+6. **Cross-entropy / loss-at-init.** `ℓ_i = −log softmax(o_i)[x_{i+1}]`, computed by cancelling log
+   and exp (`logsumexp(o) − o[target]`), averaged over batch. **At initialization, a correct LM has
+   CE ≈ log(vocab_size)** (uniform prediction). For vocab 10K, that is `log(10000) ≈ 9.21` nats.
+   *Why:* this single number is the cheapest correctness oracle in the whole stack (discipline #1);
+   it catches head/embedding/masking bugs before you waste a training run, and "what's the loss at
+   init of a freshly initialized LM?" is a fast filter interviewers use to test whether you actually
+   understand the objective.
+
+7. **MoE routing + aux-loss-free load balancing** *(completed extension, `moe.py`).* A token routes
+   to its top-`k` experts by router logits; the layer output is the gate-weighted sum of those
+   experts' FFNs. Naïve top-k collapses (a few experts win every token), so balance the load
+   **without an auxiliary loss** (DeepSeek-style): maintain a per-expert bias added to the router
+   logits *for selection only*, nudged up for under-used experts and down for over-used ones each
+   step, so the gradient path stays clean. Log a **per-expert token histogram** and **router
+   entropy**. *Why:* the falsifiable check — on a small 8-of-32 MoE, router entropy should stay
+   `> 0.9·log(K)`; collapse to a few experts means the balancer is broken. "Explain MoE routing and
+   how you keep experts balanced" is the sparse-model interview question, and every 2026 open-weight
+   flagship (DeepSeek-V3, Qwen3, Llama 4, Kimi K2) is sparse — so this is the differentiating
+   primitive, not a footnote.
 
 ---
 
-## 3. Map to reasoningLLM_scratch source files
+## 3. Map to `src/scratch_llm/` (what you built, where it lives)
 
-reasoningLLM's clean-room layout is `src/reasoning_llm/{algos,rewards,envs,rollout,scaling,data,utils}/`. A1 has **no dedicated `model/` package in the v0.1.0 frozen scope** — L1's deliverable is "the policy served in rollouts," i.e. the substrate other layers consume. The mapping below states where each A1 piece *touches* the engine; "course-only" pieces stay in your A1 scratch package and are not promoted into `src/reasoning_llm/`.
+The A1 substrate is a flat set of modules under `src/scratch_llm/` (the layered packages
+`{algos,rewards,envs,rollout,scaling,data,utils,kernels}/` are for A2–A5). Each CS336 deliverable
+maps to a concrete symbol you can open and read:
 
-| CS336 deliverable | `src/reasoning_llm/...` touch-point | Keep / adapt for the engine vs course-only |
+| CS336 deliverable | `src/scratch_llm/...` symbol(s) | Notes |
 |---|---|---|
-| BPE `train_bpe` + `Tokenizer` | the vocab/encode layer every `envs/*` task and `rollout/*` uses; `utils/monitors.py` computes KLs over this vocab | **Keep.** The tokenizer defines the token axis of `kl_train_infer` and `true_quality`. Adapt: ensure `<\|endoftext\|>` and any reasoning special tokens are stable across train/infer engines. |
-| `transformer_lm` (+ block, MHA, RoPE, SwiGLU, RMSNorm, Linear, Embedding) | **the policy object** the rollout engine serves; the thing whose logits `rewards/hack_detector.py` and `utils/monitors.py` inspect | **Keep the architecture knowledge; in v0.1.0 the served policy is typically a Qwen3-class HF model, not your hand-rolled LM.** Your from-scratch build is the *mastery artifact* that lets you read/patch logits, add GQA/MoE, and trust the sampler. Adapt: GQA + MoE are the v0.2.0 extensions of this same file. |
-| `softmax`, `decoding` (temperature, top-p) | the **sampler** behind `rollout/sglang_client.py`; exploration knob of every rollout | **Keep.** Temperature/top-p directly shape the rollout distribution and therefore `reward` and `hack_rate`; the sampler must match between train and infer engines or `kl_train_infer` is polluted by a sampling mismatch, not real drift. |
-| `cross_entropy`, `adamw`, `lr_schedule`, `gradient_clipping` | training-time only; in RL these become the policy-gradient update in `algos/` | **Adapt.** CE → the SFT/log-prob term; AdamW + clip + schedule → the optimizer of the RL fine-tune. The loss-at-init and overfit-one-batch *disciplines* (below) port directly into `algos/` tests. |
-| `data_loading`, `checkpointing`, `training_together` | the harness pattern reused by `algos/` training scripts; manifests in `utils/` | **Adapt.** `np.memmap` loading + checkpoint/restore is the same plumbing an RL run needs to resume; `experiment_log` → `utils/monitors.py` logging conventions. |
-| `transformer_accounting`, `adamw_accounting` | feeds the A2.2 "100B memory-math one-pager" (`utils/monitors.py` memory budget) | **Keep the method, course-only artifact.** The FLOP/memory algebra is the verbatim interview answer; not a runtime file. |
+| `train_bpe` + `Tokenizer` | `tokenizer.py` — `train_bpe()`, `Tokenizer` class (`_pretokenize_counts`, `_compute_merges`) | Deterministic merges (lexicographic tie-break), special-token-first splitting, `encode`/`encode_iterable`/`decode`/`from_files`, U+FFFD on malformed bytes. |
+| The full architecture chain | `model.py` — `Linear`, `Embedding`, `RMSNorm`, `softmax`, `scaled_dot_product_attention`, `RotaryPositionalEmbedding`, `silu`, `SwiGLU`, `MultiHeadSelfAttention`, `TransformerBlock`, `TransformerLM` | Pre-norm decoder; `ModelConfig` holds the shape knobs. **GQA is built in** — `MultiHeadSelfAttention` supports K/V head sharing and `KVCache` does incremental decoding (see ADR-0002). |
+| `cross_entropy` | `model.py` — `cross_entropy()` | logsumexp form; the loss-at-init oracle (≈ log V) is a test against it. |
+| MoE (completed extension) | `moe.py` — `Router`, `MoEFeedForward`, `MoEConfig`, `MoEStats`, `AuxOutput` | Top-k routing + aux-loss-free balancing + per-expert histogram + router-entropy logging (see ADR-0007). |
+| `adamw`, `gradient_clipping`, `learning_rate_schedule` | `optim.py` — `AdamW`, `gradient_clipping()`, `cosine_lr()` | AdamW = `torch.optim.Optimizer` subclass, decoupled wd, bias-corrected α_t; clip by global ℓ₂; 3-phase cosine. |
+| `decoding`, `softmax` (sampler side) | `sampling.py` — `generate()`, `generate_with_logprobs()`, `SamplingParams`, `_top_p_filter`, `_sample_next` | Temperature + top-p nucleus + stop-on-`<\|endoftext\|>`; `generate_with_logprobs` exposes per-token log-probs (see ADR-0006). |
+| `data_loading`, `checkpointing`, `training_together` | `train.py` — `get_batch()`, `save_checkpoint()`, `load_checkpoint()`, `train()`, `TrainConfig` | `np.memmap` batch sampling, model+optim+iter checkpoint/restore, the wired training loop. |
+| `transformer_accounting`, `adamw_accounting` | *(written deliverables — no runtime file)* | The params/memory/FLOPs algebra; keep the worked answers, they recur as the A2 memory-math drill. |
+
+For the full build spine (A1→A5, build order, discipline gates) see
+[`../IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md). The authoritative spec and test oracle is
+the official scaffold at `../../../lectures/assignment1-basics/` (the handout PDF + `tests/adapters.py`);
+implement against those adapters, do not copy solutions.
 
 ---
 
-## 4. Map to core context docs
+## 4. The frontier 2026 lens
 
-- **`UNIFIED_FRONTIER_PROJECT_SPEC.md §3 (L1 · A1 brief).** L1 = "you own the policy." Core = BPE + Transformer from scratch + AdamW + CE. Two senior add-ons defined there, both **v0.2.0 / additive — do not pull into the 14-day v0.1.0**:
-  - **A1.1 — MoE layer from scratch:** top-k gating + **aux-loss-free load balancing** (DeepSeek-style) + z-loss + per-expert token histogram + router-entropy logging. Falsifiable prediction: on a tiny 8-of-32 MoE, router entropy stays `> 0.9·log(K)`; collapse to a few experts ⇒ balancer broken. Kill: >2 debug days ⇒ fall back to dense+GQA (MoE becomes v0.2.0-B).
-  - **A1.2 — the discipline harness baked into your own code:** loss-at-init ≈ log V, overfit-one-batch, fixed-seed reproducibility. Spec calls this "the single highest-leverage debugging test in ML" and the engineering-quality signal labs silently screen for.
-  - Interview leverage (spec §3): "implement MHA / a Transformer layer," tensor-shape & masking fluency, "explain MoE routing and load balancing," "what's the loss at init?"
-- **`UNIFIED_FRONTIER_PROJECT_SPEC.md §2` (the stack diagram).** L1 SUBSTRATE feeds "the model the rollout engine serves"; the through-line `true_quality_gap = reward − true_quality (+ hack_rate, kl_train_infer)` is owned end-to-end *because* L1 gives you the logits/tokenizer/sampler.
-- **`UNIFIED_FRONTIER_PROJECT_SPEC.md §5` (evidence ledger / role-targeting).** L1 + L2 ⇒ "Pretraining / Core Modeling RE" lead artifact = MoE-from-scratch + memory math. Public GitHub + green CI from day one (clean engineering = the differentiator). A1 alone is parity; the add-ons + capstone are the low-supply corner.
-- **`CAPSTONE_AND_STUDY_PLAN.md §3` (row A1).** "A1 — Basics → the policy substrate: attention, tokenizer, sampling, AdamW → you *own* the model the rollout engine serves; you can't diagnose hacking without understanding logits/sampling end-to-end. Lecture backing: CS336 L2, L3, L4." Threading order: **A1 → A2 → A5 → A3 + A4 → VERA**.
-- **`STUDY_PLAN_2026.md §0.8` (reconciled schedule).** A1 lands on **Day 9** (A1 Transformer substrate + batched generation + **L10 inference**, ship target `rollout/sglang_client.py`) and **Day 11** (A1 BPE + AdamW + tiny LM; wire the `kl_train_infer` monitor, ship target `utils/monitors.py` HALT@0.10). Companion table: Day 9 → "implement a Transformer"; KV-cache (xAI). Day 11 → "implement MHA/Transformer in ~45 min" (Generalist RE). Note: BPE training is split to Day 11; the architecture + sampler land Day 9 because they front-feed the rollout/serving layer.
-- **Repo `CLAUDE.md` (L1 row + disciplines).** L1 row: "BPE · Transformer · GQA/RoPE/SwiGLU · (MoE) → the policy served in rollouts." Disciplines #1 (loss-at-init ≈ log V), #2 (overfit-one-batch), #3 (fixed-seed) are **A1.2 made native** — write each invariant as a test, then make it pass; green-CI rule (ruff/pyright/pytest).
+**Commoditized vs scarce.** A vanilla dense decoder Transformer is *commoditized* — `torch.compile`
+already emits competent kernels, every candidate can produce a forward pass, and "implement a
+Transformer" is table-stakes, not a differentiator. What is **scarce** and what this build deliberately
+owns: (a) **MoE routing + load-balancing that does not collapse** — built in `moe.py` with
+aux-loss-free balancing and router-entropy logging; (b) **GQA done correctly** (KV-cache economics) —
+built in `model.py`; (c) the **discipline harness** — a repo where loss-at-init and overfit-one-batch
+are *native tests*, not afterthoughts. Weak engineering is the most common silent rejection of
+otherwise-strong candidates; clean, reproducible substrate code is disproportionately valuable.
+
+**The 2026 default decoder (baseline, don't be a hero — copy it):** **GQA + RoPE + SwiGLU + RMSNorm +
+AdamW(β₂=0.95, wd=0.1)**, pre-norm, no bias, untied or tied embeddings. CS336 A1 builds full MHA;
+this repo extends it to **GQA** (K/V head-sharing, a small adaptation already in `model.py`). **MoE is
+the frontier default** — every open-weight flagship (DeepSeek-V3/R1, Qwen3, Llama 4, Kimi K2) is
+sparse; the sweep found zero dense flagships, which is why the MoE extension is built rather than
+deferred.
+
+**The completed extensions that turn rote A1 into a research signal:**
+- **MoE-from-scratch** (`moe.py`) with aux-loss-free balancing + router-entropy logging. This is where
+  the substrate connects to the hottest 2025–26 sparse-model failure mode: routing can flip between a
+  training step and an inference engine, and a candidate who has *implemented* top-k routing and a
+  balancer can reason about it concretely instead of hand-waving. Falsifiable: router entropy
+  `> 0.9·log(K)` on a tiny 8-of-32 MoE, else the balancer is broken.
+- **The discipline harness** — loss-at-init ≈ log V, overfit-one-batch, fixed-seed reproducibility,
+  baked into the test suite. The cheapest, highest-leverage "engineering quality" signal in the whole
+  project, and free once the model exists.
+
+**Interview leverage this assignment buys you:** "implement MHA / a Transformer layer in ~45 min,"
+tensor-shape & masking fluency, "what's the loss at init?", "what does the W in AdamW change?",
+"explain MoE routing and load balancing," and the params/memory/FLOPs accounting that becomes the
+"how would you train a 100B model?" answer.
 
 ---
 
-## 5. The frontier 2026 lens
+## 5. Prioritization verdict — what matters / what to skip
 
-**Commoditized vs scarce.** A vanilla dense decoder Transformer is *commoditized* — `torch.compile` already emits competent kernels, every candidate can produce a forward pass, and "implement a Transformer" is table-stakes, not a differentiator. What is **scarce**: (a) MoE routing + load-balancing that does not collapse; (b) GQA done correctly (KV-cache economics); (c) the **discipline harness** — a repo where loss-at-init and overfit-one-batch are *native tests*, not afterthoughts. Per the spec (§1.5, Neel Nanda), weak engineering is the most common silent rejection of promising researchers; clean, reproducible substrate code is disproportionately valuable.
+**The ~20% that is load-bearing (build these to mastery, whiteboard-cold):**
+the tokenizer (`train_bpe` + `Tokenizer`), the full architecture chain (`linear` → `embedding` →
+`rmsnorm` → `rope` → `swiglu` → `softmax` → `scaled_dot_product_attention` →
+`multihead_self_attention` → `transformer_block` → `transformer_lm`), `cross_entropy`, `adamw`,
+`lr_schedule`, `gradient_clipping`, `data_loading`, `checkpointing`, `training_together`, and
+**`decoding` (temperature + top-p)**. These are the model/optimizer/sampler every later assignment
+builds on. Bake the **disciplines** (loss-at-init ≈ log V, overfit-one-batch, fixed seed) directly
+into their tests.
 
-**The 2026 default decoder (baseline, don't be a hero — copy it):** **GQA + RoPE + SwiGLU + RMSNorm + AdamW(β₂=0.95, wd=0.1)**, pre-norm, no bias, untied or tied embeddings. CS336 A1 hands you all of this except GQA (it builds full MHA; GQA = K/V head-sharing, a small adaptation). **MoE is the frontier default** — every open-weight flagship (DeepSeek-V3/R1, Qwen3, Llama 4, Kimi K2) is sparse; the sweep found zero dense flagships.
-
-**The add-on that turns rote A1 into a research signal:**
-- **A1.1 (MoE-from-scratch)** with aux-loss-free balancing + router-entropy logging — this is where L1 connects to the hottest 2025-26 failure mode: **MoE breaks GRPO via routing mismatch** (GSPO measured ~10% of activated experts flipping after one gradient step; R3 measured ~94% of tokens differing in ≥1 layer between train and infer engines, causing 3/3 GRPO collapse). That collapse is diagnosed by your `kl_train_infer` pillar — so the MoE substrate you build in A1.1 is the policy for the v0.2.0-B headline result. **Still v0.2.0; do not smuggle into v0.1.0.**
-- **A1.2 (discipline harness)** — loss-at-init + overfit-one-batch baked into your own test suite. This is the cheapest, highest-leverage "engineering quality" signal in the whole project and it is *free* once you've written the model.
-
----
-
-## 6. Prioritization verdict — what matters / what to skip
-
-**The ~20% that is load-bearing for the through-line (build these to mastery, whiteboard-cold):**
-the tokenizer (`train_bpe` + `Tokenizer`), the full architecture chain (`linear` → `embedding` → `rmsnorm` → `rope` → `swiglu` → `softmax` → `scaled_dot_product_attention` → `multihead_self_attention` → `transformer_block` → `transformer_lm`), `cross_entropy`, `adamw`, `lr_schedule`, `gradient_clipping`, `data_loading`, `checkpointing`, `training_together`, and **`decoding` (temperature + top-p)**. These *are* the policy/logits/sampler/optimizer the RLVR engine inspects. Bake the **A1.2 disciplines** (loss-at-init ≈ log V, overfit-one-batch, fixed seed) directly into their tests.
+**Completed extensions (built, not deferred):** **GQA** (K/V head-sharing + KV-cache in `model.py`)
+and **MoE** (top-k routing + aux-loss-free balancing in `moe.py`). Present these as what you built
+beyond the CS336 core — they are the scarce, differentiating part of the substrate.
 
 **Course-rote (implement correctly for tests, then move on — do not over-invest):**
-the `unicode1/2` written Qs; the SGD toy optimizer + `learning_rate_tuning`; `experiment_log`; the BPE training *runs* on TinyStories/OWT and `tokenizer_experiments` write-ups; `learning_rate` sweep to val-loss ≤ 1.45. **Exception — treat `transformer_accounting` and `adamw_accounting` as high-signal even though they're "written":** they *are* the A2.2 "100B memory-math one-pager" and a verbatim interview gate ("how would you train a 100B model?"). Do them properly once.
+the `unicode1/2` written Qs; the SGD toy optimizer + `learning_rate_tuning`; `experiment_log`; the
+BPE training *runs* on TinyStories and `tokenizer_experiments` write-ups; the TinyStories
+`learning_rate` sweep to val-loss ≤ 1.45. **Exception — treat `transformer_accounting` and
+`adamw_accounting` as high-signal even though they're "written":** they are the params/memory/FLOPs
+math that recurs as the A2 "how would you train a 100B model?" interview answer. Do them properly
+once.
 
-**Explicit SKIP list:**
-1. **The OpenWebText leaderboard / perplexity hyperparameter-chase** beyond a single working LM. It is pure compute-spend with zero engine signal; a tuned val-loss number does not move `true_quality_gap`.
-2. **`train_bpe_expts_owt`** (32K-vocab OWT BPE) unless compute is already free — TinyStories 10K is sufficient to prove the tokenizer.
-3. **C++/Rust BPE speedups** (the PDF's optional `cppy`/`nanobind`/PyO3 path) — `multiprocessing` pre-tokenization is enough for the resource budget; the systems win belongs in A2, not here.
-4. **GQA/MoE in v0.1.0** — keep them as the documented v0.2.0 axes (ADR stubs), per frozen scope; building them now is a G6 ship-cadence risk.
+**Explicit SKIP list (3 items):**
+1. **The OpenWebText leaderboard / perplexity hyperparameter-chase** beyond a single working LM. Pure
+   compute-spend with no mastery carry; a tuned val-loss number teaches nothing the working LM didn't.
+2. **`train_bpe_expts_owt`** (32K-vocab OWT BPE) unless compute is already free — TinyStories 10K is
+   sufficient to prove the tokenizer.
+3. **C++/Rust BPE speedups** (the PDF's optional `cppy`/`nanobind`/PyO3 path) —
+   `multiprocessing` pre-tokenization is enough for the resource budget; the systems-optimization win
+   belongs in A2, not here.
 
 ---
 
-## 7. Build checklist (ordered, with discipline gates)
+## 6. Build checklist (ordered, with discipline gates)
 
-Build order respects data dependencies; discipline gates (**◆**) are inserted where they catch the most bugs for the least effort.
+Build order respects data dependencies; discipline gates (**◆**) are inserted where they catch the
+most bugs for the least effort.
 
-1. **BPE training** (`train_bpe`): pre-tokenize with the GPT-2 regex via `re.finditer`; split on special tokens *first* (`re.split` on `"|".join(re.escape(s))`); incremental pair-count cache; deterministic lexicographic tie-break. **◆ predict-before-you-run:** assert the `bpe_example` from the PDF (corpus → `st, est, ow, low, west, ne`) reproduces exactly before touching TinyStories.
-2. **Tokenizer** (`Tokenizer`): `encode` / `decode` round-trip; `encode_iterable` (lazy, memory-bounded); `from_files`; `errors='replace'` (U+FFFD) on decode. **◆ fixed-seed reproducibility:** assert `decode(encode(s)) == s` on a Unicode-heavy fixture.
+1. **BPE training** (`train_bpe`): pre-tokenize with the GPT-2 regex via `re.finditer`; split on
+   special tokens *first* (`re.split` on `"|".join(re.escape(s))`); incremental pair-count cache;
+   deterministic lexicographic tie-break. **◆ predict-before-you-run:** assert the `bpe_example` from
+   the PDF (corpus → `st, est, ow, low, west, ne`) reproduces exactly before touching TinyStories.
+2. **Tokenizer** (`Tokenizer`): `encode` / `decode` round-trip; `encode_iterable` (lazy,
+   memory-bounded); `from_files`; `errors='replace'` (U+FFFD) on decode. **◆ round-trip
+   reproducibility:** assert `decode(encode(s)) == s` on a Unicode-heavy fixture.
 3. **`Linear`, `Embedding`** (no bias, `W` stored not `Wᵀ`, trunc-normal init).
 4. **`RMSNorm`** (upcast→fp32→compute→downcast to original dtype).
-5. **`softmax`** (subtract max) → **`scaled_dot_product_attention`** (boolean mask, −∞ on False; test 3-D and 4-D).
-6. **`RoPE`** (precomputed `persistent=False` cos/sin buffer; slice by `token_positions`; apply to Q,K only, head as batch dim).
+5. **`softmax`** (subtract max) → **`scaled_dot_product_attention`** (boolean mask, −∞ on False; test
+   3-D and 4-D).
+6. **`RoPE`** (precomputed `persistent=False` cos/sin buffer; slice by `token_positions`; apply to
+   Q,K only, head as batch dim).
 7. **SwiGLU `positionwise_feedforward`** (d_ff = round-to-×64 of (8/3)·d_model).
 8. **`multihead_self_attention`** (causal mask via `torch.triu`; RoPE per head; 3 projections + O).
 9. **`transformer_block`** (pre-norm: `x + MHA(RMSNorm(x))`, then `x + FFN(RMSNorm(x))`).
-10. **`transformer_lm`** (embed → N blocks → final RMSNorm → LM head). **◆ loss-at-init:** a fresh LM's `cross_entropy` over random data must be `≈ log(vocab_size)` (e.g. ≈9.21 for 10K). If not, the head/embedding/masking is wrong — fix before proceeding. *(This is repo discipline #1 and add-on A1.2.)*
-11. **`cross_entropy`** (logsumexp form; average over batch) — needed by the loss-at-init check, so co-develop with step 10.
-12. **`adamw`** (decoupled wd; bias-corrected α_t; `self.state` per-param moments) → **`gradient_clipping`** (global ℓ₂, ε=1e-6) → **`lr_cosine_schedule`** (warmup/anneal/post).
-13. **`data_loading`** (`np.memmap` mode, dtype match, to-device) → **`checkpointing`** (model+optim+iter).
-14. **`training_together`**: wire it all. **◆ overfit-one-batch:** before any real run, drive train loss to ~0 on a single batch. If it won't, the optimizer/data/loss wiring is broken — *not* the data. *(Repo discipline #2; add-on A1.2.)*
-15. **TinyStories run** (vocab 10K, ctx 256, d_model 512, d_ff 1344, 4 layers, 16 heads, Θ=10000, ~17M params). **◆ predict-before-you-run:** write the target val-loss (≤1.45 GPU / ≤2.00 CPU-MPS) *first*; it's your debugging anchor.
-16. **`decoding`** (temperature + top-p nucleus + stop on `<\|endoftext\|>`); sanity-read generated TinyStories text. This is the sampler the rollout engine will reuse — verify temperature/top-p semantics match what the serving engine expects.
-17. **CONNECT:** one sentence — which `reasoning_llm` file did this move? (e.g., "the sampler now matches `rollout/sglang_client.py`'s decode contract"). Green tests → atomic commit (`<area>: <imperative>`).
+10. **`transformer_lm`** (embed → N blocks → final RMSNorm → LM head). **◆ loss-at-init:** a fresh
+    LM's `cross_entropy` over random data must be `≈ log(vocab_size)` (e.g. ≈9.21 for 10K). If not,
+    the head/embedding/masking is wrong — fix before proceeding. *(Discipline #1.)*
+11. **`cross_entropy`** (logsumexp form; average over batch) — needed by the loss-at-init check, so
+    co-develop with step 10.
+12. **`adamw`** (decoupled wd; bias-corrected α_t; `self.state` per-param moments) →
+    **`gradient_clipping`** (global ℓ₂, ε=1e-6) → **`cosine_lr`** (warmup/anneal/post).
+13. **`data_loading`** (`np.memmap` mode, dtype match, to-device) → **`checkpointing`**
+    (model+optim+iter).
+14. **`training_together`**: wire it all. **◆ overfit-one-batch:** before any real run, drive train
+    loss to ~0 on a single batch. If it won't, the optimizer/data/loss wiring is broken — *not* the
+    data. *(Discipline #2.)*
+15. **TinyStories run** (vocab 10K, ctx 256, d_model 512, d_ff 1344, 4 layers, 16 heads, Θ=10000,
+    ~17M params). **◆ predict-before-you-run:** write the target val-loss (≤1.45 GPU / ≤2.00 CPU-MPS)
+    *first*; it's your debugging anchor.
+16. **`decoding`** (temperature + top-p nucleus + stop on `<\|endoftext\|>`); sanity-read generated
+    TinyStories text. Verify temperature/top-p semantics behave as expected (temperature→1, top-p→1
+    recovers plain sampling; top-p→0 / temperature→0 recovers greedy).
+17. **Extensions (built):** **GQA** in `MultiHeadSelfAttention` (K/V head-sharing; ◆ assert it matches
+    full-MHA logits when `n_kv_heads == n_heads`) and **MoE** in `moe.py` (◆ router entropy
+    `> 0.9·log(K)` on a tiny 8-of-32 config — the balancer-not-collapsed check).
+18. Green tests (ruff/ruff-format/pyright/`pytest -m "not gpu"`) → atomic commit
+    (`<area>: <imperative>`).
 
 ---
 
-## 8. Open questions / ADR triggers
+## 7. Open questions / ADR triggers
 
-Candidates for `docs/adr/` (log a stub; do not relitigate in code):
+Each of these is already recorded in [`../adr/`](../adr/) — read the ADR, don't relitigate in code:
 
-1. **Dense vs MoE substrate for v0.1.0.** Frozen decision: dense (+GQA-ready). MoE-from-scratch (A1.1) is **v0.2.0-B**, gated by the ">2 debug days ⇒ fall back to dense" kill criterion. ADR should record *why* MoE is deferred (G6 ship-cadence) and what would promote it (the `kl_train_infer`-collapse headline). → `ADR: dense-vs-MoE policy substrate (MoE = v0.2.0-B)`.
-2. **Tokenizer choice for the served policy.** A1 builds a byte-level BPE from scratch, but the v0.1.0 rollout policy is a Qwen3-class HF model with *its own* tokenizer. ADR: does the engine use the HF model's native tokenizer (recommended — required for `kl_train_infer` to compare like-for-like vocabs) or the hand-rolled one (only for the from-scratch tiny-LM smoke)? Mismatched vocabs make `kl_train_infer` meaningless. → `ADR: tokenizer of record for the served policy`.
-3. **GQA vs full MHA in the substrate.** 2026 default is GQA (KV-cache economics); A1 builds full MHA. ADR: when does the served policy adopt GQA, and does the from-scratch build add it (cheap: K/V head-sharing) as the GQA-fluency artifact? → `ADR: GQA adoption in the policy substrate`.
-4. **Sampler parity (train vs infer).** Temperature/top-p must be identical between the training-time sampler and `rollout/sglang_client.py`, or `kl_train_infer` measures a sampling-config mismatch rather than real engine drift. ADR: pin the canonical decode config and assert parity in `utils/monitors.py`. → `ADR: train/infer sampler parity contract`.
-5. **Weight tying (embedding ↔ LM head).** A1 does not require it; many 2026 small models tie. Low-stakes, but record the choice so checkpoint shapes are stable across the smoke run. → optional ADR note.
+1. **GQA vs full MHA in the substrate.** 2026 default is GQA (KV-cache economics); A1's spec builds
+   full MHA. → **[`ADR-0002-gqa-in-substrate.md`](../adr/ADR-0002-gqa-in-substrate.md)** (GQA built as
+   K/V head-sharing, the KV-cache-fluency artifact).
+2. **MoE in the substrate.** A1's spec is dense; the frontier default is sparse. → decision to build
+   it: **[`ADR-0007-moe-pulled-forward.md`](../adr/ADR-0007-moe-pulled-forward.md)** (top-k routing +
+   aux-loss-free balancing in `moe.py`), with the dense-baseline rationale in
+   **[`ADR-0004-dense-substrate-v0.1.0.md`](../adr/ADR-0004-dense-substrate-v0.1.0.md)**.
+3. **Tokenizer of record.** Whether the from-scratch BPE or a pretrained model's tokenizer is used
+   when serving a real (HF) policy in later assignments. →
+   **[`ADR-0001-tokenizer-of-record.md`](../adr/ADR-0001-tokenizer-of-record.md)**.
+4. **Sampler parity (train vs infer).** Temperature/top-p must be identical between the training-time
+   sampler and any inference engine, or generation diverges for a config reason, not a model reason. →
+   **[`ADR-0003-sampler-parity.md`](../adr/ADR-0003-sampler-parity.md)**.
+5. **Log-prob convention.** How `generate_with_logprobs` defines per-token log-probs (pre/post
+   temperature, which dim). → **[`ADR-0006-policy-logprob-convention.md`](../adr/ADR-0006-policy-logprob-convention.md)**.
+6. **Weight tying (embedding ↔ LM head).** A1 does not require it; many 2026 small models tie. Low-
+   stakes; record the choice so checkpoint shapes stay stable. → optional ADR note.

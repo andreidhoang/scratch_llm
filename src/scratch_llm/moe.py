@@ -40,7 +40,7 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor, nn
 
-from reasoning_llm.model import Linear, SwiGLU
+from scratch_llm.model import Linear, SwiGLU
 
 
 def _default_expert_ffn(d_model: int) -> int:
@@ -141,7 +141,7 @@ class MoEFeedForward(nn.Module):
     """DeepSeek-V3 MoE FFN: ``n_shared`` always-on experts + ``n_routed`` Top-K experts.
 
     ``forward`` returns ``(delta, stats)`` where ``delta`` is the FFN contribution only — same
-    contract as :class:`reasoning_llm.model.SwiGLU`, so the block's ``x + ffn(x)`` is unchanged.
+    contract as :class:`scratch_llm.model.SwiGLU`, so the block's ``x + ffn(x)`` is unchanged.
     """
 
     def __init__(self, d_model: int, cfg: MoEConfig) -> None:

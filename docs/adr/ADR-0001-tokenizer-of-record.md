@@ -1,33 +1,30 @@
-# ADR-0001 — Tokenizer of record for the served policy
+# ADR-0001 — Tokenizer of record (when fine-tuning a pretrained model)
 
 - **Status:** Accepted (2026-06-05)
-- **Layer:** L1 Substrate (A1)
+- **Layer:** A1 Substrate
 - **Decides:** §8.2 of `A1_basics_BUILD_GUIDE.md`
 
 ## Context
 
-`kl_train_infer = KL(P_train ‖ P_infer)` is a sum over the vocabulary of two
-engines' next-token probabilities. The KL is only meaningful if both engines
-index the *same* vocabulary. A1 builds a byte-level BPE tokenizer from scratch,
-but the v0.1.0 served policy is a Qwen3-class HF model that ships its own
-tokenizer.
+A1 builds a byte-level BPE tokenizer from scratch. But A5's RL fine-tuning runs on a pretrained HF
+model (e.g. a Qwen-class math model) that ships its **own** tokenizer. Two engines — the training
+engine and, if used, a separate serving/inference engine — must index the **same** vocabulary, or
+any per-token comparison between them (e.g. `kl_train_infer = KL(P_train ‖ P_infer)`, a sum over the
+vocab) is meaningless.
 
 ## Decision
 
-**The tokenizer of record is the served model's native tokenizer.** The
-hand-rolled BPE is the mastery artifact and powers only the from-scratch
-tiny-LM smoke. The RLVR engine encodes every `envs/*` task and every rollout
-with the served model's tokenizer.
+**The tokenizer of record is the fine-tuned model's native tokenizer.** The hand-rolled BPE is the
+A1 mastery artifact and powers the from-scratch tiny-LM; the A5 RL pipeline encodes every task and
+rollout with the pretrained model's tokenizer.
 
-**Contract:** at engine startup, assert `vocab_size` and every special-token ID
-(`<|endoftext|>` + any reasoning delimiters) are identical across the training
-engine and the serving engine. A mismatch aborts the run — it is never silently
-tolerated, because it makes `kl_train_infer` compare incommensurable axes.
+**Contract:** at startup, assert `vocab_size` and every special-token ID (`<|endoftext|>` + any
+reasoning delimiters) are identical across the training and serving engines. A mismatch aborts the
+run — never silently tolerated, because it compares incommensurable axes.
 
 ## Consequences
 
-- (+) `kl_train_infer` measures real engine drift, not a vocab artifact.
-- (+) The from-scratch BPE still pays off: it is why we can read/patch token IDs
-  and trust special-token stability.
-- (−) The hand-rolled tokenizer is not on the metric's critical path; it must be
-  time-boxed, not gold-plated.
+- (+) Per-token train/inference comparisons measure real engine drift, not a vocab artifact.
+- (+) The from-scratch BPE still pays off: it is why you can read/patch token IDs and trust
+  special-token stability.
+- (−) The hand-rolled tokenizer is not on the A5 critical path; time-box it, don't gold-plate.

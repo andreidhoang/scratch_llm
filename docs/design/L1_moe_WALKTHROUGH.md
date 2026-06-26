@@ -1,6 +1,6 @@
 # MoE, traced end-to-end with real tensors
 
-> A line-by-line walkthrough of `src/reasoning_llm/moe.py` — every tensor shown with **actual
+> A line-by-line walkthrough of `src/scratch_llm/moe.py` — every tensor shown with **actual
 > values from real runs**, then the full training loop (forward → loss → backward → bias update →
 > multi-step balancing). Companion to [ADR-0007](../adr/ADR-0007-moe-pulled-forward.md). Read it
 > with `moe.py` open beside you.
@@ -67,8 +67,10 @@ position-independent**, which is exactly why:
 | **decode/cache parity** (`test_decode_cache_parity_with_moe`) | a token routes identically whether it's 1-of-12 in a full forward or the lone token during incremental decode |
 | **causal no-leak** (`test_causal_no_leak_with_moe`) | routing depends only on a token's own vector — a future token can't change an earlier token's route |
 
-This is the property the whole repo cares about: train and infer route the same → `kl_train_infer`
-stays clean. The day they diverge is the MoE×RL collapse that A5.3 hunts.
+This is the property that keeps training and inference consistent: a token routes to the same
+experts in both, so the training-engine and inference-engine next-token distributions stay aligned
+(the `kl_train_infer` measurement of A2.3). If routing depended on position or batch context, the
+two engines could pick different experts for the same token and the distributions would drift.
 
 ### Line: `logits = self.router(xf)`
 

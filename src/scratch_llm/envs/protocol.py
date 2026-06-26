@@ -1,10 +1,9 @@
-"""The L5 contract leaf — RewardFn / DecodeFn / Task / Graded / VerifiableEnv.
+"""The A5 verifiable-env contract — RewardFn / DecodeFn / Task / Graded / VerifiableEnv.
 
-L5 envs · the keystone leaf (``docs/IMPLEMENTATION_PLAN.md`` §3.1; ADR-0010). Owns the contracts
-every reward/env/algo module builds into, so nothing imports ``rewards.reward`` merely for a type —
-together with ``levels.py`` this is what makes the L5 dependency graph acyclic.
+The leaf every reward/env/algo module builds into, so nothing imports ``rewards.reward`` merely for
+a type — which keeps the A5 dependency graph acyclic.
 
-Pinned contracts (ADR-0010, the four-metric ADR):
+Pinned contracts:
   * ``RewardFn`` is **text-in / dict-out**: the env decodes ``Rollout.response_ids`` to text once
     (via its ``DecodeFn``) and grades on text — a grader never sees token ids, because the
     from-scratch BPE and an HF tokenizer split the same string differently, so a token-id grader is
@@ -24,10 +23,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from reasoning_llm.rollout.types import Rollout
+    from scratch_llm.rollout.types import Rollout
 
 #: The grader's return shape: ``reward`` (the scalar the RL spine optimizes) plus the
-#: ``format_reward`` / ``answer_reward`` decomposition the hack detector reads.
+#: ``format_reward`` / ``answer_reward`` decomposition the RL logs track.
 RewardDict = dict[str, float]
 
 
@@ -45,7 +44,7 @@ class Task:
 @dataclass(frozen=True)
 class Graded:
     """The outcome of grading one rollout against one task — the per-sample row the trainer
-    aggregates into ``reward_mean`` and the detector reads for ``hack_rate``."""
+    aggregates into ``reward_mean`` and the reward/length stats the RL logs track."""
 
     reward: float
     format_reward: float
@@ -63,16 +62,16 @@ class DecodeFn(Protocol):
 @runtime_checkable
 class RewardFn(Protocol):
     """Text-in / dict-out grader. Keyword-only so call sites are unambiguous and a token-id grader
-    cannot be passed by accident (ADR-0010)."""
+    cannot be passed by accident."""
 
     def __call__(self, *, response_text: str, ground_truth: str) -> RewardDict: ...
 
 
 @runtime_checkable
 class VerifiableEnv(Protocol):
-    """A pool of verifiable tasks that owns its tokenizer (``decode``) and grades rollouts under its
-    configured ``HardeningLevel``. ``LocalBackend`` (CPU, CI) and a GPU HF/SGLang backend feed the
-    *same* env, so the engine is backend-agnostic."""
+    """A pool of verifiable tasks that owns its tokenizer (``decode``) and grades rollouts.
+    ``LocalBackend`` (CPU, CI) and a GPU HF/SGLang backend feed the *same* env, so the engine is
+    backend-agnostic."""
 
     def decode(self) -> DecodeFn: ...
 

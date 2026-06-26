@@ -10,6 +10,6 @@ branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '(no git yet — r
 dirty="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
 venv=$([ -d .venv ] && echo 'ready' || echo 'missing → uv venv && source .venv/bin/activate')
 
-echo "reasoningLLM clean-room | branch: ${branch} | uncommitted: ${dirty} files | venv: ${venv}"
-echo "Cockpit (tracker, /morning, /ship gates): ../../daily  ·  green-CI is hook-enforced on git commit."
+echo "scratch_llm · CS336 from-scratch | branch: ${branch} | uncommitted: ${dirty} files | venv: ${venv}"
+echo "green-CI is hook-enforced on git commit."
 exit 0
