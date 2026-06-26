@@ -123,6 +123,7 @@ pytest -m "not gpu"                  # the CPU gate (mirrors CI); src/ layout vi
 |---|---|
 | Workspace map + CS336→interview-readiness | `../README.md` |
 | **The build plan** — A1→A5 spine, load-bearing 20%, discipline gates, build order | `docs/IMPLEMENTATION_PLAN.md` |
+| **Vision & plan (Vietnamese)** — tổng hợp tầm nhìn + specs + kế hoạch (synthesis, not source-of-truth) | `docs/VISION_VI.md` |
 | **Per-assignment build guides** — every deliverable tagged + mapped to `src/scratch_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |
 | Design specs — KV-cache · rollout seam · FA2 roofline · MoE walkthrough | `docs/design/` |
