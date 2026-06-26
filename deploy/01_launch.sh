@@ -87,9 +87,11 @@ ssh -p "$PORT" "$HOST" \
 cat <<EOF
 
 ✅ READY.
-   Instance : ${INSTANCE_ID}   ${GPU_SKU}  \$${PRICE}/hr
-   SSH      : ssh -p ${PORT} ${HOST}
-   Code     : /root/scratch_llm  (already pip-installed with [gpu,dev])
+   Instance  : ${INSTANCE_ID}   ${GPU_SKU}  \$${PRICE}/hr
+   SSH       : ssh -p ${PORT} ${HOST}
+   Workspace : /root/cs336  (STRATEGY/DELTA/README + lectures oracle + scratch_llm)
+   Code      : /root/cs336/scratch_llm  (pip-installed [gpu,dev]; same plan/context as laptop)
+   Agents    : launch Claude Code from /root/cs336/scratch_llm — auto-loads CLAUDE.md + the plan
 
    Pull checkpoints back to your laptop any time:
      INSTANCE=${INSTANCE_ID} ./deploy/sync_checkpoints.sh

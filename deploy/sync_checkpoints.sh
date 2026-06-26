@@ -11,12 +11,12 @@
 #
 # Usage:
 #   INSTANCE=12345 ./deploy/sync_checkpoints.sh
-#   INSTANCE=12345 REMOTE_DIR=/root/scratch_llm/runs ./deploy/sync_checkpoints.sh
+#   INSTANCE=12345 REMOTE_DIR=/root/cs336/scratch_llm/runs ./deploy/sync_checkpoints.sh
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
 INSTANCE="${INSTANCE:?set INSTANCE=<instance_id>}"
-REMOTE_DIR="${REMOTE_DIR:-/root/scratch_llm/checkpoints}"
+REMOTE_DIR="${REMOTE_DIR:-/root/cs336/scratch_llm/checkpoints}"
 LOCAL_DIR="${LOCAL_DIR:-./_pod_artifacts/${INSTANCE}}"
 
 URL=$(vastai ssh-url "$INSTANCE")          # ssh://root@host:port
