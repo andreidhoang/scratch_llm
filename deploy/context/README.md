@@ -1,33 +1,35 @@
-# Context bundle — parity across machines
+# Context bundle — project plan & roadmap parity
 
-This directory makes the repo **self-describing**: a freshly-provisioned GPU pod
-gets the *same* plan and the *same* Claude Code context engineering as your laptop,
-without depending on files that live outside the repo.
+This directory makes the repo **self-describing for this project**: a freshly-pulled
+clone (on a GPU pod or any machine) carries the same project plan, context
+engineering, and roadmap — without depending on files that live in the parent dir
+outside the repo.
 
 ```
 context/
-├── workspace/        # the parent cs336/ docs the repo's CLAUDE.md links via ../
-│   ├── STRATEGY.md   #   the canonical ship-order (CLAUDE.md: "wins over any other doc")
-│   ├── DELTA.md      #   the capstone spec
-│   └── README.md     #   the workspace map
-└── claude_global/    # the global ~/.claude SuperClaude config (loads every turn)
-    ├── CLAUDE.md     #   entry point (@-imports the two below)
-    ├── PRINCIPLES.md #   engineering principles
-    └── RULES.md      #   operational rules
+└── workspace/        # the parent cs336/ docs the repo's CLAUDE.md links via ../
+    ├── STRATEGY.md   #   the canonical ship-order / roadmap (CLAUDE.md: "wins over any other doc")
+    ├── DELTA.md      #   the capstone spec
+    └── README.md     #   the workspace map
 ```
 
+**Scope:** this project's roadmap/context only. The repo's own `CLAUDE.md`, `docs/`
+(`IMPLEMENTATION_PLAN.md`, `STATUS.md`, `CONTEXT_ENGINEERING.md`, guides, ADRs), and
+`.claude/` (commands `/master` `/next`, hooks) already travel with `git` — this bundle
+just adds the three parent-dir docs that `../`-links would otherwise miss. Your global
+`~/.claude` setup (personal config, skills, plugins) is **per-machine** and is not
+carried here.
+
 ## How it's used
-`deploy/provision.sh` (on the pod) lays these out so paths resolve identically:
-- `workspace/*` → `/root/cs336/` (the repo clones to `/root/cs336/scratch_llm`, so
-  `../STRATEGY.md` etc. resolve exactly as on your laptop — **no link rewriting**).
-- `claude_global/*` → `~/.claude/` (so PRINCIPLES/RULES + the learning methodology
-  load on every turn, same as your laptop).
+`deploy/provision.sh` (on the pod) lays `workspace/*` into `/root/cs336/`. Since the
+repo clones to `/root/cs336/scratch_llm`, the repo's `../STRATEGY.md` etc. resolve
+exactly as on your laptop — **no link rewriting**.
 
 ## Keeping it fresh (avoid drift)
-This is a **vendored snapshot**. When you edit the live sources on your laptop,
-refresh the bundle before launching a pod:
+This is a **vendored snapshot** of the parent-dir docs. When you edit them on your
+laptop, refresh the bundle before launching a pod:
 
 ```bash
-./deploy/sync_context.sh          # copies live sources -> here, shows the diff
-git add deploy/context && git commit -m "context: refresh bundle" && git push
+./deploy/sync_context.sh          # copies ../STRATEGY.md etc. -> here, shows the diff
+git add deploy/context && git commit -m "context: refresh roadmap docs" && git push
 ```

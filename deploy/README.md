@@ -4,26 +4,29 @@ The senior-engineer pattern: **code lives in GitHub, the pod is a disposable exe
 
 ```
 laptop (source of truth)         Vast.ai pod (ephemeral)
-  ├─ git push  ───────────────▶  git clone   (code + plan + context bundle)
-  ├─ (provision)  ────────────▶  ~/.claude/ global config + lectures oracle
+  ├─ git push  ───────────────▶  git clone   (code + this project's plan/roadmap)
+  ├─ (provision)  ────────────▶  workspace topology + lectures oracle
   └─ sync_checkpoints.sh ◀─────  checkpoints  (artifacts, never in git)
 ```
 
-The pod reproduces your laptop's **exact workspace topology** so a pod agent loads the
-*same plan and the same Claude Code context engineering* you have locally:
+The pod reproduces the **project's workspace topology** so a pod agent loads this
+project's plan, context engineering, and roadmap (the repo's own `CLAUDE.md` + `docs/`
+travel with git; the parent `../` docs are vendored so their links resolve):
 
 ```
 /root/cs336/
 ├── STRATEGY.md  DELTA.md  README.md   (vendored — the ../ refs in CLAUDE.md resolve)
 ├── lectures/                          (CS336 oracle, cloned from stanford-cs336)
 └── scratch_llm/                       (repo; Claude auto-loads CLAUDE.md + docs/)
-~/.claude/{CLAUDE,PRINCIPLES,RULES}.md (global SuperClaude config, installed by provision)
 ```
+
+Scope is **this project only** — provisioning does not touch the machine's global
+`~/.claude` setup (personal config / skills / plugins). Configure that per machine.
 
 | Artifact | Channel | Why |
 |---|---|---|
 | Source code | GitHub (`git`) | versioned, reproducible, survives `destroy` |
-| Plan + context | `deploy/context/` in git → provisioned | parity: pod agents know the plan |
+| Project plan/roadmap | repo `CLAUDE.md`+`docs/` (git) + `deploy/context/` (parent docs) | pod agents load the plan |
 | Oracle (`lectures/`) | `provision_lectures.sh` (public clone) | 452M, not bundled — cloned on demand |
 | Datasets | rsync / cloud bucket | too big for git |
 | Checkpoints | `sync_checkpoints.sh` / bucket | must survive preemption |
@@ -42,8 +45,8 @@ GitHub token automatically — no separate GitHub setup needed.
 ## Every session
 
 ```bash
-# 2. (if you changed STRATEGY/DELTA/README or your global ~/.claude config)
-#    refresh the vendored context bundle so the pod gets current files:
+# 2. (if you changed ../STRATEGY.md / DELTA.md / the workspace README)
+#    refresh the vendored roadmap docs so the pod gets current files:
 ./deploy/sync_context.sh && git add deploy/context && git commit -m "context: refresh" && git push
 
 # 3. Rent a GPU + provision (shows the offer & price before charging you)
@@ -76,7 +79,7 @@ vastai destroy instance <id>
 | `00_setup_vast.sh` | laptop | one-time: API key + SSH key upload |
 | `sync_context.sh` | laptop | refresh `context/` bundle from live laptop sources |
 | `01_launch.sh` | laptop | search live offers → rent → wait for SSH → provision |
-| `provision.sh` | pod | rebuild workspace topology + install global cfg + venv + smoke check |
+| `provision.sh` | pod | rebuild project workspace topology + venv + smoke check |
 | `provision_lectures.sh` | pod | clone the CS336 oracle (official stanford-cs336 repos) |
 | `sync_checkpoints.sh` | laptop | rsync artifacts off the pod |
-| `context/` | — | vendored plan + global config (see `context/README.md`) |
+| `context/` | — | vendored parent-dir roadmap docs (see `context/README.md`) |

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# provision.sh — runs ON THE POD. Reconstitutes the FULL cs336 workspace on
-# fresh metal so the pod's Claude Code agents have the same plan + context
-# engineering as your laptop. Invoked by 01_launch.sh; safe to re-run.
+# provision.sh — runs ON THE POD. Reconstitutes the cs336 PROJECT workspace on
+# fresh metal so the pod's Claude Code agents load this project's plan, context
+# engineering, and roadmap. Invoked by 01_launch.sh; safe to re-run.
 #
 # Reproduces this exact topology (so all the repo's ../ refs resolve unchanged):
 #
@@ -11,8 +11,9 @@
 #   ├── lectures/                          (the CS336 oracle — optional)
 #   └── scratch_llm/                       (this repo; Claude auto-loads its CLAUDE.md)
 #
-# …and installs the global SuperClaude config to the pod's ~/.claude/ so
-# PRINCIPLES.md / RULES.md / the learning methodology load every turn too.
+# Scope: PROJECT context only (repo CLAUDE.md + docs/ + .claude/ travel with git;
+# the parent ../ docs are vendored). This does NOT touch the machine's global
+# ~/.claude setup — that's yours to configure per machine.
 #
 # Expects in env:
 #   REPO=andreidhoang/scratch_llm
@@ -45,14 +46,10 @@ else
   git -C "$DEST" remote set-url origin "https://github.com/${REPO}.git"  # strip token from config
 fi
 
-echo "==> Lay out the vendored context bundle into the workspace topology"
-# Parent-dir docs the repo's CLAUDE.md points to via ../STRATEGY.md etc.
+echo "==> Lay out the vendored project docs into the workspace topology"
+# Parent-dir roadmap/context docs the repo's CLAUDE.md points to via ../STRATEGY.md etc.
 cp -f "$DEST"/deploy/context/workspace/*.md "$WORKSPACE"/
-# Global SuperClaude config: ~/.claude/CLAUDE.md @-imports PRINCIPLES.md & RULES.md
-# (siblings), so all three land together.
-mkdir -p "$HOME/.claude"
-cp -f "$DEST"/deploy/context/claude_global/*.md "$HOME/.claude/"
-echo "    workspace docs -> ${WORKSPACE}/ ; global config -> ${HOME}/.claude/"
+echo "    workspace docs -> ${WORKSPACE}/"
 
 echo "==> CS336 oracle (official Stanford repos — the test adapters)"
 if [[ "${SKIP_LECTURES:-0}" == "1" ]]; then
@@ -74,10 +71,9 @@ print("torch", torch.__version__, "cuda?", torch.cuda.is_available(),
 PY
 
 cat <<EOF
-==> Done. Parity established.
+==> Done. Project context in place.
     Workspace : ${WORKSPACE}  (STRATEGY/DELTA/README + lectures + scratch_llm)
     Repo      : ${DEST}
-    Global cfg: ${HOME}/.claude/{CLAUDE,PRINCIPLES,RULES}.md
     Start work:  cd ${DEST} && source .venv/bin/activate
-    Launch Claude Code from ${DEST} so it auto-loads CLAUDE.md + the plan.
+    Launch Claude Code from ${DEST} so it auto-loads CLAUDE.md + docs/ (the plan).
 EOF
