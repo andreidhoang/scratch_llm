@@ -68,7 +68,13 @@ ignore = ["E501"]  # line length enforced softly; long math/comments allowed
 include = ["src", "tests"]
 # Triton kernels use the `kernel[grid](...)` launch syntax static checkers can't model, and run
 # only on a GPU box — type-checked there by execution, not here.
-exclude = ["src/scratch_llm/kernels/flash_attention_triton.py"]
+exclude = [
+    "src/scratch_llm/kernels/flash_attention_triton.py",
+    "src/scratch_llm/kernels/matmul.py",
+    "src/scratch_llm/kernels/bench.py",
+    "tests/test_matmul.py",
+    "tests/test_flash_attention_triton.py",
+]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
 reportMissingImports = false   # GPU-only deps absent in CI

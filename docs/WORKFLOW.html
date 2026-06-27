@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Mastery Workflow — engineer · implement · execute · master</title>
+<style>
+  :root{
+    --bg:#faf9f5; --surface:#ffffff; --surface2:#f2f0e9; --surface3:#eceae2;
+    --text:#1a1a18; --text2:#57564f; --text3:#8b897f;
+    --border:rgba(20,20,20,.11); --border2:rgba(20,20,20,.2);
+    --blue:#2a78d6; --orange:#e25c2c; --green:#1a9e6f; --violet:#5346b8; --gold:#9a6b00; --ok:#0ca30c;
+    --orange-bg:rgba(226,92,44,.08); --orange-bd:rgba(226,92,44,.4);
+    --radius:12px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#1b1a18; --surface:#262522; --surface2:#2f2e29; --surface3:#35332d;
+      --text:#ededea; --text2:#b6b4ab; --text3:#8b897f;
+      --border:rgba(255,255,255,.13); --border2:rgba(255,255,255,.24);
+      --blue:#4f97ee; --orange:#f0824f; --green:#34c794; --violet:#9085e9; --gold:#e0b25c; --ok:#5fcf8a;
+      --orange-bg:rgba(240,130,79,.1); --orange-bd:rgba(240,130,79,.42);
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:2.4rem 1.5rem 4rem}
+  header h1{font-size:25px;font-weight:600;margin:0 0 .35rem;letter-spacing:-.01em}
+  header .sub{color:var(--text2);font-size:14.5px;margin:0 0 .2rem;max-width:70ch}
+  header .one{display:inline-block;margin-top:.7rem;font-size:13px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:30px;padding:6px 14px}
+  header .one b{color:var(--orange);font-weight:600}
+  .kick{font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--text3);margin:0 0 6px;font-weight:600}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin:2.2rem 0 .9rem}
+  .sechead .n{font-size:12px;color:var(--text3);font-family:var(--mono)}
+  .sechead h2{font-size:18px;font-weight:600;margin:0;letter-spacing:-.01em}
+  .prin{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin:1.4rem 0 0}
+  .pc{background:var(--surface2);border-radius:10px;padding:11px 14px}
+  .pc .t{font-size:13.5px;font-weight:600}
+  .pc .d{font-size:12.5px;color:var(--text2);margin-top:4px;line-height:1.45}
+  .board{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .phase{background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--c);border-radius:var(--radius);padding:14px 15px;display:flex;flex-direction:column}
+  .phase .ph{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .phase .who{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--c);margin:4px 0 11px;font-weight:600}
+  .phase ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px;flex:1}
+  .phase li{font-size:12.5px;color:var(--text2);line-height:1.45;padding-left:16px;position:relative}
+  .phase li::before{content:"";position:absolute;left:0;top:6px;width:6px;height:6px;border-radius:50%;background:var(--c)}
+  .phase li b{color:var(--text);font-weight:600}
+  .cmd{font-size:11px;font-family:var(--mono);background:var(--surface2);padding:1px 6px;border-radius:5px;color:var(--text)}
+  .tagline{font-size:11.5px;color:var(--c);margin-top:11px;padding-top:10px;border-top:1px solid var(--border);font-weight:600}
+  .loopback{text-align:center;font-size:12.5px;color:var(--text3);margin:12px 0 0}
+  .day{display:flex;flex-wrap:wrap;gap:8px}
+  .blk{flex:1;min-width:145px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+  .blk.hot{border:2px solid var(--orange)}
+  .blk .tm{font-size:10.5px;color:var(--text3);font-family:var(--mono)}
+  .blk .ti{font-size:13px;font-weight:600;margin-top:2px}
+  .blk .ds{font-size:11.5px;color:var(--text2);margin-top:3px;line-height:1.4}
+  .blk.hot .ti{color:var(--orange)}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px 15px}
+  .card .ct{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .card .cd{font-size:12.5px;color:var(--text2);margin-top:7px;line-height:1.55}
+  .card .cd b{color:var(--text);font-weight:600}
+  .arc{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+  .arcnode{flex:1;min-width:125px;background:var(--surface2);border-radius:10px;padding:12px 14px;text-align:center}
+  .arcnode.last{background:rgba(83,70,184,.1)}
+  @media (prefers-color-scheme:dark){.arcnode.last{background:rgba(144,133,233,.13)}}
+  .arcnode .an{font-size:13.5px;font-weight:600}
+  .arcnode .ad{font-size:11.5px;color:var(--text2);margin-top:4px;line-height:1.4}
+  .arcarrow{display:flex;align-items:center;color:var(--text3);font-size:17px;padding:0 5px}
+  .today{background:var(--orange-bg);border:1px solid var(--orange-bd);border-radius:var(--radius);padding:14px 17px;margin-top:1.2rem;font-size:13.5px;color:var(--text2);line-height:1.9}
+  .today b{color:var(--text);font-weight:600}
+  .fill{font-family:var(--mono);color:var(--orange);font-weight:600}
+  .ref{display:flex;flex-wrap:wrap;gap:8px;margin-top:.9rem}
+  .ref span{font-size:11.5px;color:var(--text2);background:var(--surface2);border-radius:7px;padding:4px 10px}
+  .ref b{color:var(--text);font-family:var(--mono);font-weight:600}
+  footer{margin-top:2.6rem;padding-top:1.2rem;border-top:1px solid var(--border);color:var(--text3);font-size:12px;line-height:1.6}
+  @media(max-width:820px){.board{grid-template-columns:1fr 1fr}.prin{grid-template-columns:1fr}.row3{grid-template-columns:1fr}}
+  @media print{body{background:#fff}.phase,.card,.blk{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="kick">Daily mastery workflow · one rung a day</p>
+    <h1>Your day, top to bottom — build it, prove you understand it</h1>
+    <p class="sub">Engineer the target → implement the meat (yours) → execute the profile → master the teach-back, then loop to the next rung. Everything the research converged on, on one page.</p>
+    <span class="one">Rule of thumb: <b>one rung a day</b>, and the orange column never goes blue.</span>
+  </header>
+
+  <div class="prin">
+    <div class="pc"><div class="t">🔁 Reconstruct, don't copy</div><div class="d">Retrieval builds the skill; transcribing the book (or an agent's answer) builds only the illusion of it.</div></div>
+    <div class="pc"><div class="t">📊 The profile is "done"</div><div class="d">A green test isn't the DoD — "bound by X, Y% of cuBLAS, fix = Z" is. Predict the number before you run.</div></div>
+    <div class="pc"><div class="t">✋ You own the meat</div><div class="d">Agents scaffold, profile, review. You write every kernel + derivation. A hook enforces it.</div></div>
+  </div>
+
+  <div class="sechead"><span class="n">A</span><h2>The four phases (the cycle, per rung)</h2></div>
+  <div class="board">
+    <div class="phase" style="--c:var(--blue)">
+      <div class="ph">⚙️ Engineer</div>
+      <div class="who">agents scaffold · you predict</div>
+      <ul>
+        <li><span class="cmd">/kernel-day</span> pulls today's ONE rung + the % target</li>
+        <li><b>bench-writer</b> writes the failing test + the <span class="cmd">bench.py</span> roofline call — the DoD</li>
+        <li><b>You: predict the %</b> (memory- or compute-bound?) before any code</li>
+      </ul>
+      <div class="tagline">set the target, don't peek at the answer</div>
+    </div>
+    <div class="phase" style="--c:var(--orange)">
+      <div class="ph">✍️ Implement</div>
+      <div class="who">the meat — you only</div>
+      <ul>
+        <li><b>Reconstruct the kernel from blank</b> in your editor</li>
+        <li>Stuck → <span class="cmd">/tutor</span> — hints + the book chapter, <b>never code</b></li>
+        <li>The <span class="cmd">kernel-write-guard</span> hook blocks any agent from writing it</li>
+      </ul>
+      <div class="tagline">this is where the skill is built</div>
+    </div>
+    <div class="phase" style="--c:var(--green)">
+      <div class="ph">🚀 Execute</div>
+      <div class="who">measure the truth</div>
+      <ul>
+        <li><b>Run</b> → make the test pass (correctness first)</li>
+        <li><span class="cmd">/profile</span> → <b>roofline-analyst</b>: BOUND · WHY · NEXT ← the DoD</li>
+        <li><b>Break it</b> — remove the optimization, watch it degrade</li>
+        <li><span class="cmd">/kreview</span> → ACCEPT/REJECT · is the speedup real?</li>
+      </ul>
+      <div class="tagline">the profile is done, not the green test</div>
+    </div>
+    <div class="phase" style="--c:var(--violet)">
+      <div class="ph">🧠 Master</div>
+      <div class="who">lock it in</div>
+      <ul>
+        <li><b>Teach-back cold</b> — explain <i>why</i> it works, from physics</li>
+        <li>Can't? → <b>loop back to Predict</b> (you haven't mastered it)</li>
+        <li>Stumble → ledger → spaced re-test (Leitner +2/+4/+7d)</li>
+      </ul>
+      <div class="tagline">predict-before-run + teach-back = mastered</div>
+    </div>
+  </div>
+  <div class="loopback">↻ master → engineer the next rung &nbsp;·&nbsp; one loop = one kernel, fully understood</div>
+
+  <div class="sechead"><span class="n">B</span><h2>The day's shape (~6.5h)</h2></div>
+  <div class="day">
+    <div class="blk"><div class="tm">0:00</div><div class="ti">Pull, not plan</div><div class="ds">open queue · pick ONE rung · predict the %</div></div>
+    <div class="blk hot"><div class="tm">0:15–3:15</div><div class="ti">Protected block</div><div class="ds">the four-phase loop on today's kernel</div></div>
+    <div class="blk"><div class="tm">3:15</div><div class="ti">Checkpoint</div><div class="ds">shipped a profile? no → shrink the unit</div></div>
+    <div class="blk"><div class="tm">3:30–4:45</div><div class="ti">Lane 2</div><div class="ds">read next CUDA-for-DL chapter / RL-math</div></div>
+    <div class="blk"><div class="tm">4:45</div><div class="ti">Risk-room rep</div><div class="ds">RL-math from blank (rotate) · Trio 2×/wk</div></div>
+    <div class="blk"><div class="tm">5:10</div><div class="ti">Day-close</div><div class="ds">log the roofline line + commit + ledger</div></div>
+  </div>
+
+  <div class="sechead"><span class="n">C</span><h2>How it compounds &amp; how it sticks</h2></div>
+  <div class="row3">
+    <div class="card"><div class="ct">🎯 Mastery gate</div><div class="cd">Advance only when you can <b>predict the roofline before running</b> AND <b>teach the mechanism cold</b>. Otherwise re-loop. A green test with no profile does <b>not</b> close the day.</div></div>
+    <div class="card"><div class="ct">🧷 Retention</div><div class="cd">Every stumble → the ledger with a cause tag + <b>next_test</b> date. Cold pass → +2/+4/+7d; fail → +1d. <b>Sunday</b> = a cold re-test of the whole ladder from blank.</div></div>
+    <div class="card"><div class="ct">🪜 Reliance drill</div><div class="cd">One session/week, work read-only (<span class="cmd">--permission-mode plan</span>): read the profile and form <b>your own</b> bottleneck hypothesis before the analyst. Catches quiet skill erosion.</div></div>
+  </div>
+
+  <div class="sechead"><span class="n">D</span><h2>The arc — daily reps → the offer-grade artifact</h2></div>
+  <div class="arc">
+    <div class="arcnode"><div class="an">1 day</div><div class="ad">one kernel: predicted → profiled → taught back</div></div>
+    <div class="arcarrow">→</div>
+    <div class="arcnode"><div class="an">1 week</div><div class="ad">matmul → cuBLAS climb · FA · quant (the ladder)</div></div>
+    <div class="arcarrow">→</div>
+    <div class="arcnode"><div class="an">the number</div><div class="ad">GPU MODE rank / FlashInfer-SGLang PR (public)</div></div>
+    <div class="arcarrow">→</div>
+    <div class="arcnode last"><div class="an">the signal</div><div class="ad">narrate a roofline cold = the frontier-RE bar</div></div>
+  </div>
+
+  <div class="today">
+    <b>Today's one-liner</b> — fill it at day-close; this IS the DoD:<br>
+    Rung: <span class="fill">________</span> &nbsp;·&nbsp; predicted: <span class="fill">__%</span> &nbsp;·&nbsp; measured: <span class="fill">__% of cuBLAS/SDPA</span> &nbsp;·&nbsp; bound: <span class="fill">{mem | compute}</span> &nbsp;·&nbsp; next fix: <span class="fill">________</span> &nbsp;·&nbsp; taught back? <span class="fill">[y / n]</span>
+  </div>
+
+  <div class="ref">
+    <span>commands: <b>/kernel-day</b> · <b>/tutor</b> · <b>/profile</b> · <b>/kreview</b></span>
+    <span>agents: <b>bench-writer</b> · <b>roofline-analyst</b> · <b>kernel-ship-reviewer</b> · <b>kernel-tutor</b></span>
+  </div>
+
+  <footer>
+    scratch_llm · daily mastery workflow · grounded in the 2026 research (frontier RE/PE workflow · AI-vs-hand kernels · learning science: retrieval &gt; transcription, guardrailed-AI eliminates skill atrophy). Open it each morning; execute top-to-bottom. The leverage is real — the reps stay yours.
+  </footer>
+</div>
+</body>
+</html>

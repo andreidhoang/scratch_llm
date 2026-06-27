@@ -61,6 +61,8 @@ Open these **before** you start building the assignment; run the `.py` ones alon
 - **L8** (pdf) parallelism basics → the DP/TP/PP comms algebra → ZeRO-1 → FSDP + the 100B one-pager.
 - **L10** (py) inference → the KV-cache incremental-decode path (`rollout/`, `sampling.py`).
 
+> **External CUDA text (kernels track).** *CUDA for Deep Learning* (in `interview_synthesis/`) is the primary hands-on CUDA source feeding A2's `kernels/` and the DELTA spike — chapter map: naive kernels → `kernels/` warm-up; transformer inference + optimizing kernels → the FA2/decode path; tensor cores + flash attention → `kernels/flash_attention*`; quantization → the FP8/INT4 labs; CUTLASS → the C2.5 real-kernel rung. Per-chapter loop = **predict → reconstruct from blank → compile → `ncu`/roofline → break → variant**; recurring rep = naive-matmul → cuBLAS.
+
 ### A3 · Scaling — fit a curve, extrapolate under a FLOP budget ⬜
 **`L9 → L11`** *(then `L12` for eval discipline)*
 - **L9** (pdf) scaling-law basics → the log-log power-law fitter in `scaling/`.

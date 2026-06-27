@@ -40,6 +40,12 @@
         "hooks": [
           { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/green-ci-gate.sh\"", "timeout": 600, "statusMessage": "Running green-CI gate before commit..." }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/kernel-write-guard.sh\"", "timeout": 10, "statusMessage": "Checking the kernel meat boundary..." }
+        ]
       }
     ]
   }

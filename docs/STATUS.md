@@ -105,6 +105,10 @@ kernel for **GatedDeltaNet-2** (NVIDIA, arXiv 2605.22791), targeting ≥85% of t
 roofline and the "erase/write decoupling is free at decode" thesis. Design + plan live in the **workspace
 root** (one dir up from this repo).
 
+> ⚠️ **Re-aim (2026-06-27).** The *plain* GDN-decode gap is now **closed** — FlashInfer ships `gated_delta_rule_decode` and MLSys-2026 has a GDN contest track. Re-point the spike to **NVFP4 on the GDN recurrent state** (production NVFP4 keeps the recurrent state in BF16; FP4-state error-accumulation vs context length is unmeasured) and land it as **the public artifact** (`ROADMAP.md` G3). The Phase-1 harness (= the A2 finish) is unchanged.
+>
+> **Artifact target (ready to scope).** The MLSys-2026 FlashInfer GDN track has *concluded* (winners public) — so its problem + harness are now a gold **reference to reproduce-and-beat**, not a live submission. Ship: (1) a fused **GDN-decode** kernel matched to that benchmark; (2) the **NVFP4-on-recurrent-state** numerics probe — error vs context length, the genuinely open seam. → as a **FlashInfer/SGLang PR + a GPU MODE leaderboard entry** (permanent) + a short writeup. **Kill gate:** if the plain GDN-decode kernel can't get within ~10% of FlashInfer's, drop to "NVFP4-state numerics writeup only." Gated on the A5 ship + a rented H100 (Step-0).
+
 | Artifact | State | Where |
 |---|---|---|
 | Design doc (RFC) — hypothesis · P1–P7 · scope · kill criteria | ✅ written, fact-checked 2026-06-14 | `../../DELTA.md` (Part I) |
