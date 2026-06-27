@@ -83,3 +83,62 @@ def flash_attention_forward(
         lse[:, qs:qe] = m + torch.log(ell)
 
     return o.reshape(*lead, n_q, d), lse.reshape(*lead, n_q)
+
+
+def _causal_mask(n_q: int, n_k: int, device: torch.device) -> Tensor:
+    """``(n_q, n_k)`` bool, True where a key is in the query's future (must be masked).
+
+    Uses absolute positions so it matches the forward's tiled masking even when ``n_q != n_k``."""
+    q_idx = torch.arange(n_q, device=device)
+    k_idx = torch.arange(n_k, device=device)
+    return k_idx[None, :] > q_idx[:, None]
+
+
+class FlashAttentionPyTorch(torch.autograd.Function):
+    """FA2 forward (tiled oracle) + the recomputation backward (Eqs 13–19), pure PyTorch.
+
+    The point is **recompute-vs-store**: the forward persists only ``(Q,K,V,O,L)`` — all O(N·d) —
+    and never the N×N probability matrix ``P``. The backward recomputes ``S`` and ``P`` from the
+    saved tensors, so no O(N²) bytes ever cross the fwd→bwd boundary. The softmax-Jacobian's
+    recentering term collapses to the **D-vector** ``D_i = Σ_d O_id·dO_id = Σ_j P_ij·dP_ij`` — a
+    cheap d-wide reduction over tensors we already have, no ``dP`` needed to form it.
+
+    Falsifiable invariant (tests/test_flash_attention.py): ``dQ,dK,dV`` equal plain attention's
+    autograd gradients to fp tolerance, causal and non-causal. Kill criterion: any mismatch ⇒ a
+    transpose in one of the backward einsums or a wrong causal recompute.
+    """
+
+    @staticmethod
+    def forward(ctx, q: Tensor, k: Tensor, v: Tensor, is_causal: bool = False) -> Tensor:  # type: ignore[override]
+        o, lse = flash_attention_forward(q, k, v, is_causal=is_causal)
+        ctx.save_for_backward(q, k, v, o, lse)
+        ctx.is_causal = is_causal
+        return o
+
+    @staticmethod
+    def backward(ctx, do: Tensor):  # type: ignore[override]
+        q, k, v, o, lse = ctx.saved_tensors
+        is_causal: bool = ctx.is_causal
+        d = q.shape[-1]
+        n_q, n_k = q.shape[-2], k.shape[-2]
+        scale = 1.0 / math.sqrt(d)
+
+        # Recompute in fp32 at minimum (the rescale needs headroom); keep fp64 if the input is fp64.
+        acc_dtype = q.dtype if q.dtype in (torch.float32, torch.float64) else torch.float32
+        qf, kf, vf = q.to(acc_dtype), k.to(acc_dtype), v.to(acc_dtype)
+        of, dof = o.to(acc_dtype), do.to(acc_dtype)
+
+        # Recompute the probability matrix P from saved (Q,K,V,L) — never stored in forward.
+        s = torch.einsum("...qd,...kd->...qk", qf, kf) * scale  # (..., n_q, n_k)
+        if is_causal:
+            s = s.masked_fill(_causal_mask(n_q, n_k, q.device), float("-inf"))
+        p = torch.exp(s - lse.to(acc_dtype).unsqueeze(-1))  # (..., n_q, n_k)
+
+        d_vec = (of * dof).sum(dim=-1)  # D_i = O_i·dO_i  (..., n_q)
+        dv = torch.einsum("...qk,...qd->...kd", p, dof)  # Pᵀ dO        (..., n_k, d)
+        dp = torch.einsum("...qd,...kd->...qk", dof, vf)  # dO Vᵀ        (..., n_q, n_k)
+        ds = p * (dp - d_vec.unsqueeze(-1))  # softmax backward via D    (..., n_q, n_k)
+        dq = torch.einsum("...qk,...kd->...qd", ds, kf) * scale  # (..., n_q, d)
+        dk = torch.einsum("...qk,...qd->...kd", ds, qf) * scale  # (..., n_k, d)
+
+        return dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None
