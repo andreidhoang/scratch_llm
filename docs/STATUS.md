@@ -5,8 +5,44 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 
 **As of 2026-06-27: A1 substrate complete; A2 systems — the single-GPU half is done (FA2 fwd+bwd,
 activation/selective checkpointing, mixed-precision numerics, KV-cache, monitors, rollout seam); the
-distributed half (DDP → ZeRO-1 → FSDP + the 100B memory one-pager) is next, all CPU/gloo-buildable.
-A3/A4/A5 are clean stubs. 103 tests green, ruff clean, pyright 0 errors.**
+distributed half (DDP ✅ → ZeRO-1 → FSDP + the 100B memory one-pager) is in progress, all
+CPU/gloo-buildable. A3/A4/A5 are clean stubs. 106 tests green, ruff clean, pyright 0 errors.**
+
+## End-to-end map — the whole stack at a glance
+
+Two orderings, both true: **BUILD** is numeric (each layer rests on the last); **SHIP** is EV-ranked
+(scarcest-skill-first, per [`../STRATEGY.md`](../STRATEGY.md) §8).
+
+```
+BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ A5 "aha" · (A2 finish ∥ OSS) · DELTA
+        byte ───────────── own every layer of a language model ───────────── RL update
+
+ A1 Basics      ████████████ 100%  ✅  BPE · Transformer · AdamW · train · sample
+ A2 Systems     ███████░░░░░  ~60% 🟡  ACTIVE — see breakdown below
+ A3 Scaling     ░░░░░░░░░░░░    0%  ⬜  IsoFLOP / Chinchilla fitter (clean stub)
+ A4 Data        ░░░░░░░░░░░░    0%  ⬜  extract → filter → classify → MinHash dedup (clean stub)
+ A5 Alignment   ░░░░░░░░░░░░    0%  ⬜  SFT → Expert-Iter → GRPO/Dr.GRPO  ◄ highest-EV SHIP target
+ DELTA capstone  design ✅      0%  ⬜  GDN-2 decode kernel — base-first, gated on A5 ship + Step-0
+```
+
+**A2 breakdown — the active front (the densest interview surface):**
+
+```
+ make ONE GPU fast  (single-GPU half ✅)        make MANY GPUs coherent  (distributed half, gloo)
+ ─────────────────────────────────────          ─────────────────────────────────────────────
+ FA2 forward (oracle + Triton)   ✅              DDP  naive → flat → overlap        ✅  D1
+ FA2 backward (D-vector)         ✅  K           ZeRO-1 optimizer-state sharding    ⬜  D2  ◄ NEXT
+ activation/selective ckpt       ✅  M1          + 100B memory one-pager (written)  ⬜  D2
+ mixed-precision numerics        ✅  M2          FSDP2 per-param (graded)           ⬜  D3
+ KV-cache · monitors · rollout   ✅              comms algebra (DP/FSDP/TP calcs)   ⬜  D4
+ roofline (53% SDPA @4k, 4090)   ✅              ── then Phase C frontier labs (opt-in) ──
+                                                 paged-KV · speculative · ring-CP · TP toy · FP8 sim
+```
+
+**Resourcing:** everything above is **CPU-built, zero GPU spend**. GPU dollars are batched for ONE
+rented session at the end of A2 — the FA2 roofline re-measure + DDP/ZeRO/FSDP throughput/Nsight
+numbers — then again for the A5 "aha" burst (~$30–100). CPU correctness first; rent only to benchmark
+([`../STRATEGY.md`](../STRATEGY.md), the `vastai` skill, [ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md)).
 
 **Next ship — EV-ranked, not numeric (per [`../STRATEGY.md`](../STRATEGY.md) §8): the A5 RL "aha".**
 `algos/` SFT masked-CE → GRPO/Dr.GRPO wired to `utils/monitors.py` → reproduce the R1-Zero "aha" on
@@ -20,7 +56,7 @@ gate. Tracked in the Capstone section below; the build spine is in
 
 **Frontier CORE-defaults to adopt** (the cheap, high-value 2026 upgrades — see
 [`FRONTIER_PRACTICE_2026.md`](FRONTIER_PRACTICE_2026.md)): A1 — output z-loss · WSD
-schedule · depth-scaled init (QK-norm ✅ landed, opt-in); A2 — selective recompute · FSDP2; A3 — inference-aware allocation ·
+schedule · depth-scaled init (QK-norm ✅ landed, opt-in); A2 — selective recompute ✅ landed · FSDP2 (D3 ahead); A3 — inference-aware allocation ·
 robust Huber+bootstrap fit; A4 — decontamination gate · DCLM-style classifier positives; A5 — KL k3
 estimator · RLOO · off-policy epochs>1. *Adoption is tracked as green commits in the build state above
 — no separate ledger (build state + git is the source of truth).*

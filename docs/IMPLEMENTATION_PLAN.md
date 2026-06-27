@@ -93,7 +93,7 @@ tables + equations + checklists are in the cited guide.
 - **Load-bearing 20%:** FA2 tiling + online softmax (and the recomputation backward with the D-vector); the roofline (arithmetic intensity, % of peak, BW- vs compute-bound); the ~16–20 B/param optimizer-state memory math → why 100B needs DP+TP+PP; DDP overlap; ZeRO-1.
 - **Gates:** predict-before-you-run (write expected ms first) · `cuda.synchronize()` around all timing · fixed-seed.
 - **Production polish:** FA2 validated against the pure-PyTorch oracle and SDPA; DDP/ZeRO/FSDP each with a 2-rank gloo equivalence test (×5); the 100B memory one-pager.
-- **Status / next:** FA2 + KV-cache + monitors + rollout seam ✅; **DDP/ZeRO-1/FSDP are CPU-buildable via gloo — build them next**; real SGLang serving needs a Hopper box (rent it; ADR-0008).
+- **Status / next:** single-GPU half ✅ (FA2 fwd+bwd · selective checkpointing · mixed-precision numerics · KV-cache · monitors · rollout seam · roofline); distributed half in progress — **DDP naive/flat/overlap ✅ (gloo); ZeRO-1 next (D2) + the 100B one-pager, then FSDP2 (D3, graded) + comms algebra (D4)**; real SGLang serving needs a Hopper box (rent it; ADR-0008).
 - **SKIP:** the 8B leaderboard; the optional Triton FA2 backward (Alg. 2) — do the `torch.compile` recomputation backward.
 - **Interview leverage:** the xAI inference loop (kernels, KV-cache, quant), "how would you train a 100B model?" (DP+TP+PP + the memory math), **MFU / inference co-design** (why 100% MFU is an anti-goal; pick matrix topologies that saturate the units), and the **MoE serving** tradeoff (expert-parallel all-to-all vs pipeline-prefill).
 
