@@ -3,9 +3,10 @@
 Single source of truth for what is built, tested, and green. Updated as modules land.
 Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m "not gpu"`.
 
-**As of 2026-06-20: A1 substrate complete; A2 systems partial (FlashAttention-2 + KV-cache +
-monitors + rollout seam done; DDP/ZeRO-1/FSDP + the memory one-pager remain). A3/A4/A5 are clean
-stubs. 92 tests green, ruff clean, pyright 0 errors, CPU suite ≈ 16 s; last code commit Jun 8.**
+**As of 2026-06-27: A1 substrate complete; A2 systems — the single-GPU half is done (FA2 fwd+bwd,
+activation/selective checkpointing, mixed-precision numerics, KV-cache, monitors, rollout seam); the
+distributed half (DDP → ZeRO-1 → FSDP + the 100B memory one-pager) is next, all CPU/gloo-buildable.
+A3/A4/A5 are clean stubs. 103 tests green, ruff clean, pyright 0 errors.**
 
 **Next ship — EV-ranked, not numeric (per [`../STRATEGY.md`](../STRATEGY.md) §8): the A5 RL "aha".**
 `algos/` SFT masked-CE → GRPO/Dr.GRPO wired to `utils/monitors.py` → reproduce the R1-Zero "aha" on
@@ -41,11 +42,14 @@ estimator · RLOO · off-policy epochs>1. *Adoption is tracked as green commits 
 
 | Module | Status | Notes |
 |---|---|---|
-| `kernels/` FA2 (oracle + Triton) + roofline | ✅ | pure-PyTorch tiled oracle (CPU tests) + autotuned Triton fwd+causal, validated on a 4090 vs oracle/SDPA. **Roofline: 53 % of SDPA @ seq 4k** (honest gap shipped). Spec: [`design/L2_flash_attention_SPEC.md`](design/L2_flash_attention_SPEC.md) |
+| `kernels/` FA2 fwd (oracle + Triton) + roofline | ✅ | pure-PyTorch tiled oracle (CPU tests) + autotuned Triton fwd+causal, validated on a 4090 vs oracle/SDPA. **Roofline: 53 % of SDPA @ seq 4k** (honest gap shipped). Spec: [`design/L2_flash_attention_SPEC.md`](design/L2_flash_attention_SPEC.md) |
+| `kernels/` FA2 **backward** (recomputation) | ✅ | `FlashAttentionPyTorch(autograd.Function)`: save `(Q,K,V,O,L)`, recompute `S,P` in bwd, softmax-Jacobian via the D-vector `D=(O∘dO).sum(-1)`; grads == SDPA autograd to 1e-10/1e-8 (causal+non-causal, ragged). torch.compile recomputation path, not hand-rolled Triton bwd (SKIP) |
+| activation checkpointing (none/full/**selective**) | ✅ | `utils/checkpointing.py`: recompute-vs-store on two CPU-measured axes — grads transparent; boundary memory full,selective≪none; matmul recompute full>selective==none (selective = the 2026 SAC default) |
+| mixed-precision numerics | ✅ | `utils/mixed_precision.py`: fp16 sequential accumulation stalls (under-counts small addends) vs fp32; autocast rule matmul→bf16, LayerNorm/softmax→fp32 |
 | KV-cache (incremental decode) | ✅ | `KVCache` + cache-aware attention/forward; cached == recompute (MHA/GQA/batch). Spec: [`design/L2_kv_cache_SPEC.md`](design/L2_kv_cache_SPEC.md) |
 | `utils/monitors.py` | ✅ | entropy, the KL divergences, IS ratios + ESS, reward/length stats |
 | `rollout/` client seam + `LocalBackend` | ✅ | `Rollout`/`RolloutClient` contract + CPU `LocalBackend`; per-token log-probs feed `monitors`. Spec: [`design/L2_rollout_seam_SPEC.md`](design/L2_rollout_seam_SPEC.md) |
-| DDP (naive → flat-bucket → overlap) | ⬜ | CPU-buildable via the gloo backend |
+| DDP (naive → flat-bucket → overlap) | ⬜ **next** | CPU-buildable via the gloo backend |
 | ZeRO-1 optimizer-state sharding | ⬜ | CPU/gloo |
 | FSDP | ⬜ | CPU/gloo; a full graded A2 deliverable |
 | 100B memory-math one-pager | ⬜ | the verbatim "train a 100B model" answer (params+grads+Adam ≈ 16–20 B/param) |
