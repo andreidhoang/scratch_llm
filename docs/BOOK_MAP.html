@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book → Build → Harness map — read the right chapter at the right stage</title>
+<style>
+  :root{
+    --bg:#faf9f5; --surface:#ffffff; --surface2:#f2f0e9; --surface3:#eceae2;
+    --text:#1a1a18; --text2:#57564f; --text3:#8b897f;
+    --border:rgba(20,20,20,.11); --border2:rgba(20,20,20,.2);
+    --blue:#2a78d6; --orange:#e25c2c; --green:#1a9e6f; --violet:#5346b8; --gold:#9a6b00; --ok:#0ca30c;
+    --orange-bg:rgba(226,92,44,.09); --orange-bd:rgba(226,92,44,.4);
+    --row-hi:rgba(226,92,44,.05); --chip:rgba(20,20,20,.05);
+    --radius:12px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#1b1a18; --surface:#262522; --surface2:#2f2e29; --surface3:#35332d;
+      --text:#ededea; --text2:#b6b4ab; --text3:#8b897f;
+      --border:rgba(255,255,255,.13); --border2:rgba(255,255,255,.24);
+      --blue:#4f97ee; --orange:#f0824f; --green:#34c794; --violet:#9085e9; --gold:#e0b25c; --ok:#5fcf8a;
+      --orange-bg:rgba(240,130,79,.1); --orange-bd:rgba(240,130,79,.42);
+      --row-hi:rgba(240,130,79,.06); --chip:rgba(255,255,255,.07);
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:2.2rem 1.4rem 4rem}
+  .nav{display:flex;gap:8px;margin:0 0 1.4rem;font-size:12.5px}
+  .nav a{text-decoration:none;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:30px;padding:5px 13px}
+  .nav a.here{color:var(--text);border-color:var(--border2);font-weight:600}
+  .kick{font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--text3);margin:0 0 6px;font-weight:600}
+  header h1{font-size:24px;font-weight:600;margin:0 0 .35rem;letter-spacing:-.01em}
+  header .sub{color:var(--text2);font-size:14px;margin:0;max-width:80ch;line-height:1.55}
+  .spines{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:1.3rem 0 .4rem}
+  .spine{background:var(--surface2);border-radius:10px;border-left:3px solid var(--c);padding:11px 14px}
+  .spine .st{font-size:13px;font-weight:600}
+  .spine .sd{font-size:12.5px;color:var(--text2);margin-top:4px;line-height:1.5}
+  .spine code{font-family:var(--mono);font-size:.86em}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:1rem 0 .2rem;font-size:12px;color:var(--text2)}
+  .legend b{color:var(--gold)}
+  .meat-tag{display:inline-block;font-size:10.5px;font-weight:600;color:var(--orange);background:var(--orange-bg);border:1px solid var(--orange-bd);border-radius:5px;padding:0 6px}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin:2rem 0 .7rem}
+  .sechead .n{font-size:12px;color:var(--text3);font-family:var(--mono)}
+  .sechead h2{font-size:18px;font-weight:600;margin:0;letter-spacing:-.01em}
+  .scroll{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:780px}
+  thead th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--text3);padding:10px 12px;border-bottom:1px solid var(--border);background:var(--surface2);position:sticky;top:0}
+  td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.45;color:var(--text2)}
+  tr:last-child td{border-bottom:none}
+  tr.hi td{background:var(--row-hi)}
+  tr.meat td:first-child{box-shadow:inset 3px 0 0 var(--orange)}
+  .ch{font-weight:600;color:var(--text);font-size:13px}
+  .star{color:var(--gold);font-size:11px;letter-spacing:-1px}
+  .secs{font-size:11px;color:var(--text3);margin-top:3px;line-height:1.4}
+  .when{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap;background:var(--chip);color:var(--text)}
+  .when.day{background:rgba(42,120,214,.14);color:var(--blue)}
+  .when.ref{background:var(--chip);color:var(--text3)}
+  td b{color:var(--text);font-weight:600}
+  .cmd{display:inline-block;font-family:var(--mono);font-size:11px;background:var(--chip);border-radius:5px;padding:1px 6px;color:var(--text);margin:1px 2px 1px 0;white-space:nowrap}
+  .idx{display:flex;flex-wrap:wrap;gap:6px}
+  .idxc{flex:1;min-width:150px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 11px}
+  .idxc .d{font-size:11px;color:var(--text3);font-family:var(--mono)}
+  .idxc .b{font-size:12px;font-weight:600;color:var(--text);margin-top:1px}
+  .idxc .r{font-size:11.5px;color:var(--text2);margin-top:2px;line-height:1.4}
+  .idxc.cuda{border-left:3px solid var(--green)} .idxc.rlhf{border-left:3px solid var(--violet)} .idxc.retro{border-left:3px solid var(--gold)}
+  footer{margin-top:2.4rem;padding-top:1.1rem;border-top:1px solid var(--border);color:var(--text3);font-size:12px;line-height:1.6}
+  footer b{color:var(--text2)}
+  @media(max-width:760px){.spines{grid-template-columns:1fr}}
+  @media print{body{background:#fff}.scroll{overflow:visible}table{min-width:0;font-size:11px}tr.hi td{background:transparent}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="nav">
+    <a href="WORKFLOW.html">← Daily workflow</a>
+    <a class="here" href="BOOK_MAP.html">Book → build → harness map</a>
+  </div>
+
+  <header>
+    <p class="kick">Read the right chapter at the right stage</p>
+    <h1>Book → Build → Harness map</h1>
+    <p class="sub">At each stage: read the mapped sections → <b style="color:var(--orange)">reconstruct the kernel / derivation from blank</b> (the meat — yours) → master the load-bearing 20% cold → invoke the listed command. The <b>When</b> column is your trigger; don't read ahead of the build. Sections are from the MEAP TOCs (CUDA v05 · RLHF v04).</p>
+  </header>
+
+  <div class="spines">
+    <div class="spine" style="--c:var(--green)"><div class="st">🟢 CUDA spine — the matmul → cuBLAS climb</div><div class="sd">Ch 4 (naive CUDA matmul → cuBLAS) → Ch 6.6 (the GEMM ladder: coalescing → shared-mem tiling → 1D/2D blocktiling → vectorize) → FA (Ch 8) → quant (Ch 9).</div></div>
+    <div class="spine" style="--c:var(--violet)"><div class="st">🟣 RLHF spine — SFT → RM → RL → DPO</div><div class="sd">Ch 4 (SFT) → Ch 5 (reward modeling) → <b>Ch 6 (RL / GRPO)</b> → Ch 8 (DPO). Over-optimization (Ch 14) = your RQ2 home turf; Regularization/KL (Ch 15) = <code>monitors.py</code>.</div></div>
+  </div>
+  <div class="legend">
+    <span><b>★</b> = load-bearing (master cold)</span>
+    <span><span class="meat-tag">✍ meat</span> = you reconstruct from blank (kernel body / derivation)</span>
+    <span><span class="cmd">/cmd</span> = harness command</span>
+  </div>
+
+  <div class="sechead"><span class="n">1</span><h2>CUDA for Deep Learning → A2 kernels + the sprint</h2></div>
+  <div class="scroll">
+  <table>
+    <thead><tr><th style="width:21%">Chapter · §</th><th style="width:10%">When</th><th style="width:21%">Build (cs336)</th><th style="width:30%">Master cold — load-bearing 20%</th><th style="width:18%">Harness</th></tr></thead>
+    <tbody>
+      <tr><td><span class="ch">1 · When PyTorch isn't enough</span><div class="secs">1.4 memory hierarchy · 1.6 optimization stack</div></td><td><span class="when ref">read-once</span></td><td>— (orientation)</td><td>the memory hierarchy HBM→L2→shared→regs; the optimization stack; roofline intuition</td><td><span class="cmd">/tutor</span></td></tr>
+      <tr><td><span class="ch">2 · Your first CUDA program</span><div class="secs">2.5 grids/blocks/boundary · 2.7 nD→1D</div></td><td><span class="when day">D8</span></td><td>warm-up kernel via <span class="cmd">bench.load_cuda</span></td><td>thread/block/grid indexing + boundary checks <b>from blank</b>; the nD→1D pattern</td><td><span class="cmd">/kernel-day</span> <span class="cmd">/profile</span></td></tr>
+      <tr><td><span class="ch">3 · Naive kernels</span><div class="secs">3.1.2 transpose · 3.2.1 GEMM · 3.2.2 softmax</div></td><td><span class="when day">D8–9</span></td><td><span class="cmd">matmul_naive</span> (given) + reconstruct transpose/softmax</td><td>the naive GEMM kernel + naive sequential softmax from blank</td><td><span class="cmd">/kernel-day</span> <span class="cmd">/tutor</span></td></tr>
+      <tr class="meat"><td><span class="ch">4 · Training in raw CUDA <span class="star">★</span></span><div class="secs">4.2 backprop · 4.5 naive-CUDA matmul · 4.6 cuBLAS + cublasSgemm · 4.5.5 wall-clock vs GPU-time</div></td><td><span class="when day">D8</span></td><td>THE matmul→cuBLAS baseline → <span class="cmd">bench.matmul_roofline</span></td><td>the naive CUDA matmul kernel; the <code>cublasSgemm</code> call (your % target); wall-clock <b>vs</b> GPU-time</td><td><span class="cmd">/kernel-day</span> <span class="cmd">/profile</span> <span class="meat-tag">✍</span></td></tr>
+      <tr><td><span class="ch">5 · Transformer inference in CUDA</span><div class="secs">5.2.1 KV-cache · 5.3.2 GEMV · 5.3.1 memory layout</div></td><td><span class="when day">D13</span></td><td>ties to your <span class="cmd">KVCache</span> (built) + decode path</td><td>why decode is <b>memory-bound</b> (GEMV, AI≈1); the KV-cache decode step</td><td><span class="cmd">/profile</span></td></tr>
+      <tr class="hi meat"><td><span class="ch">6 · Optimizing transformer kernels <span class="star">★★</span> THE climb</span><div class="secs">6.1 profiling/ncu · 6.2 GEMV coalesce→vectorize · 6.3 online softmax→fused · 6.4 LayerNorm · <b>6.6 GEMM: coalescing→thread-remap→shared-mem tiling→1D→2D blocktiling→vectorize</b></div></td><td><span class="when day">D9–13, D15</span></td><td><span class="cmd">matmul_tiled</span> — rungs R1–R6</td><td><b>§6.6 the full GEMM ladder</b> (each rung + <i>why</i>); <b>§6.1 reading an ncu profile</b>; <b>§6.3 online softmax</b> (feeds FA)</td><td><span class="cmd">/kernel-day</span> <span class="cmd">/profile</span> <span class="cmd">/kreview</span> <span class="meat-tag">✍</span></td></tr>
+      <tr><td><span class="ch">7 · Tensor cores</span><div class="secs">7.2 WMMA · 7.3 WGMMA+PTX · 7.5.4 what you still optimize · 7.6 TCGen05</div></td><td><span class="when day">D15</span></td><td>R5 + the tensor-core matmul path</td><td>when to use TCs; WMMA fragment/tiling; manual-tiling → hardware-tiling</td><td><span class="cmd">/kernel-day</span> <span class="cmd">/profile</span></td></tr>
+      <tr class="meat"><td><span class="ch">8 · Flash attention <span class="star">★</span></span><div class="secs">8.1 memory-bound · 8.2 tiling + online softmax · 8.3 fused kernel · 8.4 FA1–4</div></td><td><span class="when day">D16</span></td><td>re-measure FA2-Triton; <b>beat 53% of SDPA</b></td><td>online softmax + tiling (the FA invariant); why attention is memory-bound; the fused-kernel structure</td><td><span class="cmd">/kernel-day</span> <span class="cmd">/profile</span> <span class="cmd">/kreview</span> <span class="meat-tag">✍</span></td></tr>
+      <tr><td><span class="ch">9 · Quantization</span><div class="secs">9.1 dtypes/quant-dequant · 9.2 granularity/calibration · 9.3 AWQ · 9.5 GPTQ/NF4/QAT</div></td><td><span class="when day">D17</span></td><td>FP8/INT4 fake-quant + a fused dequant-GEMM (C2 rung)</td><td>per-channel <b>vs</b> per-tensor scaling; the dequant-GEMM; AWQ; NVFP4 framing (→ DELTA)</td><td><span class="cmd">/kernel-day</span> <span class="cmd">/profile</span></td></tr>
+      <tr><td><span class="ch">10 · Distributed computing</span><div class="secs">10.1 NCCL/ring-vs-tree · 10.2 TP+AllReduce · 10.3 PP via streams · 10.4 multi-node</div></td><td><span class="when ref">A2 finish</span></td><td>DDP ✅ → ZeRO-1/FSDP → TP/PP</td><td>the comms algebra (AllReduce cost); TP = local matmul + AllReduce; ring vs tree</td><td><span class="cmd">/next</span> <span class="cmd">/ship</span></td></tr>
+      <tr><td><span class="ch">11 · CUTLASS</span><div class="secs">code <code>9_cutlass/</code></div></td><td><span class="when day">D18</span></td><td>the DELTA C2.5 / GDN reference</td><td>CuTe / CUTLASS GEMM literacy</td><td><span class="cmd">/kernel-day</span></td></tr>
+      <tr><td><span class="ch">Appendix A</span><div class="secs">setup · dev workflow · profiling · A.9 pybind11 / CUDAExtension</div></td><td><span class="when ref">setup</span></td><td>mirrors <span class="cmd">bench.load_cuda</span></td><td>the kernel dev + profiling workflow; CUDAExtension</td><td>reference</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="sechead"><span class="n">2</span><h2>RLHF book → A5 alignment + reasoningLLM</h2></div>
+  <div class="scroll">
+  <table>
+    <thead><tr><th style="width:21%">Chapter · §</th><th style="width:10%">When</th><th style="width:21%">Build</th><th style="width:30%">Master cold — load-bearing 20%</th><th style="width:18%">Harness</th></tr></thead>
+    <tbody>
+      <tr><td><span class="ch">1–2 · Intro + history</span></td><td><span class="when ref">read-once</span></td><td>—</td><td>orientation</td><td><span class="cmd">/tutor</span></td></tr>
+      <tr><td><span class="ch">3 · Training Overview</span><div class="secs">3.1 problem formulation · 3.2 recipes: InstructGPT, Tülu 3, DeepSeek R1</div></td><td><span class="when ref">pre-W1</span></td><td>—</td><td>the post-training recipe shape; the <b>R1-Zero recipe</b> (your Countdown "aha" target)</td><td><span class="cmd">/master</span></td></tr>
+      <tr class="meat"><td><span class="ch">4 · Instruction Fine-tuning (SFT)</span><div class="secs">4.1 chat templates · 4.3 implementation</div></td><td><span class="when ref">W1 prereq</span></td><td>A5 <span class="cmd">algos/</span> SFT</td><td><b>SFT masked cross-entropy + the <code>response_mask</code></b> (everything downstream depends on it)</td><td><span class="cmd">/next</span> <span class="cmd">/audit-rl</span> <span class="meat-tag">✍</span></td></tr>
+      <tr><td><span class="ch">5 · Reward Modeling</span><div class="secs">5.1 Bradley-Terry · 5.5 ORM · 5.6 PRM · 5.8 generative RM</div></td><td><span class="when day">D6</span></td><td><span class="cmd">rewards/</span> (r1-zero grader, BT loss)</td><td>the Bradley-Terry RM loss; ORM vs PRM; the verifiable-reward grader</td><td><span class="cmd">/master</span></td></tr>
+      <tr class="hi meat"><td><span class="ch">6 · Reinforcement Learning <span class="star">★★★</span> R5 — the room the offer dies in</span><div class="secs">6.1 derive PG · VPG · REINFORCE · RLOO · PPO · GRPO · GSPO · CISPO · 6.2 loss-agg · async · TIS · 6.3 GAE</div></td><td><span class="when day">W1 · D1–4</span></td><td>reasoningLLM <span class="cmd">credit_assigners</span> + <span class="cmd">off_policy</span> + A5 <span class="cmd">algos/grpo</span></td><td><b>from blank:</b> ∇J=E[∇logπ·R]; REINFORCE→<b>GAE</b>→<b>PPO-clip</b>→<b>GRPO/k3-KL</b>; RLOO; TIS</td><td><span class="cmd">/master</span> <span class="cmd">/audit-rl</span> <span class="meat-tag">✍</span></td></tr>
+      <tr><td><span class="ch">7 · Reasoning & Inference-Time Scaling</span><div class="secs">7.1 RLVR · 7.2 reasoning methods</div></td><td><span class="when day">D19</span></td><td>RLVR notes → <span class="cmd">reward.py</span></td><td>RLVR; pass@k; the reasoning-model recipe</td><td><span class="cmd">/master</span></td></tr>
+      <tr class="meat"><td><span class="ch">8 · Direct Alignment / DPO <span class="star">★</span></span><div class="secs">8.1 how + derivation · 8.2 numerical · 8.3 impl · 8.5 online vs offline</div></td><td><span class="when day">W1 · D5</span></td><td>A5 <span class="cmd">algos/dpo</span></td><td><b>derive DPO from the RLHF-KL identity</b>; the DPO loss; numerical stability</td><td><span class="cmd">/master</span> <span class="meat-tag">✍</span></td></tr>
+      <tr><td><span class="ch">9 · Rejection Sampling</span><div class="secs">9.1 generate→score→FT · 9.3 best-of-N</div></td><td><span class="when ref">A5</span></td><td>Expert Iteration (STaR)</td><td>the EI loop; best-of-N</td><td><span class="cmd">/next</span></td></tr>
+      <tr><td><span class="ch">13 · Tool Use & Function Calling</span><div class="secs">13.1 interweave · 13.2 multi-step · 13.3 MCP</div></td><td><span class="when ref">fwd edge</span></td><td>agentic RL on <span class="cmd">envs/protocol</span></td><td>multi-turn / agentic RL (the 2026 frontier)</td><td><span class="cmd">/master</span></td></tr>
+      <tr class="hi"><td><span class="ch">14 · Over-Optimization <span class="star">★</span> YOUR HOME TURF — RQ2</span><div class="secs">14.1 proxy/over-refusal · 14.2 quantitative · 14.3 misalignment</div></td><td><span class="when day">D11</span></td><td>RQ2 exploitability work + reward-hack detectors</td><td>over-opt → your <b>L0–L4 exploitability curve</b>; the reward-hacking taxonomy</td><td><span class="cmd">/master</span></td></tr>
+      <tr><td><span class="ch">15 · Regularization</span><div class="secs">15.1 KL in RL + impl · 15.2 SFT memorizes, RL generalizes</div></td><td><span class="when day">D6</span></td><td><span class="cmd">monitors.py</span> (the KLs, HALT@0.10)</td><td>the <b>k3 KL estimator</b>; why the KL penalty; SFT-vs-RL generalization</td><td><span class="cmd">/audit-rl</span></td></tr>
+      <tr><td><span class="ch">16 · Evaluation</span><div class="secs">16.1 prompting/CoT · 16.4 contamination · 16.5 tooling</div></td><td><span class="when ref">eval</span></td><td>eval notes</td><td>pass@k; contamination; eval calibration</td><td><span class="cmd">/master</span></td></tr>
+      <tr><td><span class="ch">10 · 11 · 12 · 17</span><div class="secs">preferences · preference data · synthetic/CAI · model character</div></td><td><span class="when ref">breadth</span></td><td>—</td><td>the concepts for the interview answer (distillation, CAI, persona)</td><td><span class="cmd">/tutor</span></td></tr>
+      <tr><td><span class="ch">Appendix A · C</span><div class="secs">definitions · C.1 compute · C.4 identifying bad training jobs</div></td><td><span class="when ref">reference</span></td><td>—</td><td>"is this run interpretable / a bad job?"</td><td><span class="cmd">/audit-rl</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="sechead"><span class="n">3</span><h2>The 20-day sprint index</h2></div>
+  <div class="idx">
+    <div class="idxc rlhf"><div class="d">D1 Mon</div><div class="b">RLHF 6.1 — REINFORCE / PG</div><div class="r">∇J, masked_mean + naive PG loss → PG subset green</div></div>
+    <div class="idxc rlhf"><div class="d">D2</div><div class="b">RLHF 6.3.1 — GAE</div><div class="r">derive GAE(λ): δ_t, λ=0→TD / λ=1→MC</div></div>
+    <div class="idxc rlhf"><div class="d">D3</div><div class="b">RLHF 6.1.5 — PPO clip</div><div class="r">clipped surrogate → test_grpo green (CP#1 done)</div></div>
+    <div class="idxc rlhf"><div class="d">D4</div><div class="b">RLHF 6.1.6 — GRPO + k3 KL</div><div class="r">GRPO objective + k3 KL</div></div>
+    <div class="idxc rlhf"><div class="d">D5</div><div class="b">RLHF 8 — DPO</div><div class="r">derive DPO from the KL identity → test_dpo green</div></div>
+    <div class="idxc rlhf"><div class="d">D6</div><div class="b">RLHF 5 + 15 — RM + KL</div><div class="r">Bradley-Terry loss; tie KL to monitors.py</div></div>
+    <div class="idxc retro"><div class="d">D7</div><div class="b">consolidation</div><div class="r">cold re-test REINFORCE→GAE→PPO→GRPO→DPO</div></div>
+    <div class="idxc cuda"><div class="d">D8 Mon</div><div class="b">CUDA 2–4 — matmul baseline</div><div class="r">run matmul_naive; predict % of cuBLAS</div></div>
+    <div class="idxc cuda"><div class="d">D9</div><div class="b">CUDA 6.6 — GEMM rung 1</div><div class="r">matmul_tiled L2-reuse ordering</div></div>
+    <div class="idxc cuda"><div class="d">D10</div><div class="b">CUDA 6.6 — shared-mem tiling</div><div class="r">autotune + shared-mem; ≥2× naive %</div></div>
+    <div class="idxc rlhf"><div class="d">D11</div><div class="b">RLHF 14 — over-opt / RQ2</div><div class="r">RQ2 blog increment</div></div>
+    <div class="idxc cuda"><div class="d">D12</div><div class="b">CUDA 6.6 — block-tiling</div><div class="r">1D/2D blocktiling; remove bank conflicts</div></div>
+    <div class="idxc cuda"><div class="d">D13</div><div class="b">CUDA 5 + 6 — inference / KV</div><div class="r">profile KV-cache decode → memory-bound</div></div>
+    <div class="idxc retro"><div class="d">D14</div><div class="b">consolidation</div><div class="r">cold re-test the matmul ladder</div></div>
+    <div class="idxc cuda"><div class="d">D15 Mon</div><div class="b">CUDA 7 — tensor cores</div><div class="r">R5 vectorized + TC path; ≥80% of cuBLAS</div></div>
+    <div class="idxc cuda"><div class="d">D16</div><div class="b">CUDA 8 — flash attention</div><div class="r">beat 53% of SDPA</div></div>
+    <div class="idxc cuda"><div class="d">D17</div><div class="b">CUDA 9 — quantization</div><div class="r">fused dequant-GEMM + perplexity vs bf16</div></div>
+    <div class="idxc cuda"><div class="d">D18</div><div class="b">CUDA 11 — CUTLASS + capstone</div><div class="r">GDN-decode + NVFP4-on-state → open the public artifact</div></div>
+    <div class="idxc rlhf"><div class="d">D19</div><div class="b">RLHF 7 — RLVR + eval</div><div class="r">pass@k estimator; RLVR notes</div></div>
+    <div class="idxc retro"><div class="d">D20</div><div class="b">retro</div><div class="r">cold re-test EVERYTHING + 1-page "what I can do cold"</div></div>
+  </div>
+
+  <footer>
+    <b>One rule across both books:</b> read the chapter, then close it and reconstruct from blank — the kernel body (CUDA) or the derivation (RLHF). That's the rep, the interview bar, and the only thing that builds the skill. The profile / teach-back is the DoD, not a green test. &nbsp;·&nbsp; Companion to <b>WORKFLOW.html</b> · source: <b>BOOK_TO_BUILD_HARNESS_MAP.md</b> · sections from the MEAP TOCs (CUDA v05 · RLHF v04).
+  </footer>
+</div>
+</body>
+</html>
