@@ -29,4 +29,11 @@ if command -v pytest >/dev/null 2>&1; then
   [ "$rc" -eq 0 ] || [ "$rc" -eq 5 ] || fail "pytest failed (exit $rc)"
 fi
 
+# FOP-1 doc-discipline — WARN-ONLY (never blocks, never changes exit status).
+# If the staged set adds a new .md but stages no code, nudge: ship a node, don't pile docs.
+staged="$(git diff --cached --name-only --diff-filter=A 2>/dev/null || true)"
+if echo "$staged" | grep -Eq '\.md$' && ! echo "$staged" | grep -Eq '\.(py|cu|triton)$'; then
+  echo "⚠ FOP-1: staged a new .md with no staged code — close a node, don't write the next doc (CLAUDE.md FOP)." >&2
+fi
+
 exit 0

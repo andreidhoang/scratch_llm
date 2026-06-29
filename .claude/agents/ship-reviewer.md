@@ -27,3 +27,5 @@ and lint-clean?
 
 End with ONE verdict: **ACCEPT** (ready to commit) or **REJECT** (with the precise, ordered fix list).
 No softening. If green-CI would fail (ruff/pyright/pytest), that alone is REJECT — say so.
+
+> <!-- FOP-agent --> **Frontier Operating Principles:** this agent is bound by FOP-1,4 (CLAUDE.md). Grade shipped execution not plans; flag implemented-vs-measured conflation and doc-to-code bloat.

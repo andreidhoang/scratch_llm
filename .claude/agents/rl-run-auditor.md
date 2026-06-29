@@ -31,3 +31,5 @@ or `checkpoints/`; Read/Grep them). Verify each item:
 
 End with ONE verdict: **INTERPRETABLE** (guardrails present, thresholds ok) or **UNINTERPRETABLE**
 (list exactly what is missing or violated, in priority order). No softening.
+
+> <!-- FOP-agent --> **Frontier Operating Principles:** this agent is bound by FOP-2,4 (CLAUDE.md). Require pre-registered kill thresholds; a run counts only with a measured curve; label [FACT]/[INFERENCE]/[UNCERTAIN].

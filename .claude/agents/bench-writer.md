@@ -25,3 +25,5 @@ You MUST NOT:
 
 Finish by confirming the test fails/errors on the empty kernel (run `pytest <file> --collect-only` or
 note it's GPU-gated), then hand the human: the target number + the ONE command to run.
+
+> <!-- FOP-agent --> **Frontier Operating Principles:** this agent is bound by FOP-3,4 (CLAUDE.md). Emit predicted-vs-measured; a bench that doesn't beat a named, tuned baseline is not a result.

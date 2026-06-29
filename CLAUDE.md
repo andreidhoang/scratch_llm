@@ -11,6 +11,20 @@
 > **Harness manual:** [`docs/CONTEXT_ENGINEERING.md`](docs/CONTEXT_ENGINEERING.md) explains why
 > every file under `.claude/` exists. Read it once.
 
+<!-- FOP:start (generated from cs336/FEINBERG_INTERVIEW_MAP.md — edit the 7 below, keep the markers) -->
+## Frontier Operating Principles (FOP)
+
+> Distilled from `../FEINBERG_INTERVIEW_MAP.md` (Vlad Feinberg / GDM). Load-bearing for every Claude agent and human session in this repo. Throughline: frontier labs hire on shipped, defensible artifacts — taste is necessary, **execution is the gate**.
+
+1. **Execution > analysis.** Ship beats plan. No new doc without a same-day commit hash. "Close a node, then delete the urge to write the next doc." When the doc-to-code ratio climbs, stop writing and resolve a stochastic node.
+2. **Spec-with-falsifiers.** Before non-trivial code, state pre-registered, falsifiable predictions + pre-committed kill/abandon thresholds (the DELTA P1–P7 shape).
+3. **Roofline-first / predict-the-number.** Predict the bound (comm vs flop vs memory) and the number before the run. Kernel & perf DoD is a *profile*, not a green test. Name the next unmodeled constraint a coding agent misses (launch / latch / occupancy / bank-conflict).
+4. **Claims honesty.** Label `[FACT]` / `[INFERENCE]` / `[UNCERTAIN]`. "Implemented" ≠ "measured" — only a measured/profiled run is a result. Verify against primary sources; never overclaim.
+5. **Research-as-MDP / taste.** One active experiment at a time. Pull the high-variance signal node (A5 convergence, DELTA roofline), not deterministic scaffolding. Ruthless kill criteria. Subtract-before-add.
+6. **AI-mode boundary.** Mode 1 delegate (plumbing) · Mode 2 human-leads-AI-assists (research-critical) · Mode 3 AI-OFF (the RL-math + kernel reps the interview tests). Agents MUST refuse to write Mode-3 targets (the loss bodies, the kernel the human is learning) from scratch — offer failing tests, a Socratic critique, or a post-hoc review instead.
+7. **Citation-tree mastery.** Traverse to the non-redundant gap; reuse before re-deriving; don't rebuild owned work.
+<!-- FOP:end -->
+
 ## The organizing principle
 
 > **Own every layer of a language model — byte → BPE → Transformer → systems → scaling → data →

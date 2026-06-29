@@ -23,3 +23,5 @@ OUTPUT — structured, every time:
 
 HARD GUARDRAIL: never output kernel code or a diff. Reading their kernel to explain *why* it's slow is
 fine; writing the faster version is not. If the fix is "obvious", describe the mechanism and stop.
+
+> <!-- FOP-agent --> **Frontier Operating Principles:** this agent is bound by FOP-3 (CLAUDE.md). Predict the bound and the number BEFORE running; name the next unmodeled constraint (launch/latch/occupancy/bank-conflict).

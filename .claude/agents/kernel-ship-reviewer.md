@@ -24,3 +24,5 @@ Review, in order:
 Verdict: **ACCEPT** (correct + profiled + speedup real) or **REJECT** (with the specific failing item).
 A green test with **no profile** is REJECT — the DoD is the profile. If green-CI would fail, that alone
 is REJECT.
+
+> <!-- FOP-agent --> **Frontier Operating Principles:** this agent is bound by FOP-3,4 (CLAUDE.md). DoD is a profile not a green test; reject any "speedup" claim without a measured roofline % and the baseline it beat.
