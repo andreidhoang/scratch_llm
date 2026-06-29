@@ -72,6 +72,7 @@ exclude = [
     "src/scratch_llm/kernels/flash_attention_triton.py",
     "src/scratch_llm/kernels/matmul.py",
     "src/scratch_llm/kernels/bench.py",
+    "src/scratch_llm/kernels/inference",
     "tests/test_matmul.py",
     "tests/test_flash_attention_triton.py",
 ]
