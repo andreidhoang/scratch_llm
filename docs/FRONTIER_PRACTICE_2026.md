@@ -23,6 +23,17 @@
 > first-principles rule — keep only what a 2026 frontier lab screens for, cut the GPU-poor / applied
 > noise (LoRA-as-default, QLoRA/NF4, and fine-tune-vs-RAG were cut). Same caveat: cited, not fact-checked.
 
+> **➕ 2026-production-performance refresh (2026-06-29).** A six-stream deep-research pass (inference
+> serving · low-precision/quant · MoE & parallelism · kernels & roofline · RL-systems) refreshed the
+> performance/inference numbers and organized them under one storyline — **"the decode memory-wall,
+> owned end-to-end."** That synthesis (with dated primaries: FA3 740 TFLOP/s; DeepSeek-V3 FP8 + NVFP4
+> block-scaling; EP320 decode; DistServe/Mooncake P/D; EAGLE-3 + the batch-erosion caveat; the
+> train↔infer logprob mismatch + truncated-IS) lives in **[`PERFORMANCE_TRACK.md`](PERFORMANCE_TRACK.md)**,
+> with a no-GPU-background on-ramp in **[`GPU_FROM_ZERO.md`](GPU_FROM_ZERO.md)**. The per-pillar items
+> below remain the source of truth for *what to build per assignment*; the track doc is the *why/order*
+> for the perf spine. Honesty constants: dense H100 ridge ~295 (not sparse ~590) · FP4 = 2× FP8 ·
+> DeepSeek-V3 $5.576M = final-run rent, not total R&D.
+
 ## How to use the three tiers
 
 - **🟢 Modern default** — a small, high-value upgrade a 2026 from-scratch build *should* adopt as its

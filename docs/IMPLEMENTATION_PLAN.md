@@ -152,6 +152,7 @@ An assignment is "mastered to production" when:
 - Per-assignment how-to (the load-bearing 20%): `docs/assignment_guides/A{1..5}_*_BUILD_GUIDE.md` (start at `INDEX.md`).
 - Lecture → assignment → source map (which slides to read first, in what order): `docs/LECTURE_MAP.md`.
 - Frontier-practice layer (2026 modern defaults · build labs · interview-awareness, per pillar, fact-checked): `docs/FRONTIER_PRACTICE_2026.md`.
+- **Performance & inference spine** (the decode-memory-wall storyline across A2/A5/DELTA · 2026 frontier findings · EV-ranked perf build list): `docs/PERFORMANCE_TRACK.md`; the **GPU-from-zero curriculum** (rung 0→9, no GPU background assumed): `docs/GPU_FROM_ZERO.md`.
 - Build status (single source of truth): `docs/STATUS.md`.
 - Constitution + disciplines + green-CI: `CLAUDE.md`.
 - Workspace map + interview-readiness: `../README.md`.

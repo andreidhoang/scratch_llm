@@ -16,6 +16,8 @@ pytest.importorskip("triton")
 if not torch.cuda.is_available():  # pragma: no cover - environment guard
     pytest.skip("CUDA required for the matmul kernels", allow_module_level=True)
 
+pytest.importorskip("scratch_llm.kernels.matmul", reason="matmul kernel not built (Mode-3)")
+
 from scratch_llm.kernels.matmul import matmul_naive, matmul_tiled, reference  # noqa: E402
 
 pytestmark = pytest.mark.gpu

@@ -8,6 +8,31 @@ activation/selective checkpointing, mixed-precision numerics, KV-cache, monitors
 distributed half (DDP ✅ → ZeRO-1 → FSDP + the 100B memory one-pager) is in progress, all
 CPU/gloo-buildable. A3/A4/A5 are clean stubs. 106 tests green, ruff clean, pyright 0 errors.**
 
+> ✅ **Green-CI restored (2026-06-29).** The checkout had lost several files (no git to restore from):
+> rebuilt `rollout/` (types/local/__init__ per `design/L2_rollout_seam_SPEC.md`), `envs/protocol.py`
+> + the `algos/rewards/envs/scaling/data` package stubs, and `importorskip`'d the missing Mode-3
+> `kernels/matmul.py` in its gpu-marked test. The real "blocked every Bash" deadlock was that **deps
+> (torch/regex) weren't on the system Python the gate ran** — the uv venv (`.venv`, py3.11) has them;
+> the gate now (a) fires only on `git commit` (its documented intent) and (b) uses the venv tools.
+> **Suite green: 106 passed · 1 skipped · 33 deselected; ruff + pyright clean.** Box: **NVIDIA RTX PRO
+> 4000 Blackwell, 24 GB, CUDA available** — real roofline/kernel runs are possible here, not just CPU.
+
+> 🆕 **Performance & inference track (added 2026-06-29).** A six-stream deep-research pass (serving ·
+> quant · MoE/parallelism · kernels/roofline · RL-systems · internal-doc audit) was synthesized into the
+> **decode-memory-wall spine** + a **GPU-from-zero curriculum** for someone with no GPU background:
+> [`PERFORMANCE_TRACK.md`](PERFORMANCE_TRACK.md) (the spine + 2026 findings + EV-ranked build list),
+> [`GPU_FROM_ZERO.md`](GPU_FROM_ZERO.md) (rung 0→9, forced-mastery, AI-explains/human-implements), and
+> the first specs `design/PERF_roofline_harness_SPEC.md` + `design/PERF_decode_roofline_SPEC.md`. The
+> highest-value first result: the KV-cache is correctness-tested **but never *timed*** — time it.
+>
+> **Apparatus built (2026-06-29):** `src/scratch_llm/bench/` — `gpu_specs` (sourced dense roofline
+> table + `measure_hbm_bandwidth`), `roofline` (the engine + op-counters; the decode-step counter
+> computes to **AI = 1.00 FLOP/byte, ~297× below the H100 ridge** — the thesis, asserted in a test),
+> `harness` (CUDA-event timing + p-quantiles), `ledger` (predict-vs-measure JSONL + regression guard).
+> 9 CPU tests green (**115 total**, ruff/pyright clean). First live numbers on the RTX PRO 4000
+> Blackwell: ~0.55 TB/s HBM, 4096³ bf16 matmul ~73 TFLOP/s. The ledger awaits your first
+> *predict-then-measure* cycle — the prediction is your Mode-3 rep.
+
 ## End-to-end map — the whole stack at a glance
 
 Two orderings, both true: **BUILD** is numeric (each layer rests on the last); **SHIP** is EV-ranked

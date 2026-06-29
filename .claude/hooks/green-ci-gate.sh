@@ -5,9 +5,24 @@
 # Graceful on an empty clean room: no git → skip; no tests → pass (pytest exit 5).
 set -uo pipefail
 
+# Scope (the documented intent): gate ONLY an actual `git commit`. PreToolUse passes the proposed
+# tool call as JSON on stdin; the settings.json `if: Bash(git commit*)` matcher is not honored by
+# this harness (the gate was firing on every Bash), so enforce the scope here. Any non-commit Bash
+# is allowed straight through — only a red *commit* is blocked.
+payload="$(cat 2>/dev/null || true)"
+case "$payload" in
+  *"git commit"*) : ;;   # a commit → run the green gate below
+  *) exit 0 ;;           # any other Bash → allow untouched
+esac
+
 root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 [ -z "$root" ] && exit 0          # not a git repo yet → nothing to gate
 cd "$root"
+
+# Prefer the project venv's tools — bare ruff/pyright/pytest otherwise resolve to a system Python
+# without the deps (torch/regex), which would spuriously fail a valid commit. The venv is the
+# source of truth (it is what `uv pip install -e ".[dev]"` populates).
+[ -x "$root/.venv/bin/python" ] && PATH="$root/.venv/bin:$PATH"
 
 fail() {
   echo "green-ci-gate: BLOCKED — $1." >&2

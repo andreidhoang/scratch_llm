@@ -137,6 +137,10 @@ pytest -m "not gpu"                  # the CPU gate (mirrors CI); src/ layout vi
 |---|---|
 | Workspace map + CS336→interview-readiness | `../README.md` |
 | **The build plan** — A1→A5 spine, load-bearing 20%, discipline gates, build order | `docs/IMPLEMENTATION_PLAN.md` |
+| **Performance & inference track** — the decode-memory-wall spine · 2026 frontier findings · EV-ranked perf build list | `docs/PERFORMANCE_TRACK.md` |
+| **GPU & kernels from zero** — laddered rung 0→9 curriculum (no GPU background assumed; AI explains/visualizes, you derive/implement) | `docs/GPU_FROM_ZERO.md` |
+| **Daily operating rhythm** — the frontier-engineer day on this harness (`/standup` → deep-work → `/eod`); one active node, predict-before-run, measured>implemented | `docs/OPERATING_RHYTHM.md` |
+| **Measurement ledger** — durable predicted-vs-measured record (what git can't track; the "DoD is a profile" gate) | `bench/RESULTS.md` |
 | **Vision & plan (Vietnamese)** — tổng hợp tầm nhìn + specs + kế hoạch (synthesis, not source-of-truth) | `docs/VISION_VI.md` |
 | **Per-assignment build guides** — every deliverable tagged + mapped to `src/scratch_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |
@@ -151,6 +155,14 @@ pytest -m "not gpu"                  # the CPU gate (mirrors CI); src/ layout vi
 - **Own every line.** This is your from-scratch implementation. The official `../lectures/assignment*`
   scaffolds are the **spec + test oracle** — implement against their `tests/adapters.py`; do not copy
   solutions.
+- **Reference-as-oracle (re-implement to truly own).** Treat *all existing code* — this repo's
+  `src/scratch_llm/` and any reference repo — as **oracle, not your work**: the goal is mastery you can
+  rebuild blind. The teach-back gate decides what to re-own; don't rebuild what you can already defend
+  cold (FOP-7). To genuinely re-own a module, **blank-slate it one at a time**: git/tag holds the
+  reference → reduce the body to its signature + `raise NotImplementedError` → confirm the tests go
+  **red** (proves they have teeth) → re-derive from first principles → green **+ measured**. Never blank
+  the whole repo; green-CI still gates every commit. Curriculum: `docs/GPU_FROM_ZERO.md` (rung protocol)
+  + `docs/PERFORMANCE_TRACK.md` (what/why). **Measured > implemented — log numbers to `bench/RESULTS.md`.**
 - Every module's docstring states its intent, the key invariant it must satisfy, and (where relevant)
   the interview question it answers — the engineering rationale lives in the code, not only the guides.
 - Land changes **test-first** where practical: write the invariant (loss-at-init, decode round-trip,
