@@ -39,10 +39,18 @@ the same six steps — and the division of labor is fixed by the Mode boundary:*
 The *result* is a measured profile that lands near a roofline you predicted **before** running (FOP-3).
 "Implemented" ≠ "measured" (FOP-4) — only a profiled run is a result.
 
-**Resourcing.** Rungs 0–1, 5 (oracle), 7 (CPU codec) are pure CPU/mental-model. The kernels (rungs
-2–6) need a GPU — **rent one on vast.ai** (`vastai` skill), batch the work into one session, never
-silently drop a GPU step (`CLAUDE.md` "Follow the plan"). Correctness on CPU first; rent only to
-benchmark.
+**Resourcing — we develop on a standing GPU** (RTX PRO 4000 Blackwell, sm120, 25 GB). Rungs 0–1, 5
+(oracle), 7 (CPU codec) need no GPU at all (mental-model / pure-torch); the kernel rungs (2–6) run on
+the box **now** — write, run, **measure + profile here** (`CLAUDE.md` "Develop on the GPU"). Get the
+oracle green first (the floor), then the roofline (the result). Rails: **25 GB cap** + **"% of *this*
+Blackwell," not datacenter**. Rent a bigger / multi-GPU box (`vastai`) only for what this card can't do
+(full-scale throughput, multi-GPU NCCL); never silently drop a step. **Empirical (sm120): Triton ✅;
+the CUDA `rmsnorm.cu` NaNs** — see ADR-0011 + `bench/RESULTS.md`.
+
+**Framework policy ([ADR-0011](adr/ADR-0011-kernel-framework-policy.md)).** Write every ladder rung +
+the DELTA kernel in **Triton** (primary); do R4's GEMM in **CUDA C++** too (the compute-bound feel) and
+treat CUDA/CUTLASS/CuTe as the read-and-contribute tier for FlashInfer/FA. The rule for any new kernel:
+**memory-bound → Triton; compute-bound chasing tensor-core peak → CUDA/CUTLASS.** CuTeDSL/Pallas = know-it.
 
 ---
 

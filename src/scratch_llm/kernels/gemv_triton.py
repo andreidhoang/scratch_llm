@@ -26,9 +26,9 @@ def _gemv_triton_kernel(
     BLOCK_K: tl.constexpr,
 ):
     """Triton kernel for y = A @ x.
-    
+
     Grid: (M,) - each program (program_id 0) is responsible for exactly one output row.
-    
+
     Your implementation contract:
     1. Identify the output row using tl.program_id(0).
     2. Stride/loop over K columns in chunks of BLOCK_K.
@@ -49,15 +49,15 @@ def _gemv_triton_kernel(
     for k_offset in range(0, K, BLOCK_K):
         # Calculate current column indices
         col_idx = k_offset + cols
-        
+
         # Load weight elements from Row row_idx
         a_ptrs = a_ptr + row_idx * stride_am + col_idx * stride_ak
         a = tl.load(a_ptrs, mask=col_idx < K, other=0.0)
-        
+
         # Load activation vector elements
         x_ptrs = x_ptr + col_idx * stride_x
         x = tl.load(x_ptrs, mask=col_idx < K, other=0.0)
-        
+
         # Multiply element-wise and sum this block's results
         acc += tl.sum(a * x, axis=0)
     # 5. Write the final accumulated scalar to the output vector
@@ -65,10 +65,9 @@ def _gemv_triton_kernel(
     tl.store(y_ptr_out, acc)
 
 
-
 def gemv_triton(A: Tensor, x: Tensor) -> Tensor:
     """Launcher for the Triton GEMV kernel.
-    
+
     A: (M, K) matrix
     x: (K,) vector
     y: (M,) output vector
@@ -118,10 +117,10 @@ def gemv_triton_roofline(m: int = 4096, k: int = 4096, dtype: str = "bfloat16"):
     td = getattr(torch, dtype)
     A = torch.randn(m, k, device="cuda", dtype=td)
     x = torch.randn(k, device="cuda", dtype=td)
-    
+
     flops = 2.0 * m * k
     rw_bytes = (m * k + k + m) * A.element_size()
-    
+
     return roofline(
         fn=lambda: gemv_triton(A, x),
         flops=flops,

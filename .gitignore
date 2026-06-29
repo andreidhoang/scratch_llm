@@ -41,3 +41,7 @@ wandb/
 
 # Course reference PDFs — read-only material, not source
 docs/*.pdf
+
+# Local machine state — not source
+.venv-backups/
+.claude/settings.local.json

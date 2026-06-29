@@ -68,7 +68,7 @@ builds on the last); ship-order is EV-ranked.** With A1 ✅ done, the next artif
 then DELTA on that base — the one canonical sequence is **`../STRATEGY.md` §8** (it wins over any other
 doc's ordering). "Production" means: green CI,
 tests as executable spec, design docs and ADRs for non-obvious decisions, reproducible runs.
-GPU-bound steps are **resourced** (rented), never silently dropped (see "Follow the plan").
+GPU steps are **developed on the standing GPU** (rented out only for what this card can't do), never silently dropped (see "Develop on the GPU").
 
 ## The five assignments → layer → source files
 
@@ -103,15 +103,18 @@ ship + the Step-0 gate. See [`docs/STATUS.md`](docs/STATUS.md) and `../STRATEGY.
    stats, and **length stats** (catches verbosity reward-hacking).
 5. **Predict before you run.** Write the falsifiable number first; it is the debugging anchor.
 
-## Follow the plan — never skip a step
+## Develop on the GPU — never skip a step
 
-Build the plan's steps **in order and in full**. A step that needs hardware is **not** a step to
-skip — it is a step to *resource*. If a step requires a GPU (Triton/FA2 kernels, DDP/ZeRO/FSDP,
-real serving, RL runs), **rent one on vast.ai** (use the `vastai` skill) and complete it.
-"GPU-deferred" means *scheduled on rented hardware*, never *abandoned*. Order CPU-buildable steps
-first when cheaper, but CPU-vs-GPU is never an excuse to drop scope. The only legitimate non-builds
-are items the guides tag **SKIP** (e.g. the perplexity/8B/Paloma leaderboards — capped, GPU-dollar
-sinks with no mastery carry).
+**We develop on a standing GPU** (RTX PRO 4000 Blackwell, **sm120**, 25 GB — check `nvidia-smi` /
+`vast-capabilities`). No build step is deferred for lack of hardware: write the kernel, run it, and
+**measure + profile it here, now**. Build the plan's steps **in order and in full**. "CPU-buildable"
+means a step *doesn't require* a GPU (pure-torch oracles, gloo distributed-correctness, CPU fake-quant)
+— build those on the GPU box too; it is never an excuse to drop scope. Two honesty rails: the **25 GB
+cap** (size models to fit) and **report "% of *this* Blackwell," never imply datacenter numbers**. A
+bigger / multi-GPU box is **rented (`vastai` skill) only for what this card can't do** — full-scale
+throughput vs H100/B200, real multi-GPU NCCL — never abandoned. The only legitimate non-builds are
+items the guides tag **SKIP** (e.g. the perplexity/8B/Paloma leaderboards — capped GPU-dollar sinks
+with no mastery carry).
 
 ## Green-CI rule (enforced, not requested)
 
@@ -128,8 +131,12 @@ uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"          # CPU core: numpy/pydantic/pyyaml/regex
 ruff check src tests && ruff format --check src tests
 pyright
-pytest -m "not gpu"                  # the CPU gate (mirrors CI); src/ layout via pytest pythonpath
+pytest -m "not gpu"                  # the HW-agnostic gate (mirrors CI + the commit hook); stays
+pytest -m gpu                        # the kernels/measurements — run on THIS GPU box (sm120 Blackwell)
 ```
+
+The `-m "not gpu"` gate is the **commit/CI floor** and stays HW-agnostic; the `-m gpu` suite (Triton/CUDA
+kernels, KV-cache decode, real-precision) is exercised on the standing GPU as you develop — not deferred.
 
 ## Where things live (read on-demand, not auto-loaded)
 

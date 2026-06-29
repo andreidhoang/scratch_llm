@@ -64,10 +64,16 @@ BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ 
                                                  paged-KV · speculative · ring-CP · TP toy · FP8 sim
 ```
 
-**Resourcing:** everything above is **CPU-built, zero GPU spend**. GPU dollars are batched for ONE
-rented session at the end of A2 — the FA2 roofline re-measure + DDP/ZeRO/FSDP throughput/Nsight
-numbers — then again for the A5 "aha" burst (~$30–100). CPU correctness first; rent only to benchmark
-([`../STRATEGY.md`](../STRATEGY.md), the `vastai` skill, [ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md)).
+**Resourcing — we develop on a standing GPU now.** Hardware (2026-06-29): **NVIDIA RTX PRO 4000
+Blackwell, sm120, 25 GB**, torch 2.12.1+cu130, triton 3.7.1. Measured peaks: **72 TFLOP/s bf16 ·
+0.55 TB/s HBM · ridge ≈ 130 FLOP/byte** (in `bench.py _PEAKS`). **Empirically: Triton ✅ (FA2-fwd +
+gemv pass on sm120); the CUDA-C++ `rmsnorm.cu` regresses to NaN** (2nd-tier, ADR-0011; superseded by
+the R3 Triton norm). No build step is deferred — **write the kernel, measure + profile it here, now.**
+"CPU-buildable" = *doesn't require* a GPU (oracles, gloo-correctness, fake-quant); build it on the box
+too. Rails: **25 GB cap** (size models) and **report "% of *this* Blackwell," not datacenter numbers**.
+A bigger / multi-GPU box is rented (`vastai` skill) only for what this card can't do — full-scale
+throughput vs H100/B200, real multi-GPU NCCL ([ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md) is
+an open re-check on sm120). The `pytest -m "not gpu"` gate stays as the HW-agnostic commit/CI floor.
 
 **Next ship — EV-ranked, not numeric (per [`../STRATEGY.md`](../STRATEGY.md) §8): the A5 RL "aha".**
 `algos/` SFT masked-CE → GRPO/Dr.GRPO wired to `utils/monitors.py` → reproduce the R1-Zero "aha" on
@@ -153,4 +159,4 @@ and base share infrastructure, they do not compete.
 
 ADR-0001 tokenizer of record · ADR-0002 GQA in the substrate · ADR-0003 sampler parity · ADR-0004
 dense default / MoE opt-in · ADR-0006 rollout log-prob convention · ADR-0007 MoE FFN (opt-in A1
-extension) · ADR-0008 SGLang is Hopper-only on Ada.
+extension) · ADR-0008 SGLang is Hopper-only on Ada · ADR-0011 kernel-framework policy (Triton-primary, CUDA/CUTLASS second-tier).

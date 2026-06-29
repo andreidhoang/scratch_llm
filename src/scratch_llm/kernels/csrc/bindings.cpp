@@ -14,4 +14,5 @@
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("rmsnorm_cuda", &rmsnorm_cuda, "Fused RMSNorm over the last dim (decode, memory-bound)");
     m.def("gemv_cuda", &gemv_cuda, "Matrix-vector y = A@x (decode Linear, memory-bound)");
+    m.def("gemm_cuda", &gemm_cuda, "Matrix-matrix C = A@B (tiled GEMM, compute-bound)");
 }

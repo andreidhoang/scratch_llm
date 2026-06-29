@@ -93,7 +93,7 @@ tables + equations + checklists are in the cited guide.
 - **Load-bearing 20%:** FA2 tiling + online softmax (and the recomputation backward with the D-vector); the roofline (arithmetic intensity, % of peak, BW- vs compute-bound); the ~16–20 B/param optimizer-state memory math → why 100B needs DP+TP+PP; DDP overlap; ZeRO-1.
 - **Gates:** predict-before-you-run (write expected ms first) · `cuda.synchronize()` around all timing · fixed-seed.
 - **Production polish:** FA2 validated against the pure-PyTorch oracle and SDPA; DDP/ZeRO/FSDP each with a 2-rank gloo equivalence test (×5); the 100B memory one-pager.
-- **Status / next:** single-GPU half ✅ (FA2 fwd+bwd · selective checkpointing · mixed-precision numerics · KV-cache · monitors · rollout seam · roofline); distributed half in progress — **DDP naive/flat/overlap ✅ (gloo); ZeRO-1 next (D2) + the 100B one-pager, then FSDP2 (D3, graded) + comms algebra (D4)**; real SGLang serving needs a Hopper box (rent it; ADR-0008).
+- **Status / next:** single-GPU half ✅ (FA2 fwd+bwd · selective checkpointing · mixed-precision numerics · KV-cache · monitors · rollout seam · roofline); distributed half in progress — **DDP naive/flat/overlap ✅ (gloo); ZeRO-1 next (D2) + the 100B one-pager, then FSDP2 (D3, graded) + comms algebra (D4)**; develop on the standing **Blackwell sm120** GPU (gloo for distributed-correctness here; multi-GPU NCCL throughput rents a multi-GPU box). Real SGLang on sm120 is an open **ADR-0008** re-check (was Hopper-gated on Ada).
 - **SKIP:** the 8B leaderboard; the optional Triton FA2 backward (Alg. 2) — do the `torch.compile` recomputation backward.
 - **Interview leverage:** the xAI inference loop (kernels, KV-cache, quant), "how would you train a 100B model?" (DP+TP+PP + the memory math), **MFU / inference co-design** (why 100% MFU is an anti-goal; pick matrix topologies that saturate the units), and the **MoE serving** tradeoff (expert-parallel all-to-all vs pipeline-prefill).
 
@@ -119,7 +119,7 @@ tables + equations + checklists are in the cited guide.
 - **Load-bearing 20%:** SFT masked cross-entropy (correct `response_mask` — everything downstream depends on it); the GRPO group-relative advantage; the GRPO-clip trust region + importance-sampling ratio; the Dr.GRPO de-biasing toggle (std-norm + length-norm); the DPO objective.
 - **Repo:** `algos/` (SFT/EI/GRPO/Dr.GRPO/DPO + advantage + off-policy), `rewards/` (the r1-zero grader), `envs/` (a verifiable math/Countdown env behind `envs/protocol.py`, already in place).
 - **Gates:** loss-at-init on the SFT head · overfit-one-batch on the SFT step · mandatory RL logging (entropy + KLs + reward/length) wired *before* the first GRPO run · predict-before-you-run.
-- **Optional capstone:** reproduce the R1-Zero "aha" on Countdown with Qwen2.5-1.5B (~$30 on a rented GPU) — the cheapest end-to-end validation that your RL engine works on a real model (emerges at 1.5B, fails at 0.5B).
+- **Optional capstone:** reproduce the R1-Zero "aha" on Countdown with Qwen2.5-1.5B — runs on the standing **Blackwell (25 GB fits 1.5B)**; the cheapest end-to-end validation that your RL engine works on a real model (emerges at 1.5B, fails at 0.5B).
 - **Frontier lab (GDM-aligned, 🔵):** knowledge distillation — `algos/distill.py` (logit KD · on-policy reverse-KL · sequence-level), the *serve-cheap student* lever a GDM pre-training lead weights most heavily; reuses `cross_entropy` + the rollout seam + the SFT step, and pairs with the A3 distillation-scaling-law note. Detail in `FRONTIER_PRACTICE_2026.md` (A5 🔵 + A3 ⚪).
 - **Forward edge (post-aha, 🔵):** multi-turn / agentic tool-use RL on the existing `envs/protocol` — the live 2026 post-training frontier (agentic coding · computer-use · deep-research); single-turn GRPO is the degenerate case. See `FRONTIER_PRACTICE_2026.md` A5 🔵. *(PEFT/LoRA stays awareness-only — frontier flagships full-fine-tune; QLoRA/NF4 and fine-tune-vs-RAG cut as non-frontier.)*
 - **SKIP:** the generalist-chat eval re-runs (AlpacaEval/SST/MMLU-delta), the full Anthropic-HH DPO training run — skim for the interview answer, don't invest.
@@ -170,7 +170,7 @@ survives any generalist screen and keeps every door open.
 
 - **Spike = DELTA** — a fused **decode-step** kernel for **GatedDeltaNet-2** (NVIDIA, arXiv 2605.22791):
   correctness oracle + the *measured* H100 memory roofline + the "erase/write decoupling is free at
-  decode" thesis + the `C(B)` batch-crossover. Feasible on bursty rental H100 (~20–40 H100-hrs). The
+  decode" thesis + the `C(B)` batch-crossover. The **NVFP4-on-state numerics seam runs on the standing Blackwell now** (native FP4); the full GDN-decode throughput roofline vs FlashInfer wants a rented datacenter card (~20–40 H100-hrs). The
   differentiator — on the exact layer (GDN/linear-attention) the current production wave is decode-bound on.
 - **Base = A5 (GRPO/Dr.GRPO "aha") + the A2 finish** — the *other* scarce-2026 cluster (stable RL with a
   verifiable reward) and the systems spine. The A2 finish (`fla` baseline + Nsight harness + the tightened

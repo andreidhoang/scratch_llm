@@ -21,7 +21,14 @@ from dataclasses import dataclass
 import torch
 
 # Nominal dense (no-sparsity) peaks — APPROX, verify per your card: (HBM TB/s, bf16 TFLOP/s).
+# The "RTX PRO 4000" row is *measured-achieved* on this Blackwell instance (do_bench: 8192³ bf16
+# matmul + 1 GB copy), per the module's own "replace with YOUR measured peak" rule — note Blackwell's
+# real headroom is FP4/FP8, not bf16, so this bf16 figure understates the card for low-precision work.
 _PEAKS: dict[str, tuple[float, float]] = {
+    "RTX PRO 4000": (
+        0.55,
+        72.0,
+    ),  # measured-achieved (sm120 Blackwell, 25 GB); ridge ≈ 130 FLOP/byte
     "4090": (1.01, 165.0),
     "H100": (3.35, 989.0),
     "A100": (2.04, 312.0),
@@ -131,6 +138,33 @@ def matmul_roofline(
         flops=flops,
         rw_bytes=rw_bytes,
         label=label or getattr(fn, "__name__", "matmul"),
+        ref=ref,
+    )
+
+
+def vector_add_roofline(
+    fn,
+    n: int = 1 << 24,
+    *,
+    dtype: torch.dtype = torch.float32,
+    label: str | None = None,
+    ref_to_torch: bool = True,
+) -> Roofline:
+    """z = x + y roofline vs torch. flops=N (one add/elem); bytes=3·N·itemsize (read x,y; write z).
+
+    Memory-bound: AI = N / (3·N·itemsize) = 1/(3·itemsize) ≈ 1/12 for fp32 → grade on % of HBM BW,
+    not % of FLOP/s. A correct kernel should land near the bandwidth roof (~80–90% of `x + y`).
+    """
+    x = torch.randn(n, device="cuda", dtype=dtype)
+    y = torch.randn(n, device="cuda", dtype=dtype)
+    flops = float(n)
+    rw_bytes = 3.0 * n * x.element_size()
+    ref = (lambda: x + y) if ref_to_torch else None
+    return roofline(
+        lambda: fn(x, y),
+        flops=flops,
+        rw_bytes=rw_bytes,
+        label=label or getattr(fn, "__name__", "vector_add"),
         ref=ref,
     )
 

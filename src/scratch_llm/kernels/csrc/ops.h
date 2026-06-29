@@ -13,3 +13,4 @@ torch::Tensor rmsnorm_cuda(torch::Tensor x, torch::Tensor weight, double eps);
 
 // ---- gemm/ ----
 torch::Tensor gemv_cuda(torch::Tensor A, torch::Tensor x);
+torch::Tensor gemm_cuda(torch::Tensor A, torch::Tensor B);

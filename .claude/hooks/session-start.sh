@@ -11,5 +11,5 @@ dirty="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
 venv=$([ -d .venv ] && echo 'ready' || echo 'missing → uv venv && source .venv/bin/activate')
 
 echo "scratch_llm · CS336 from-scratch | branch: ${branch} | uncommitted: ${dirty} files | venv: ${venv}"
-echo "green-CI is hook-enforced on git commit."
+echo "green-CI is hook-enforced on git commit. | open the day with /standup, close with /eod (docs/OPERATING_RHYTHM.md)."
 exit 0
