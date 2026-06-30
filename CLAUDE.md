@@ -146,6 +146,8 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
 | **The build plan** — A1→A5 spine, load-bearing 20%, discipline gates, build order | `docs/IMPLEMENTATION_PLAN.md` |
 | **Performance & inference track** — the decode-memory-wall spine · 2026 frontier findings · EV-ranked perf build list | `docs/PERFORMANCE_TRACK.md` |
 | **GPU & kernels from zero** — laddered rung 0→9 curriculum (no GPU background assumed; AI explains/visualizes, you derive/implement) | `docs/GPU_FROM_ZERO.md` |
+| **Perf curriculum — engineering spec** — hardware gates, per-assignment falsifiable predictions, DoD, kill criteria (A1–A7); read before any perf-curriculum session | `performance/PERF_ENGINEERING_SPEC.md` |
+| **Perf curriculum — implementation plan** — phased sequencing, current node, rental batching strategy, rung-by-rung status | `performance/PERF_PLAN.md` |
 | **Daily operating rhythm** — the frontier-engineer day on this harness (`/standup` → deep-work → `/eod`); one active node, predict-before-run, measured>implemented | `docs/OPERATING_RHYTHM.md` |
 | **Measurement ledger** — durable predicted-vs-measured record (what git can't track; the "DoD is a profile" gate) | `bench/RESULTS.md` |
 | **Vision & plan (Vietnamese)** — tổng hợp tầm nhìn + specs + kế hoạch (synthesis, not source-of-truth) | `docs/VISION_VI.md` |

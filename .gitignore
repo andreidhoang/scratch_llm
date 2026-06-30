@@ -40,7 +40,7 @@ wandb/
 *.key
 
 # Course reference PDFs — read-only material, not source
-docs/*.pdf
+*.pdf
 
 # Local machine state — not source
 .venv-backups/

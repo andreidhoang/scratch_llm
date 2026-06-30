@@ -85,6 +85,40 @@ against primary sources (2026-06-14); **no kernel code yet** — build gated on 
 gate. Tracked in the Capstone section below; the build spine is in
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7.
 
+---
+
+## Performance Curriculum — Frontier GPU Engineering (A1→A7)
+
+> **Ordering mandate (2026-06-30):** Complete the `performance/` curriculum (A1–A7) before resuming
+> CS336 A5 RL / DELTA. A2–A5 kernel skills are direct DELTA prerequisites. Spec + plan:
+> [`performance/PERF_ENGINEERING_SPEC.md`](../performance/PERF_ENGINEERING_SPEC.md) ·
+> [`performance/PERF_PLAN.md`](../performance/PERF_PLAN.md).
+> Hardware: standing GPU (sm_120, 0.55 TB/s, ridge≈130 FLOP/byte) for Phase 1; rent H100 (Phase 2),
+> B200 (Phase 3), 8×H100 (Phase 4), 2-node (Phase 5). Estimated total: ~$250–$310 in GPU spend.
+
+**Current node: Phase 1a — A1 Rung 0 (metrics harness + PyTorch eager baseline)**
+
+```
+Assignment  Phase       Rungs                                         Status
+──────────  ──────────  ────────────────────────────────────────────  ──────
+A1 Infer    1a (sm120)  R0-R3 + 4.1 PagedAttn + 4.2-4.6 frontier     ⬜  not started
+A2 Kernel   1b (sm120)  R0-R6 CUDA-core ladder                        ⬜  not started
+            Phase 2     §4.1-4.5 WGMMA+TMA+FP8 (H100)                ⬜  gate: Phase 1b done
+A3 TC       1c (sm120)  R0-R2 WMMA + mma.sync                         ⬜  not started
+            Phase 2     R3-R4 + §4.1 warp-spec (H100)                 ⬜  gate: Phase 2
+            Phase 3     §4.2-4.3 tcgen05/NVFP4 (B200)                 ⬜  gate: Phase 3
+A4 FlashA   1d (sm120)  R0-R3 + §4.3 variant + backward               ⬜  not started
+            Phase 2     R4 FA3-class (H100)                            ⬜  gate: Phase 2
+A5 Quant    1e (sm120)  R0-R4 + §4.3 PTQ                              ⬜  not started
+            Phase 3     §7 NVFP4 native MMA (B200)                    ⬜  gate: Phase 3
+A6 Dist     Phase 4     R0-R2 + §4.2-4.5 single-node (8×H100)        ⬜  gate: Phase 4
+            Phase 5     R3 + §4.1 multi-node (2-node, 16×H100)        ⬜  gate: Phase 5
+A7 Cap      Phase 5     Track B kernel suite                           ⬜  gate: A1-A6 done
+```
+
+Measurement ledger: all numbers log to `bench/RESULTS.md` (append-only, dated).
+Design notes: `performance/notes/A#_design_note.md` (create dir on first note).
+
 **Frontier CORE-defaults to adopt** (the cheap, high-value 2026 upgrades — see
 [`FRONTIER_PRACTICE_2026.md`](FRONTIER_PRACTICE_2026.md)): A1 — output z-loss · WSD
 schedule · depth-scaled init (QK-norm ✅ landed, opt-in); A2 — selective recompute ✅ landed · FSDP2 (D3 ahead); A3 — inference-aware allocation ·
