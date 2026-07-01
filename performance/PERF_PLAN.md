@@ -12,20 +12,21 @@
 ## Current Node
 
 ```
-Phase: 1a — A1 Rung 0,1,2 done → Rung 3 (continuous batching) next per plan sequence
+Phase: 1a — A1 R0,R1,R2 done, R3a done → R3b (continuous scheduler) next
 Hardware: Standing GPU (sm_120)
-Done (2026-07-01): R1 overhead-strip (torch.compile 15%→53% of HBM, thesis in trend; cudagraphs blocked
-  by cat-cache). R2 GQA/MQA DONE — tests/test_kv_memory.py green (KV/token 128/32/4 KB = 32:8:1, grouping
-  oracle); bench/kv_memory.py measured: compiled decode MQA 1.92× MHA @16K (R2.5 confirmed), eager control
-  ~1× (overhead hides KV), crossover ctx 14K/51K/396K. See bench/RESULTS.md A1-R2 measured block.
-Next action (Rung 3 — continuous batching, Orca-style): raise arithmetic intensity by BATCHING (weights
-  read once, amortized over B sequences → AI ~1→~B → decode crosses toward compute-bound). DoD: each
-  request token-exact; ≥2× aggregate throughput vs static batch. Predict-before-run: at B where weights
-  amortize, aggregate tok/s scales ~linearly until KV capacity or compute binds. GQA (R2) is what makes
-  a large B fit (B=256 ctx=2K: MHA 68 GB OOM vs GQA-4 17 GB).
-LINCHPIN (lands here): efficient batched + variable-length decode needs the static/paged [B,H_kv,max_ctx,
-  d_head] KVCache rewrite (replacing torch.cat) — the SAME refactor that unblocks PagedAttention (R4.1)
-  and CUDA-graphs (R4.4, R1's cudagraph failure). One refactor, three rungs — build it as R3's storage.
+Done (2026-07-01): R1 overhead-strip (torch.compile 15%→53% HBM). R2 GQA/MQA DONE (MQA 1.92× MHA @16K).
+  R3a static batched decode DONE — serving/batched.py + tests/test_batched_decode.py green (batched row ==
+  single-stream); bench/batched_decode.py measured: AI≈B exact, aggregate 185→9255 tok/s B=1→64, peak
+  12,220 @B=256 = 66× the B=1 rate, roofline crosses memory→compute at B≈128 (AI≈ridge 131). R3.1/R3.2/R3.3
+  [FACT]. (Correction: eager also amortizes — the fixed ~20ms launch overhead spreads over B.)
+Next action (R3b — continuous scheduler, Orca iteration-level): build the static BatchedKVCache
+  [B,H_kv,max_ctx,d_head] buffer + per-row length mask + per-row RoPE positions (variable lengths), then
+  the admit/decode/evict loop. DoD R3.4: ≥2× aggregate vs static batching on a mixed 128/512 trace (+ slot
+  utilization to explain it); R3.5: report ITL/TTFT via serving/metrics. Oracle: each request == standalone
+  greedy. Kill: continuous <2× ⇒ scheduler not refilling (measure utilization first).
+LINCHPIN (built in R3b): the static BatchedKVCache buffer IS the R4.1 (paged) / R4.4 (cudagraph) prereq —
+  one refactor, three rungs. R3b needs the per-row-length attention path (extend model attention: per-row
+  positions + key-padding mask; uniform path unchanged).
 ```
 
 > **Reset 2026-07-01.** Built from scratch: the exploratory Jun-29 perf kernels were removed (tag
@@ -78,7 +79,7 @@ Total est. cost (rough): <$300 for A1–A5 (single-GPU); $100–200 H100 batch;
 | 0: metrics harness + PyTorch eager baseline | ✅ | metrics reproducible, fixed-seed (34f739e) | sm_120 |
 | 1: KV-cache decoder (contiguous) | 🔵 | token-exact ✅; decode measured + overhead-stripped (15%→53% HBM via fusion); wall-close deferred to R4.4 | sm_120 |
 | 2: GQA/MQA | ✅ | KV/token 128/32/4 KB (32:8:1); compiled decode MQA 1.92× MHA @16K; eager control ~1× (da64bfb→R2) | sm_120 |
-| 3: continuous batching (Orca-style) | ⬜ | ≥2× aggregate throughput | sm_120 |
+| 3: continuous batching (Orca-style) | 🔵 | R3a ✅ weight-amortization roofline (agg 66× B=1, memory→compute flip @B≈128); R3b scheduler (≥2× vs static) next | sm_120 |
 | 4.1: PagedAttention (16-tok blocks, Triton) | ⬜ | <4% waste; contiguous-match test | sm_120 |
 | 4.2: chunked prefill | ⬜ | TTFT/ITL curve vs chunk size | sm_120 |
 | 4.3: speculative decoding (lossless) | ⬜ | greedy output token-exact | sm_120 |

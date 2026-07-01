@@ -47,6 +47,20 @@ continuous scheduler (≥2× vs static). Config: GQA-4 0.84B, compiled (the R1 p
 flat in B ⇒ not amortizing weights (bytes/step must be ~2P+B·KV, not B·2P). Continuous <2× static ⇒
 scheduler not refilling freed slots (measure slot utilization before blaming the trace).
 
+### Measured — A1 R3a static batched decode (2026-07-01, `bench/batched_decode.py` + `tests/test_batched_decode.py` green)
+
+| date | rung / artifact | hardware | metric | predicted | measured | bound | root cause | next experiment |
+|---|---|---|---|---|---|---|---|---|
+| 2026-07-01 | A1 R3a · batched decode agg tok/s vs B, **compiled** | RTX PRO 4000 Blackwell (sm120) | agg tok/s scaling | ≥10× @B=32; ~linear; AI≈B | **R3.1/R3.2 CONFIRMED** — AI≈B exact; agg(B=32)/agg(B=1)=**24.9×**; 185→9,255 tok/s B=1→64 (50× for 64×); **peak 12,220 @B=256 = 66×** | memory→compute | Weights read once/step amortize over B rows (per-stream ~145–185 tok/s, %HBM ~50–56% in the memory regime). Roofline **crosses memory→compute at B≈128** (AI≈ridge 131); plateau ~12K tok/s = the naive `@` matmul's ~28% of the 72 TF/s compute peak | R3b continuous scheduler (≥2× vs static on mixed trace); A2/A3 tensor-core GEMM to raise the compute ceiling |
+| 2026-07-01 | A1 R3a · batched decode (eager control) | RTX PRO 4000 Blackwell (sm120) | agg tok/s scaling | (pred: overhead masks amortization) | **PREDICTION CORRECTED** — eager ALSO scales: agg(32)/agg(1)=30.7×, peak 13,462 @B=256 | overhead | Batching amortizes the **fixed ~20 ms/step launch overhead** across B tokens too (step time ~constant in B → per-stream ~48, aggregate linear). Compiled wins at low-mid B (185 vs 48 tok/s @B=1, strips overhead → 56% HBM) but both converge at high B (~20 ms/step, compute/overhead-bound) | — |
+
+**Verdict (A1 R3a DONE — R3.1/R3.2/R3.3 [FACT]):** batching is the lever that beats the B=1 memory wall —
+aggregate tok/s scales ~linearly with B (weights amortized) until the roofline crosses to compute-bound
+at **B≈128 (AI≈ridge)**, peaking ~66× the single-stream rate. The oracle (test_batched_decode) pins
+batched row == single-stream. Remaining for Rung-3 close: **R3b** (continuous scheduler: variable lengths
++ join/leave, ≥2× vs static — R3.4/R3.5), which needs the static `BatchedKVCache` buffer (the R4.1/R4.4
+linchpin). Correction logged: eager does not mask amortization — it amortizes the fixed launch overhead.
+
 ### Pre-registration — A1 R2 GQA/MQA reduction (predict-before-run, D5)
 
 Registered 2026-07-01 BEFORE running `bench/kv_memory.py`. Spec: `performance/notes/A1_R2_gqa.md`.
