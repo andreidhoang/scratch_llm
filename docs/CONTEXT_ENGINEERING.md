@@ -130,11 +130,13 @@ This is the heart of the manual: for each file we authored, *why it exists*, *wh
 
 ### `.claude/hooks/session-start.sh` — Lever 4 feeding Lever 1
 - **What:** a `SessionStart` hook whose stdout is injected into context: current branch, uncommitted
-  file count, and venv presence.
-- **Why this is subtle and good:** CLAUDE.md is *static* — it cannot know your branch right now. The
-  hook supplies the small slice of *dynamic* state worth always-on residence. Keep it ~2 lines:
-  every line is paid once per session, so it must out-earn its tokens. (Don't echo what CLAUDE.md
-  already says — that's double-paying.)
+  file count, venv presence, **the latest commits, and the current perf-curriculum node** — the dynamic
+  "what just shipped / where we are" that feeds the *Orient before you build* protocol (CLAUDE.md).
+- **Why this is subtle and good:** CLAUDE.md is *static* — it cannot know your branch or last commit
+  right now. The hook supplies the slice of *dynamic* state worth always-on residence, so a session
+  starts from real state, not assumption. Every line is paid once per session, so it must out-earn its
+  tokens (don't echo what CLAUDE.md already says); the commit list + node clear that bar because they
+  change every session and are exactly what step 1 of the orient protocol reads before any code.
 
 ### `.claude/agents/*.md` — Levers 2 + 3
 Two specialists. The frontmatter is deliberately **minimal and verified** (`name`, `description`,
@@ -216,6 +218,18 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
 
 The files above are the static harness. This section is the dynamic discipline — how you run Claude
 Code day to day so context stays high-signal.
+
+### 3.0 Orient before you build (the first move, every session)
+The load-bearing rule that governs the rest of this section — codified in CLAUDE.md ("Orient before you
+build"), and applied by every agent as a lead-frontier-lab RE would. Before any engineering work:
+**analyze → reconstruct → reason → build.** Read `git log --oneline -15` + the current-node pointer
+(`performance/PERF_PLAN.md`, else `docs/STATUS.md`) + the ledger (`bench/RESULTS.md`) + the one spec
+governing the active node; state what the last commits established and what is *measured vs merely
+implemented*; then reason the next task from that state (the highest-EV node, predict-before-run) rather
+than pattern-matching a default. The SessionStart hook (Lever 4) injects the *starting* slice — latest
+commits + node — so this begins for free; the agent then reads deeper. Skipping orientation is the
+classic silent failure: re-doing closed work, trusting a stale doc over a fresh commit, or pulling a
+low-signal node. Depth scales with the task (a one-line fix needs only a `git log` glance).
 
 ### 3.1 Launch from the right directory
 This harness (settings, hooks, CLAUDE.md) only loads when cwd is inside

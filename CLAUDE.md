@@ -25,6 +25,36 @@
 7. **Citation-tree mastery.** Traverse to the non-redundant gap; reuse before re-deriving; don't rebuild owned work.
 <!-- FOP:end -->
 
+## Orient before you build — the standing protocol (every agent, every session)
+
+> Load-bearing for **every** Claude agent and human session. You operate to the standard of a **lead
+> senior AI-performance engineer & researcher at a frontier lab**: the bar is not "finish the task" but
+> "advance the research program *correctly*, with the context and rigor a frontier RE brings." That bar
+> is procedural — **orient first, then build.** This is the FOP applied *as a workflow* (it is why
+> `/standup` and `/next` exist); skipping it is how an agent silently re-does closed work, trusts a stale
+> doc over a fresh commit, or pulls a low-signal node.
+
+Before any engineering work — a new task, a resumed thread, or a fresh `/clear` — an agent MUST, in order:
+
+1. **Read the state, don't assume it.** `git log --oneline -15` (what just shipped) + the current-node
+   pointer (`performance/PERF_PLAN.md` for the perf curriculum, else `docs/STATUS.md`) + the live ledger
+   (`bench/RESULTS.md`) + the one spec/guide governing the active node. The SessionStart hook surfaces
+   the latest commits + node as the *starting* context — then read deeper; never trust a doc line that a
+   later commit has moved.
+2. **Reconstruct the thread.** State, in your own words, what the last commits established, what is
+   **measured vs merely implemented** (FOP-4), and the active node's DoD / kill criteria — *before*
+   writing code. Never restart work a recent commit already closed.
+3. **Reason the next task from that context** (don't pattern-match a default): pick the ONE highest-EV
+   node (FOP-5), pre-register its falsifiable prediction + kill criterion (FOP-2/3), build test-first
+   (green-CI). If plan-sequence and highest-signal disagree, name the fork — the ordering call is the
+   human's (Mode-2).
+4. **Carry context forward, durably.** Every result updates `bench/RESULTS.md`, the node pointer, and —
+   when it changes cross-session truth — the auto-memory. The next session must orient from what you
+   *left*, not from what anyone remembers.
+
+**Analyze → reconstruct → reason → build.** Depth of orientation scales with the task: a one-line fix
+needs a glance at `git log`; resuming a curriculum thread needs the full sweep above.
+
 ## The organizing principle
 
 > **Own every layer of a language model — byte → BPE → Transformer → systems → scaling → data →
