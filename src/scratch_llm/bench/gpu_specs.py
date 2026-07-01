@@ -79,6 +79,16 @@ GPUS: dict[str, GpuSpec] = {
         peak_flops={BF16: 165e12, FP16: 165e12, TF32: 82.6e12, FP32: 82.6e12},
         source="NVIDIA Ada datasheet (fp16 w/ fp32-accumulate dense); repo FA2 roofline",
     ),
+    # The standing GPU (perf curriculum Phase 1). Values are *measured* on the box
+    # (bench/RESULTS.md 2026-06-29), not datasheet — the honest roof for a memory-bound kernel. fp8/fp4
+    # exist on sm120 but are omitted until measured (A5), so a roofline against them raises rather than
+    # inventing a number (2x/4x of an *achieved* bf16 is not a defensible peak).
+    "rtx4000-blackwell": GpuSpec(
+        name="RTX PRO 4000 Blackwell (sm120)",
+        hbm_bandwidth=0.55e12,  # measured HBM copy
+        peak_flops={BF16: 72e12, FP16: 72e12},  # measured bf16 GEMM 8192³; fp16 = same tensor path
+        source="repo measurement bench/RESULTS.md 2026-06-29 (72 TF/s bf16, 0.55 TB/s HBM; ridge ≈ 131)",
+    ),
 }
 
 
