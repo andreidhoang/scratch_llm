@@ -12,21 +12,20 @@
 ## Current Node
 
 ```
-Phase: 1a — A1 Rung 1 closed-in-trend (da64bfb); Rung 2 SPEC'd → build next (plan sequence)
+Phase: 1a — A1 Rung 0,1,2 done → Rung 3 (continuous batching) next per plan sequence
 Hardware: Standing GPU (sm_120)
-Done (2026-07-01): R1 decode roofline (51 tok/s = 16% roof, overhead-bound); overhead-strip
-  (bench/decode_overhead_strip.py) — .item()-sync kill ~free (pred A falsified), torch.compile fusion
-  15%→53% of HBM (pred B confirmed, thesis demonstrated in trend), reduce-overhead cudagraph capture
-  FAILED on the cat-grown KV cache (scopes the static-buffer refactor). R2 GQA/MQA spec written:
-  performance/notes/A1_R2_gqa.md (+ predict-before-run rows in bench/RESULTS.md).
-Next action (per plan numeric sequence R2→R3→4.x): BUILD Rung 2 test-first —
-  1. tests/test_kv_memory.py (CPU, green): KV bytes/token == 4096·H_kv for H_kv∈{32,8,1}; grouping oracle.
-  2. bench/kv_memory.py (gpu): capacity/crossover table + compiled decode tok/s @ ctx {2K,16K} for
-     MHA/GQA-4/MQA. Falsifier: MQA >20% faster than MHA @ ctx=16K under compile (the only tok/s-mover).
-  Log measured vs the §3 predictions.
-LINCHPIN (noted, lands at R3/R4.1): the static [B,H_kv,max_ctx,d_head] KVCache rewrite (replacing the
-  torch.cat cache) unblocks batching (R3), PagedAttention (R4.1) AND CUDA-graphs (R4.4) — one refactor,
-  three rungs. Schedule it as R3's batched-storage need + the 4.x prereq. Highest-leverage single change.
+Done (2026-07-01): R1 overhead-strip (torch.compile 15%→53% of HBM, thesis in trend; cudagraphs blocked
+  by cat-cache). R2 GQA/MQA DONE — tests/test_kv_memory.py green (KV/token 128/32/4 KB = 32:8:1, grouping
+  oracle); bench/kv_memory.py measured: compiled decode MQA 1.92× MHA @16K (R2.5 confirmed), eager control
+  ~1× (overhead hides KV), crossover ctx 14K/51K/396K. See bench/RESULTS.md A1-R2 measured block.
+Next action (Rung 3 — continuous batching, Orca-style): raise arithmetic intensity by BATCHING (weights
+  read once, amortized over B sequences → AI ~1→~B → decode crosses toward compute-bound). DoD: each
+  request token-exact; ≥2× aggregate throughput vs static batch. Predict-before-run: at B where weights
+  amortize, aggregate tok/s scales ~linearly until KV capacity or compute binds. GQA (R2) is what makes
+  a large B fit (B=256 ctx=2K: MHA 68 GB OOM vs GQA-4 17 GB).
+LINCHPIN (lands here): efficient batched + variable-length decode needs the static/paged [B,H_kv,max_ctx,
+  d_head] KVCache rewrite (replacing torch.cat) — the SAME refactor that unblocks PagedAttention (R4.1)
+  and CUDA-graphs (R4.4, R1's cudagraph failure). One refactor, three rungs — build it as R3's storage.
 ```
 
 > **Reset 2026-07-01.** Built from scratch: the exploratory Jun-29 perf kernels were removed (tag
@@ -78,7 +77,7 @@ Total est. cost (rough): <$300 for A1–A5 (single-GPU); $100–200 H100 batch;
 |---|---|---|---|
 | 0: metrics harness + PyTorch eager baseline | ✅ | metrics reproducible, fixed-seed (34f739e) | sm_120 |
 | 1: KV-cache decoder (contiguous) | 🔵 | token-exact ✅; decode measured + overhead-stripped (15%→53% HBM via fusion); wall-close deferred to R4.4 | sm_120 |
-| 2: GQA/MQA | ⬜ | KV memory reduction measured | sm_120 |
+| 2: GQA/MQA | ✅ | KV/token 128/32/4 KB (32:8:1); compiled decode MQA 1.92× MHA @16K; eager control ~1× (da64bfb→R2) | sm_120 |
 | 3: continuous batching (Orca-style) | ⬜ | ≥2× aggregate throughput | sm_120 |
 | 4.1: PagedAttention (16-tok blocks, Triton) | ⬜ | <4% waste; contiguous-match test | sm_120 |
 | 4.2: chunked prefill | ⬜ | TTFT/ITL curve vs chunk size | sm_120 |

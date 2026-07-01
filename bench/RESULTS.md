@@ -43,6 +43,22 @@ decode is overhead-bound at B=1, so GQA moves tok/s **only** at long ctx under `
 **Kill line:** grouped math ≠ explicit-repeat reference ⇒ group-map bug (fix first). MQA no edge over
 MHA at ctx=16 K under compile ⇒ not at the wall (re-check compiled BW ≈53%) or KV-traffic model wrong.
 
+### Measured — A1 R2 GQA/MQA (2026-07-01, `bench/kv_memory.py` + `tests/test_kv_memory.py` green)
+
+| date | rung / artifact | hardware | metric | predicted | measured | bound | root cause | next experiment |
+|---|---|---|---|---|---|---|---|---|
+| 2026-07-01 | A1 R2 · KV capacity MHA/GQA-4/MQA | RTX PRO 4000 Blackwell (sm120) | KV/token · crossover ctx | 128/32/4 KB · 13K/51K/410K | **128/32/4 KB · 14.4K/51.3K/396K** | — | **R2.1/R2.3 CONFIRMED.** Exact formula match `2·L·H_kv·d_head·dtype`; GQA-4 pushes the KV-read=weight-read crossover 14K→51K, MQA→396K (test_kv_memory green) | R3: GQA is what makes a big batch fit — B=256 ctx=2K is 68 GB (MHA, OOM) vs 17 GB (GQA-4) |
+| 2026-07-01 | A1 R2 · MQA vs MHA decode @ ctx, **compiled** | RTX PRO 4000 Blackwell (sm120) | tok/s ratio (MQA/MHA) | >1.2× @ 16K | **1.03× @2K → 1.81× @8K → 1.92× @16K** (MQA 102 vs MHA 53 tok/s @16K) | memory | **R2.5 CONFIRMED.** Under torch.compile the step is memory-bound, so shrinking KV (MHA 4.03 → MQA 1.69 GB/step) directly cuts step time; the ctx-trend traces MHA's 14K crossover | R3 continuous batching (raise AI by batch); the static-KV-buffer refactor (R4.1/R4.4) |
+| 2026-07-01 | A1 R2 · eager decode (control) | RTX PRO 4000 Blackwell (sm120) | tok/s ratio (MQA/MHA) | ≈1× (overhead hides KV) | **0.91–0.95×** (all ~50–55 tok/s regardless of ctx/H_kv) | overhead | **Control CONFIRMED.** Eager step time is set by ~955 launches, not bytes — MHA@16K even shows *higher* achieved BW (220 GB/s) than MQA (84) at the *same* tok/s: extra KV bytes ride free under launch overhead. This is *why* R2.5 needs the compiled path | (same as above) |
+| 2026-07-01 | A1 R2 · compiled decode %HBM (MHA @2K) | RTX PRO 4000 Blackwell (sm120) | achieved BW | — | **388 GB/s = 71% HBM** (vs R1's 53%); falls to ~30–40% at 16K | memory | bigger per-step byte volume (weights+KV) amortizes residual launch overhead better than R1's tiny short-ctx step → closer to the wall. %HBM drops at long ctx: naive SDPA over the cache is less BW-efficient than the GEMV weight reads | R4.4 cudagraphs for the residual launches; a fused decode-attention for the long-ctx KV read |
+
+**Verdict (A1 R2 DONE — all 3 DoD boxes [FACT]):** KV footprint == analytic formula (test green +
+capacity table); grouping oracle green; the compiled long-ctx sweep **confirms R2.5 (MQA 1.92× MHA @
+16K)** while eager confirms the control (overhead hides it). The GQA/MQA lever is now measured on both
+axes — **capacity** (32× for MQA) and **long-context traffic** (1.92× decode). Next per plan sequence:
+**R3 continuous batching** — raise arithmetic intensity by batching (which GQA makes fit), target ≥2×
+aggregate throughput; that motivates the static-buffer `KVCache` rewrite (the R4.1/R4.4 linchpin).
+
 ### Pre-registration — A1 R1 overhead-strip (predict-before-run, D5)
 
 Registered 2026-07-01 BEFORE running `bench/decode_overhead_strip.py`. Baseline is the row above
