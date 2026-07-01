@@ -28,6 +28,21 @@
 
 <!-- append new measurements below; never edit a logged row (it is a dated record) -->
 
+### Pre-registration — A1 R2 GQA/MQA reduction (predict-before-run, D5)
+
+Registered 2026-07-01 BEFORE running `bench/kv_memory.py`. Spec: `performance/notes/A1_R2_gqa.md`.
+KV stored/token = `2·L·H_kv·d_head·dtype` = `4096·H_kv` bytes (Rung-1 config, bf16). Honest frame:
+decode is overhead-bound at B=1, so GQA moves tok/s **only** at long ctx under `torch.compile` (pred 5).
+
+| # | experiment | predicted | measured | bound | note |
+|---|---|---|---|---|---|
+| R2.1 | KV/token vs `4096·H_kv`, H_kv∈{32,8,1} | 128 / 32 / 4 KB (32:8:1) | — (pending) | — | footprint fact |
+| R2.3 | crossover ctx (KV read = 1.68 GB weights) | MHA ~13 K · GQA-4 ~51 K · MQA ~410 K | — (pending) | — | GQA pushes KV-bound point out |
+| R2.5 | decode tok/s @ ctx=16 K, compiled — MQA vs MHA | **MQA >20% faster** (MHA KV≈2.1 GB > weights) | — (pending) | memory | the only tok/s-moving falsifier |
+
+**Kill line:** grouped math ≠ explicit-repeat reference ⇒ group-map bug (fix first). MQA no edge over
+MHA at ctx=16 K under compile ⇒ not at the wall (re-check compiled BW ≈53%) or KV-traffic model wrong.
+
 ### Pre-registration — A1 R1 overhead-strip (predict-before-run, D5)
 
 Registered 2026-07-01 BEFORE running `bench/decode_overhead_strip.py`. Baseline is the row above
