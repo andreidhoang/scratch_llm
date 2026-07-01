@@ -97,7 +97,8 @@ gate. Tracked in the Capstone section below; the build spine is in
 > Hardware: standing GPU (sm_120, 0.55 TB/s, ridge≈130 FLOP/byte) for Phase 1; rent H100 (Phase 2),
 > B200 (Phase 3), 8×H100 (Phase 4), 2-node (Phase 5). Estimated total: ~$250–$310 in GPU spend.
 
-**Current node: Phase 1a — A1 Rung 0 (metrics harness + PyTorch eager baseline)**
+**Current node: Phase 1a — A1 Rung 1 (KV-cache decoder: prove decode is memory-bound)**
+_Rung 0 shipped 2026-07-01 (`34f739e` serving metrics+baseline, `f3907fb` bench Blackwell spec)._
 
 > **Clean slate (2026-07-01).** The exploratory Jun-29 perf kernels (GEMV/GEMM/RMSNorm CUDA +
 > `kernels/bench.py`) were removed to build A1–A7 from scratch against `PERF_ENGINEERING_SPEC.md`.
@@ -107,7 +108,7 @@ gate. Tracked in the Capstone section below; the build spine is in
 ```
 Assignment  Phase       Rungs                                         Status
 ──────────  ──────────  ────────────────────────────────────────────  ──────
-A1 Infer    1a (sm120)  R0-R3 + 4.1 PagedAttn + 4.2-4.6 frontier     ⬜  not started
+A1 Infer    1a (sm120)  R0-R3 + 4.1 PagedAttn + 4.2-4.6 frontier     🔵  R0 done → R1
 A2 Kernel   1b (sm120)  R0-R6 CUDA-core ladder                        ⬜  not started
             Phase 2     §4.1-4.5 WGMMA+TMA+FP8 (H100)                ⬜  gate: Phase 1b done
 A3 TC       1c (sm120)  R0-R2 WMMA + mma.sync                         ⬜  not started

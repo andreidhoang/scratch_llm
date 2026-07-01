@@ -12,14 +12,22 @@
 ## Current Node
 
 ```
-Phase: 1a — A1 Rung 0 (Metrics harness + PyTorch eager baseline)
+Phase: 1a — A1 Rung 1 (KV-cache decoder: prove decode is memory-bound)
 Hardware: Standing GPU (sm_120)
-Next action: Write the failing harness test (bench-writer), then implement Rung 0
+Next action: size a ~1B bf16 model, run serving.run_baseline (locked clocks, discard warmup),
+  place decode on the roofline three ways (hand AI≈1 · Nsight SoL Memory%≫Compute% · measured
+  tok/s vs ~266 ceiling) and log the first bench/RESULTS.md row (predicted vs measured + gap).
 ```
 
 > **Reset 2026-07-01.** Built from scratch: the exploratory Jun-29 perf kernels were removed (tag
-> `pre-perf-kernel-reset`). Starting clean at Rung 0. Foundations that survive and are reused: the
-> `scratch_llm.bench` measurement apparatus, `sampling.generate` (token-exact decode), CS336 A2 FA2.
+> `pre-perf-kernel-reset`). Foundations reused: the `scratch_llm.bench` measurement apparatus,
+> `sampling.generate` (token-exact decode), CS336 A2 FA2.
+>
+> **Rung 0 shipped 2026-07-01** (`34f739e` serving, `f3907fb` bench): `serving/metrics.py`
+> (TTFT/ITL/throughput/goodput at p50/p95/p99) + `serving/baseline.py` (instrumented decode —
+> token-exact vs `sampling.generate`, under `no_grad`, fixed-seed reproducible). `GpuSpec` for the
+> standing card added so `roofline()` scores decode on sm_120. Ship-reviewer ACCEPT; 10 serving
+> tests green; carried-forward Rung-1 hardening: discard warmup, sync-once-for-throughput.
 
 ---
 
@@ -58,7 +66,7 @@ Total est. cost (rough): <$300 for A1–A5 (single-GPU); $100–200 H100 batch;
 
 | Rung | Status | DoD gate | Hardware |
 |---|---|---|---|
-| 0: metrics harness + PyTorch eager baseline | ⬜ | metrics reproducible, fixed-seed | sm_120 |
+| 0: metrics harness + PyTorch eager baseline | ✅ | metrics reproducible, fixed-seed (34f739e) | sm_120 |
 | 1: KV-cache decoder (contiguous) | ⬜ | token-exact; GEMM→GEMV shift measured | sm_120 |
 | 2: GQA/MQA | ⬜ | KV memory reduction measured | sm_120 |
 | 3: continuous batching (Orca-style) | ⬜ | ≥2× aggregate throughput | sm_120 |
