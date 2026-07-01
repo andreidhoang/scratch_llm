@@ -28,6 +28,25 @@
 
 <!-- append new measurements below; never edit a logged row (it is a dated record) -->
 
+### Pre-registration — A1 R3 continuous batching (predict-before-run, D5)
+
+Registered 2026-07-01 BEFORE building. Spec: `performance/notes/A1_R3_continuous_batching.md`.
+Thesis: **batching is how you beat the memory wall** — read weights once, apply to B sequences → AI≈B,
+weight traffic amortized. Phased: R3a static batched decode (weight-amortization roofline) → R3b
+continuous scheduler (≥2× vs static). Config: GQA-4 0.84B, compiled (the R1 path that reaches the wall).
+
+| # | experiment | predicted | measured | bound | note |
+|---|---|---|---|---|---|
+| R3.1 | decode AI at batch B (short ctx) | ≈ B (memory while B<130) | — (pending) | memory | AI = 2PB/(2P+B·KV) |
+| R3.2 | aggregate tok/s B=32 vs B=1 | **≥10×** (weights + overhead amortize); ~linear | — (pending) | memory | THE falsifier: flat ⇒ not amortizing |
+| R3.3 | batched row b vs single-stream greedy | token-exact | — (pending) | — | per-row length mask correctness |
+| R3.4 | continuous vs static, mixed 128/512 @B=32 | **≥2×** aggregate | — (pending) | — | kills head-of-line + padding waste |
+| R3.5 | ITL @B=32 vs B=1 | higher (throughput↔latency) | — (pending) | — | the honest cost of batching |
+
+**Kill line:** batched row ≠ single-stream ⇒ per-row length-mask/positions bug (fix first). Aggregate
+flat in B ⇒ not amortizing weights (bytes/step must be ~2P+B·KV, not B·2P). Continuous <2× static ⇒
+scheduler not refilling freed slots (measure slot utilization before blaming the trace).
+
 ### Pre-registration — A1 R2 GQA/MQA reduction (predict-before-run, D5)
 
 Registered 2026-07-01 BEFORE running `bench/kv_memory.py`. Spec: `performance/notes/A1_R2_gqa.md`.
