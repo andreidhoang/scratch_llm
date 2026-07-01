@@ -17,6 +17,10 @@ Hardware: Standing GPU (sm_120)
 Next action: Write the failing harness test (bench-writer), then implement Rung 0
 ```
 
+> **Reset 2026-07-01.** Built from scratch: the exploratory Jun-29 perf kernels were removed (tag
+> `pre-perf-kernel-reset`). Starting clean at Rung 0. Foundations that survive and are reused: the
+> `scratch_llm.bench` measurement apparatus, `sampling.generate` (token-exact decode), CS336 A2 FA2.
+
 ---
 
 ## Phase Map
@@ -70,9 +74,11 @@ Total est. cost (rough): <$300 for A1–A5 (single-GPU); $100–200 H100 batch;
 ```
 1. /standup (orient: confirm current node = A1 Rung 0)
 2. Invoke bench-writer agent: "Write the failing correctness + metrics harness tests for A1 Rung 0
-   in src/scratch_llm/kernels/inference/. Target: (a) greedy generation output reproducible fixed-seed,
-   (b) TTFT/ITL/throughput/goodput at p50/p95/p99 from a batch of requests."
-3. Human implements the PyTorch eager baseline + metrics harness.
+   in a new src/scratch_llm/serving/ module (reuse the kept scratch_llm.bench apparatus —
+   decode_step_flops_bytes, measure_hbm_bandwidth, roofline). Target: (a) greedy generation output
+   reproducible fixed-seed, (b) TTFT/ITL/throughput/goodput at p50/p95/p99 from a batch of requests."
+3. Implement the PyTorch eager baseline + metrics harness (recruit sampling.generate — it already
+   exists and is token-exact; this rung instruments it, it does not rebuild the decoder).
 4. Confirm pytest -m gpu passes.
 5. Log baseline numbers to bench/RESULTS.md.
 ```

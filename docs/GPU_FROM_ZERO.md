@@ -44,8 +44,9 @@ The *result* is a measured profile that lands near a roofline you predicted **be
 the box **now** — write, run, **measure + profile here** (`CLAUDE.md` "Develop on the GPU"). Get the
 oracle green first (the floor), then the roofline (the result). Rails: **25 GB cap** + **"% of *this*
 Blackwell," not datacenter**. Rent a bigger / multi-GPU box (`vastai`) only for what this card can't do
-(full-scale throughput, multi-GPU NCCL); never silently drop a step. **Empirical (sm120): Triton ✅;
-the CUDA `rmsnorm.cu` NaNs** — see ADR-0011 + `bench/RESULTS.md`.
+(full-scale throughput, multi-GPU NCCL); never silently drop a step. **Empirical (sm120): Triton ✅
+(FA2-fwd).** *(The Jun-29 perf CUDA suite incl. `rmsnorm.cu` was reset 2026-07-01 for the from-scratch
+A1–A7 rebuild; preserved at tag `pre-perf-kernel-reset` — see ADR-0011 + `bench/RESULTS.md`.)*
 
 **Framework policy ([ADR-0011](adr/ADR-0011-kernel-framework-policy.md)).** Write every ladder rung +
 the DELTA kernel in **Triton** (primary); do R4's GEMM in **CUDA C++** too (the compute-bound feel) and

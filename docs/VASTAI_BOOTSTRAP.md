@@ -13,9 +13,9 @@ uv pip install torch triton              # GPU box: match the box's CUDA; verify
 ## 2. Sanity check (the profile-DoD harness works)
 ```bash
 nvidia-smi                               # confirm the GPU + driver
-PYTHONPATH=src uv run python -c "from scratch_llm.kernels.bench import matmul_roofline; \
-  from scratch_llm.kernels.matmul import matmul_naive; matmul_roofline(matmul_naive, 4096, 4096, 4096)"
-uv run pytest -m gpu tests/test_matmul.py   # matmul_naive passes; matmul_tiled xfails until you build it
+PYTHONPATH=src uv run python -c "from scratch_llm.bench import measure_hbm_bandwidth; \
+  print(f'HBM {measure_hbm_bandwidth()/1e12:.2f} TB/s')"   # kept apparatus: scratch_llm.bench
+uv run pytest -m gpu tests/test_flash_attention_triton.py   # the kept FA2 kernel (perf suite is being rebuilt)
 ```
 
 ## 3. The loop (in Claude Code)

@@ -4,6 +4,13 @@
 - **Layer:** L2 Systems (A2 kernels) + Capstone DELTA — `src/scratch_llm/kernels/`
 - **Decides:** which language/framework each kernel is written in across the from-scratch build, so the choice is never re-litigated per kernel
 
+> **Note (2026-07-01 · perf-curriculum reset).** The concrete example files cited below
+> (`kernels/gemv_triton.py`, `kernels/csrc/gemm/gemv.cu`, `kernels/csrc/norm/rmsnorm.cu`,
+> `bindings.cpp`) were **removed** to rebuild the `performance/` A1–A7 track from scratch; they are
+> preserved at git tag `pre-perf-kernel-reset`. This **decision is unchanged** — Triton-primary still
+> governs the rebuild. The kept CS336 A2 `kernels/flash_attention_triton.py` remains the reference
+> Triton kernel. When the rebuilt suite lands, refresh the file paths below.
+
 ## Context
 
 The build writes ~9 compute kernels from scratch (the `GPU_FROM_ZERO.md` ladder R2→R7) plus the DELTA

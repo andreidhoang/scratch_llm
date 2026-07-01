@@ -66,9 +66,10 @@ BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ 
 
 **Resourcing — we develop on a standing GPU now.** Hardware (2026-06-29): **NVIDIA RTX PRO 4000
 Blackwell, sm120, 25 GB**, torch 2.12.1+cu130, triton 3.7.1. Measured peaks: **72 TFLOP/s bf16 ·
-0.55 TB/s HBM · ridge ≈ 130 FLOP/byte** (in `bench.py _PEAKS`). **Empirically: Triton ✅ (FA2-fwd +
-gemv pass on sm120); the CUDA-C++ `rmsnorm.cu` regresses to NaN** (2nd-tier, ADR-0011; superseded by
-the R3 Triton norm). No build step is deferred — **write the kernel, measure + profile it here, now.**
+0.55 TB/s HBM · ridge ≈ 130 FLOP/byte** (in `scratch_llm.bench.gpu_specs`). **Empirically: Triton ✅
+(FA2-fwd on sm120).** *(The Jun-29 perf CUDA suite — gemv/gemm/`rmsnorm.cu` — was reset 2026-07-01 to
+rebuild `performance/` A1–A7 from scratch; preserved at tag `pre-perf-kernel-reset`.)* No build step is
+deferred — **write the kernel, measure + profile it here, now.**
 "CPU-buildable" = *doesn't require* a GPU (oracles, gloo-correctness, fake-quant); build it on the box
 too. Rails: **25 GB cap** (size models) and **report "% of *this* Blackwell," not datacenter numbers**.
 A bigger / multi-GPU box is rented (`vastai` skill) only for what this card can't do — full-scale
@@ -97,6 +98,11 @@ gate. Tracked in the Capstone section below; the build spine is in
 > B200 (Phase 3), 8×H100 (Phase 4), 2-node (Phase 5). Estimated total: ~$250–$310 in GPU spend.
 
 **Current node: Phase 1a — A1 Rung 0 (metrics harness + PyTorch eager baseline)**
+
+> **Clean slate (2026-07-01).** The exploratory Jun-29 perf kernels (GEMV/GEMM/RMSNorm CUDA +
+> `kernels/bench.py`) were removed to build A1–A7 from scratch against `PERF_ENGINEERING_SPEC.md`.
+> Kept: CS336 A2 FlashAttention-2, the `scratch_llm.bench` measurement apparatus, and `bench/RESULTS.md`.
+> Prior work is at git tag `pre-perf-kernel-reset`. All rungs below are genuinely `⬜ not started`.
 
 ```
 Assignment  Phase       Rungs                                         Status

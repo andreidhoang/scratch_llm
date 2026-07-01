@@ -74,11 +74,11 @@ uv pip install torch triton
 Ensure the GPU is active and the kernel test harness works:
 ```bash
 nvidia-smi
-# Run a baseline roofline bench
-PYTHONPATH=src uv run python -c "from scratch_llm.kernels.bench import matmul_roofline; \
-  from scratch_llm.kernels.matmul import matmul_naive; matmul_roofline(matmul_naive, 4096, 4096, 4096)"
-# Run the GPU-specific tests
-uv run pytest -m gpu tests/test_matmul.py
+# Confirm the measurement harness + GPU work (kept apparatus: scratch_llm.bench)
+PYTHONPATH=src uv run python -c "from scratch_llm.bench import measure_hbm_bandwidth; \
+  print(f'HBM {measure_hbm_bandwidth()/1e12:.2f} TB/s')"
+# Run the GPU-specific tests (the kept FA2 kernel)
+uv run pytest -m gpu tests/test_flash_attention_triton.py
 ```
 
 ### C. General Testing
