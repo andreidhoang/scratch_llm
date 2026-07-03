@@ -61,6 +61,27 @@ batched row == single-stream. Remaining for Rung-3 close: **R3b** (continuous sc
 + join/leave, ≥2× vs static — R3.4/R3.5), which needs the static `BatchedKVCache` buffer (the R4.1/R4.4
 linchpin). Correction logged: eager does not mask amortization — it amortizes the fixed launch overhead.
 
+### Pre-registration CORRECTION + R3b registration (2026-07-03, before build)
+
+The R3.4 row above registered **≥2× on a 16×128 + 16×512 trace** — that gate is **analytically
+unreachable**: the spec note inverted idle-fraction and utilization (16·384 idle slot-steps of 32·512 =
+37.5% *idle* → **utilization 62.5%**, and perfect continuous batching on a saturated queue is bounded by
+1/util = **1.6×**, ~1.4–1.5× after the admission-prefill tax). Built as registered, the kill criterion
+("<2× ⇒ scheduler not refilling") would have misfired on a *correct* scheduler. Model + corrected gates
+(spec: `performance/notes/A1_R3_continuous_batching.md` §2, corrected in place with provenance):
+
+`speedup ≈ max_len / (mean_len + B·τ_p/τ)` — static-wave util = mean_len/max_len; admit tax ≈ B·τ_p/τ.
+
+| # | experiment (B=32, prompt 32, GQA-4 0.84B compiled) | predicted | measured | bound | note |
+|---|---|---|---|---|---|
+| R3.4 | continuous vs static-wave, **heavy-tail 24×64+6×256+2×512** | **≥2×** (point ~2.7×; ceiling 4.0×) | — (pending) | — | the corrected primary gate |
+| R3.4s | continuous vs static-wave, 16×128+16×512 (as first registered) | ~1.4–1.5× (ceiling 1.6×) | — (pending) | — | sensitivity: win is a fn of length dispersion |
+| R3.6 | TTFT p95 continuous vs static-wave (queued trace) | **≥4× lower** | — (pending) | — | admit-on-slot-free vs wait-for-wave-end |
+
+R3.3 (ragged oracle) and R3.5 (ITL cost) stand as registered. Kill lines updated: continuous < 0.8× its
+*analytic ceiling* ⇒ measure slot utilization first (util≈100% ⇒ prefill stalls; <90% ⇒ refill bug);
+compile recompiling every step ⇒ a dynamic shape leaked (fix before benching — it forfeits R4.4 capture).
+
 ### Pre-registration — A1 R2 GQA/MQA reduction (predict-before-run, D5)
 
 Registered 2026-07-01 BEFORE running `bench/kv_memory.py`. Spec: `performance/notes/A1_R2_gqa.md`.

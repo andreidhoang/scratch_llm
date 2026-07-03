@@ -21,9 +21,11 @@ Done (2026-07-01): R1 overhead-strip (torch.compile 15%→53% HBM). R2 GQA/MQA D
   [FACT]. (Correction: eager also amortizes — the fixed ~20ms launch overhead spreads over B.)
 Next action (R3b — continuous scheduler, Orca iteration-level): build the static BatchedKVCache
   [B,H_kv,max_ctx,d_head] buffer + per-row length mask + per-row RoPE positions (variable lengths), then
-  the admit/decode/evict loop. DoD R3.4: ≥2× aggregate vs static batching on a mixed 128/512 trace (+ slot
-  utilization to explain it); R3.5: report ITL/TTFT via serving/metrics. Oracle: each request == standalone
-  greedy. Kill: continuous <2× ⇒ scheduler not refilling (measure utilization first).
+  the evict/admit/decode loop. DoD R3.4 (CORRECTED 2026-07-03 — the 128/512 trace's ≥2× was arithmetic
+  error, ceiling 1.6×): ≥2× aggregate vs static-wave on the heavy-tail trace 24×64+6×256+2×512 (predict
+  ~2.7×, ceiling 4.0×) + the 16/16 trace as sensitivity (~1.4–1.5×) + slot utilization explaining both;
+  R3.5/R3.6: ITL/TTFT via serving/metrics. Oracle: each request == standalone greedy. Kill: continuous
+  <0.8× analytic ceiling ⇒ check utilization (100% ⇒ prefill stalls; <90% ⇒ refill bug).
 LINCHPIN (built in R3b): the static BatchedKVCache buffer IS the R4.1 (paged) / R4.4 (cudagraph) prereq —
   one refactor, three rungs. R3b needs the per-row-length attention path (extend model attention: per-row
   positions + key-padding mask; uniform path unchanged).
