@@ -54,19 +54,21 @@ Phase 1d  A4 Rungs 0–3 (naive → FA2 WMMA)           sm_120 standing   ~1 wee
 Phase 1e  A5 Rungs R0–R4 (numerics + NVFP4 math)    sm_120 standing   ~1 week
 ───────────────────────────────────────────────────────────────────────────────────
 Phase 2   H100 batch  (A2§4, A3 rungs3-4+§4.1, A4 rung4/FA3, A5 FP8-WGMMA)
-          Rent 1× H100 SXM (~$2/hr)                                  ~8–12 H100-hrs
+          + single-GPU frontier serving block (70B-FP8 · gpt-oss-120b)
+          Rent 1× H100 SXM (~$2–2.5/hr)                              ~12–15 H100-hrs
 ───────────────────────────────────────────────────────────────────────────────────
 Phase 3   B200 batch  (A3 §4.2–4.3 tcgen05/NVFP4-MMA, A5 §7 NVFP4 B200)
-          Rent 1× B200 (~$4/hr)                                       ~4–6 B200-hrs
+          Rent 1× B200 (~$4–7/hr)                                     ~4–6 B200-hrs
 ───────────────────────────────────────────────────────────────────────────────────
-Phase 4   A6 single-node  (8× H100 SXM node, rungs 0–2)
-          Rent 8× H100 node (~$23/node-hr)                            ~4–6 node-hrs
+Phase 4   THE SERVING DAY — a frontier MoE on one NVLink domain (ADR-0012)
+          A6 R0–R1 + DeepSeek-R1 FP8: TP×EP · MLA KV · PD-disagg
+          Rent 8× H200 SXM node, ON-DEMAND (~$20–32/node-hr)          ~6–10 node-hrs
 ───────────────────────────────────────────────────────────────────────────────────
-Phase 5   A6 multi-node + A7 capstone
-          Rent 2-node, 16× H100 + H100/B200 for capstone kernels     ~6–10 hrs
+Phase 5   OPTIONAL (training-leaning): A6 multi-node EP + 1F1B pipeline
+          + A7 capstone kernel polish (H100/B200 hours, not cluster)  ~0–10 hrs
 ───────────────────────────────────────────────────────────────────────────────────
-Total est. cost (rough): <$300 for A1–A5 (single-GPU); $100–200 H100 batch;
-                          $50–100 B200 batch; $150–200 multi-GPU (A6). Budget: ~$700.
+Total est. (inference track, ADR-0012): ~$25–45 (P2) + ~$25–45 (P3) + ~$150–320 (P4)
+          + ~$30–50 (A7 polish) [+ ~$50–100 optional P5] ≈ **$230–460**  (old ~$700 retired)
 ```
 
 ---
@@ -218,9 +220,19 @@ measurement for every sm_120-runnable rung; the PTX artifact (A3) is written.
 | 10th | A3 §4.1: warp-specialized persistent (target ≥85% of H100 dense) | 1 hr |
 | 11th | A4 Rung 4: FA3-class kernel (start from CUTLASS/CuTe; warp-spec + TMA + ping-pong + FP8) | 2 hr |
 | 12th | A5 FP8-WGMMA (DeepGEMM two-level accumulation on Hopper) | 1 hr |
-| **Total** | | **~12 H100-hrs ≈ ~$24** |
+| 13th | **Serving block S1** — Llama-3.3-70B FP8 single-GPU: B=1 decode vs roofline; batch sweep; KV-headroom audit | 1.5 hr |
+| 14th | **Serving block S2** — gpt-oss-120b (MXFP4-native MoE, single-GPU by design): B=1 + aggregate; MoE-vs-dense decode contrast | 1 hr |
+| **Total** | | **~14–15 H100-hrs ≈ ~$30–45** |
 
 **Critical: log EVERY measurement to bench/RESULTS.md BEFORE the instance is released.**
+
+**Serving-block pre-registrations (S1–S3 — copy into bench/RESULTS.md before the session):**
+
+| # | experiment | predicted | derivation / bound |
+|---|---|---|---|
+| S1 | Llama-3.3-70B FP8, B=1 decode tok/s | **35–45** (roofline ceiling **47.9**) | `3.35 TB/s ÷ 70 GB weights`; engines reach 75–90% of the wall (our sm_120 compiled path measured 53–71% — Hopper fused paths do better) → memory-bound |
+| S2 | KV headroom, 70B-FP8 on 80 GB | **~3–5 GB free ⇒ only ~10–15 K cached tokens** (GQA-8 BF16 = 327.7 KB/tok) ⇒ tiny max batch | ~74 GB usable − 70 GB weights. THE single-GPU capacity lesson: a dense 70B on H100 barely batches — this is why FP8-KV, H200 capacity, and MLA exist (Phase-4 P5 completes the argument) |
+| S3 | gpt-oss-120b (5.1B active, MXFP4), B=1 decode | **100–250 tok/s — latency-floor-bound**, NOT the naive ~1,100 | active weights ≈ 2.7–3 GB/tok ÷ 3.35 TB/s ≈ 0.9 ms; per-layer launch/attention floors dominate — the small-active-MoE preview of Phase-4 P2's node-scale version |
 
 ---
 
@@ -249,51 +261,113 @@ dense. The jump to B200 should only happen once you've exhausted H100 headroom.
 
 ---
 
-## Phase 4 — A6 Single-Node (8× H100 SXM)
+## Phase 4 — THE SERVING DAY: a real frontier MoE on one NVLink domain (8× H200)
 
-**Gate:** Phases 1–3 complete; A1–A5 all DoD boxes checked.
+> **Re-aimed 2026-07-03 ([ADR-0012](../docs/adr/ADR-0012-inference-rental-tiers.md)).** Was: 8×H100
+> training-parallelism ladders. Now: the single most instructive rental for frontier inference —
+> bring up **DeepSeek-R1 671B FP8** on one 8×H200 NVLink node and measure every serving-native
+> distributed behavior against pre-registered numbers. A6 Rung 0 (topology/busbw) and Rung 1
+> (TP micro) execute inside this day; the training-leaning depth (1F1B pipeline, multi-node EP,
+> elastic ckpt) moves to optional Phase 5.
 
-**Single-node work (can be done without multi-node):**
-- Rung 0: nccl-tests, topology map, Ring/Tree/NVLS comparison
-- Rung 1: Megatron TP MLP (TP-8 single-node, ~100% scaling efficiency target)
-- Rung 2: 1F1B pipeline (naive → streams+events → 1F1B → interleaved)
-- §4.2: Bandwidth cliff (NVLink busbw at message sizes)
-- §4.5: Async DCP checkpoint + elastic restart
+**Gate:** Phases 1–3 complete; every sm_120/H100/B200 rung ledgered.
+**Hardware:** 8× H200 SXM (1,128 GB HBM3e, 4.8 TB/s/GPU, NVLink4 900 GB/s/GPU) — **on-demand only**
+(spec §2 rule 5). **Fallback** if H200 unavailable/mispriced: 8× H100 serving **Qwen3-235B-A22B
+FP8** (235 GB fits with 365 GB headroom) — loses the R1 flag, keeps every primitive.
 
-**Multi-node (Rung 3 + §4.1, §4.3, §4.4) → Phase 5.**
+### Why R1 is the teacher (first principles)
 
-| Order | What | Est. hrs (node-hrs @ $23/hr) |
+1. **Fit forces multi-GPU:** 671 GB FP8 weights exceed any single GPU; even the TP-8 shard is
+   83.9 GB/GPU (> H100's 80) — the model *is* the reason the node exists (ADR-0012 fit table).
+2. **MoE routing is THE 2026 serving problem:** 256 routed experts, top-8/token, 37 B active of
+   671 B — EP-vs-TP is a live measured tradeoff here, not a slide.
+3. **MLA is THE 2026 KV story:** `(512+64) × 61 L × 2 B = 70.3 KB/token` — 4.7× less than a 70B
+   GQA-8 (327.7 KB). Long-context serving economics from architecture, completing Phase 2's S2.
+4. **Honesty anchor:** SGLang/vLLM publish single-node R1-FP8 configs + numbers — our measurements
+   have a public reference to be checked against.
+
+### Pre-rental checklist (extends spec §2 rules 1–6)
+
+```
+□ Engine image pinned; the EXACT launch command smoke-tested beforehand on Tier 0/1 (small model)
+□ nccl-tests built or install rehearsed; `nvidia-smi topo -m` parse rehearsed
+□ Listing: ≥5 Gbps down, ≥1.5 TB disk, NVLink SXM (not PCIe) — verify inside the first 10 min or kill
+□ P1–P7 pre-registration rows copied into bench/RESULTS.md (from the table below)
+□ Two-load trace (bench/continuous.py make_trace: heavy-tail, saturated + shallow) adapted to the
+  engine's benchmark client — R3b finding: one trace cannot measure both throughput and TTFT
+□ On-demand instance; hard budget alarm at 12 node-hrs
+```
+
+### The day (≈ 8–8.5 node-hrs)
+
+| Hr | Block | What / gate |
 |---|---|---|
-| 1st | Rung 0: topology + nccl-tests busbw sweep + NVLS | 1 node-hr |
-| 2nd | Rung 1: TP-8 MLP | 1 node-hr |
-| 3rd | Rung 2: pipeline (all variants) | 1.5 node-hr |
-| 4th | §4.2 (single-node portion): NVLink busbw chart | 0.5 node-hr |
-| 5th | §4.5: checkpoint + elastic restart test | 0.5 node-hr |
-| **Total** | | **~4.5 node-hrs ≈ ~$105** |
+| 0–0.75 | Pre-flight | topo verify (all pairs NV*); **start the 671 GB weight pull immediately** (ETA gate ≤ 90 min); run the nccl-tests busbw sweep 1 KB→1 GB *while downloading* → P1 (A6 Rung 0) |
+| 0.75–1.75 | Bring-up | R1-FP8 TP-8 up; correctness smoke (5 greedy prompts + logprob sanity); B=1 decode tok/s → P2 |
+| 1.75–3.25 | Throughput | concurrency sweep 1→256: aggregate tok/s + ITL/TTFT percentiles; locate the aggregate knee; experts-hit-vs-B curve → P3; cross-check published engine numbers |
+| 3.25–4.75 | EP vs TP | expert-parallel vs TP-8 at B∈{32,64,128}: throughput + per-expert load histogram → P4; A6 Rung-1 TP micro (20 min: the 2-AllReduce/layer count check) |
+| 4.75–5.5 | MLA KV audit | engine-reported KV/token vs the 70.3 KB analytic; max concurrent×ctx vs the ~6.4 M-token pool → P5 |
+| 5.5–7.0 | PD-disagg | prefill/decode split vs co-located on the two-load trace: TTFT p95 + goodput under SLO → P6 |
+| 7.0–7.75 | Stretch | MTP spec-decode acceptance + speedup → P7; re-run anything noisy |
+| 7.75–8.25 | Ledger | every number → bench/RESULTS.md; postmortem skeleton → `performance/notes/A6_serving_day.md`; release |
+
+### Pre-registered predictions P1–P7 (derivations inline; copy to RESULTS.md before the session)
+
+| # | experiment | predicted | derivation / bound |
+|---|---|---|---|
+| P1 | AllReduce busbw, large msg (≥256 MB) | **≥720 GB/s** (80% of the 900 GB/s line rate); small msg (1–8 MB, decode-sized): **latency floor 15–40 μs** | ring efficiency at line rate; the small-msg floor is the input to P2 |
+| P2 | R1 B=1 decode tok/s | **30–60 — LATENCY-bound, not bandwidth-bound** | naive active-weight roofline: ~37 GB active FP8 ÷ 8 GPUs ÷ 4.8 TB/s ≈ 0.96 ms → ~1,000 tok/s. Real bound: 61 layers × (2 AllReduces × 20–40 μs + launches + routing) ≈ 4–8 ms/token. THE node-scale B=1 lesson (contrast the sm_120 arc: overhead → memory; here: latency) |
+| P3 | aggregate decode @ concurrency ≥128 | **≥3,000 tok/s**; the scaling knee arrives LATER than dense | MoE amortization is weaker than dense: E[experts hit] = 256·(1−(1−8/256)^B) → B=32 hits ≈163/256, so expert-weight reads keep growing with B until B ≫ E/k = 32 — dense R3a saw AI≈B; register the bent curve |
+| P4 | EP-8 vs TP-8, B ≥ 64 | **EP ≥1.2×**, with the imbalance histogram logged | wire/token: EP a2a ≈ top-k·h·(1 B fp8 dispatch + 2 B bf16 combine)·(7/8) ≈ **150 KB** vs TP-MoE AllReduce ≈ 61 × 2·(7/8)·7168·2 B ≈ **1.5 MB** — ~10× less wire and no replicated expert reads; risk = hot experts (per-expert load ties to `moe.py`'s aux-loss-free balancing) |
+| P5 | MLA KV/token (engine-reported) | **≈70 KB/token BF16 (±10%)** | (512+64)×61×2 B; capacity: free-KV-GB ÷ 70.3 KB ≈ the ~6 M-token pool (e.g. 128 × 50 K ctx) |
+| P6 | PD-disagg vs co-located | **TTFT p95 ≥2× better at matched throughput** (or goodput ≥1.3× under SLO) | co-located prefill bursts evict decode from the batch (R4.2/R4.6 at scale); measured on the two-load trace — shallow for TTFT, saturated for throughput (R3b lesson) |
+| P7 | MTP spec-decode (stretch) | acceptance **60–80%**, decode **×1.5–2** | R1 ships an MTP head; acceptance is domain-dependent — register the band, measure |
+
+### DoD (all `[FACT]`-ledgered BEFORE release)
+
+- [ ] P1–P6 measured or explicitly killed with the observed blocker (P7 stretch)
+- [ ] The six headline numbers in RESULTS.md: busbw large/small · B=1 tok/s + its bound · aggregate
+      peak + knee-B · EP:TP ratio + balance histogram · KV/token + pool size · disagg delta
+- [ ] Postmortem note (1 page, peer-review quality): what the node taught that sm_120 could not
+
+### Kill criteria
+
+- Bring-up > 2 h → swap to Qwen3-235B-A22B FP8 (battle-tested, fits everywhere); the day's physics
+  survives the model swap.
+- Topo shows PIX/PHB, or weight-pull ETA > 90 min → kill the listing inside hour 1 (sunk ≤ $30).
+- An engine bug blocks EP or disagg → do NOT debug the engine on node-time; measure the TP-8
+  surface completely, file the gap in the postmortem.
+
+**Cost: 6–10 node-hrs × $20–32 ≈ $150–320.**
 
 ---
 
-## Phase 5 — A6 Multi-Node + A7 Capstone
+## Phase 5 — OPTIONAL multi-node A6 (training-leaning) + A7 Capstone kernel polish
 
-**Gate:** A6 single-node DoD boxes checked.
+> **Re-scoped 2026-07-03 (ADR-0012): the multi-node block is CUT from the inference track.** The
+> one inference-relevant fact it adds — the **~18× NVLink→IB cliff** (§4.2, 900 → ~50 GB/s/dir) —
+> is legible from Phase-4 single-node numbers + nccl-tests documentation. Production multi-node
+> serving (prefill/decode fleets, cross-node DeepEP) reuses the primitives Phase 4 measures; what
+> it adds is RDMA plumbing and ops practice — a job, not a rental. Rent only for A6 completeness
+> or A7 Track C. **A7 Track B (kernel suite) stays committed** — it needs H100/B200 hours, not a
+> cluster.
 
-**Multi-node (2-node, 16× H100 over InfiniBand NDR):**
-- Rung 3: EP all-to-all (NCCL AllToAll → DeepEP); DeviceMesh DP×TP×PP×EP
-- §4.1: EP overlap under compute (DualPipe decomposition); nsys zero-SM proof
-- §4.2: Bandwidth cliff (IB segment): annotate the full NVLink→IB ratio
-- §4.3: MFU at 16/32/64 GPUs; six-killer decomposition
-- §4.4: DeviceMesh single-config re-mapping
+**Optional multi-node scope (2-node, 16× H100 over IB), if pursued:**
+- A6 Rung 2 (1F1B pipeline — moved from Phase 4; PP is a cross-node serving tool, a single-node
+  training exercise) + Rung 3: EP all-to-all (NCCL AllToAll → DeepEP); DeviceMesh DP×TP×PP×EP
+- §4.1 EP overlap under compute (nsys zero-SM proof) · §4.2 the IB segment of the cliff ·
+  §4.3 MFU at 16/32/64 · §4.4 DeviceMesh re-mapping · §4.5 async DCP + elastic restart
 
-**A7 Capstone (Track B — Kernel Suite):**
+**A7 Capstone (Track B — Kernel Suite, committed):**
 - Integrate A2§4 WGMMA GEMM + A4 FA3 attention + A5 NVFP4
 - Benchmark all three vs their ceilings; write the design doc
 - PR to FlashInfer / CUTLASS / vLLM (strongly encouraged)
 
-| Phase | Est. cost |
+| Item | Est. cost |
 |---|---|
-| Multi-node A6 | ~$50–100 (cluster hrs) |
-| A7 capstone (H100/B200 kernel polish) | ~$30–50 |
-| **Total Phase 5** | **~$80–150** |
+| A7 capstone (H100/B200 kernel polish) — committed | ~$30–50 |
+| Multi-node A6 (2-node 16× H100) — optional | ~$50–100 |
+| **Total Phase 5** | **~$30–50 (+$50–100 optional)** |
 
 ---
 
@@ -302,15 +376,18 @@ dense. The jump to B200 should only happen once you've exhausted H100 headroom.
 | Phase | Duration | Compute cost (est.) |
 |---|---|---|
 | 1a–1e (sm_120) | 6–8 weeks part-time | $0 |
-| 2 (H100 batch) | 1 session (~12 hrs) | ~$24 |
-| 3 (B200 batch) | 1 session (~5 hrs) | ~$25 |
-| 4 (8× H100 single-node) | 1–2 sessions | ~$105 |
-| 5 (multi-node + capstone) | 1–2 sessions | ~$80–150 |
-| **Total** | **~8–12 weeks** | **~$250–$310** |
+| 2 (H100 batch + serving block) | 1 session (~12–15 hrs) | ~$30–45 |
+| 3 (B200 batch) | 1 session (~4–6 hrs) | ~$25–45 |
+| 4 (**8× H200 serving day**) | 1 session (~6–10 node-hrs) | ~$150–320 |
+| 5 (A7 kernel polish; multi-node optional) | 0–2 sessions | ~$30–50 (+$50–100 opt.) |
+| **Total (inference track)** | **~8–12 weeks** | **~$235–460** |
 
-Budget-conscious path: Phases 1 and 2 alone deliver A1–A5 with H100 frontier kernels for ~$25 in
-rental spend and most of the principal-level competency. Phase 3 (B200) and Phase 4+ (multi-GPU)
-are the frontier edge; they can be deferred without blocking the capstone kernel work.
+**Three rental sessions, peak 8 GPUs concurrent** (ADR-0012). Budget-cut order if constrained:
+drop B200 first (defer — DELTA's NVFP4 headline eventually needs it) → fold the Phase-2 single-GPU
+session into the node day (H200 is sm_90a too; the kernels compile there) → **the node is
+irreducible**: a single GPU cannot teach frontier serving, because frontier serving is
+definitionally a multi-GPU problem (the weights don't fit). Phases 1+2 alone still deliver A1–A5
+with Hopper frontier kernels for ~$30–45.
 
 ---
 

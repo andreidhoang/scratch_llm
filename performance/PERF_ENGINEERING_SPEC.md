@@ -56,14 +56,32 @@ rung that requires WGMMA/TMA needs a rented H100. Plan accordingly.
 
 ---
 
-## 2. Rental Plan
+## 2. Rental Plan — capability tiers, not GPU counts (ADR-0012, 2026-07-03)
 
-| When to rent | Hardware | Est. rate | Enables |
-|---|---|---|---|
-| After A1–A2 rungs 0–6 correct on sm_120 | 1× H100 SXM (sm_90a) | ~$2/hr | A2 §4.1–4.5; A3 rungs 3–4 + §4.1; A4 rung 4 (FA3); A5 FP8-WGMMA |
-| After H100 correctness proven | 1× B200 (sm_100a) | ~$4/hr | A3 §4.2–4.3 (tcgen05/NVFP4); A4 §7 (FA4 stretch) |
-| After A5 done | 8× H100 SXM node | ~$23/node-hr | A6 single-node TP+PP |
-| After A6 single-node | 2-node, 16× H100 | cluster rate | A6 multi-node EP + A7 if Track C |
+> **First principle: a rental buys architecture-gated behaviors, not FLOPs.** Three hard gates
+> decide what a tier can teach, and no GPU count below a gate substitutes for it:
+> **(1) ISA generation** — `wgmma`/TMA/FP8-WGMMA are sm_90a-only; `tcgen05`/TMEM/native-NVFP4 are
+> sm_100a-only; the standing sm_120 has neither (§1). **(2) HBM bandwidth & capacity** — decode is
+> memory-bound (A1, measured), so the wall itself is the spec; B=1 ceiling = `BW / weight-bytes`.
+> **(3) Interconnect domain** — TP/EP/collectives/disaggregation are only real inside one NVLink
+> domain (900 GB/s/GPU); crossing nodes is the ~18× IB cliff, plumbing not primitives.
+
+| Tier | Hardware | Gate it opens | B=1 ceiling, 70 GB-FP8 dense | Enables | Sessions × hrs · est. cost |
+|---|---|---|---|---|---|
+| 0 own | RTX PRO 4000 Blackwell (sm_120, 24 GB, 0.55 TB/s) | — (~80% of all work) | n/a (24 GB; 0.84B bf16 → 327 tok/s) | every non-ISA-gated rung of A1–A5; all serving algorithms + oracles + traces | standing · $0 |
+| 1 rent | 1× H100 SXM (80 GB, 3.35 TB/s, sm_90a) | ISA: WGMMA/TMA/FP8 | 47.9 tok/s | A2 §4.1–4.5; A3 R3–4 + §4.1; A4 R4 (FA3); A5 FP8-WGMMA; **+ single-GPU frontier serving block** (Phase 2) | 1 × 12–15 h · ~$25–45 |
+| 2 rent | **8× H200 SXM NVLink node** (1,128 GB, 4.8 TB/s/GPU) — *the crown* | interconnect: one NVLink domain **+ capacity: R1-FP8 fits** | 68.6 tok/s | A6 R0–R1 + **the frontier-MoE serving day**: DeepSeek-R1 FP8 TP×EP, MLA KV at scale, PD-disagg (Phase 4) | 1 × 6–10 h · ~$150–320 |
+| 3 rent | 1× B200 (~192 GB, ~8 TB/s, sm_100a) | ISA: tcgen05/TMEM/NVFP4 | ~114 tok/s | A3 §4.2–4.3; A5 §7; DELTA NVFP4-state probe | 1 × 4–6 h · ~$25–45 |
+| 4 skip | 2-node 16× over IB | the ~18× cliff itself | — | A6 R3 + §4.1/4.3/4.4 (optional; training-leaning) | optional |
+
+**The capacity gate, worked (why Tier 2 is H200, not H100):** DeepSeek-R1 FP8 weights ≈ **671 GB**
+vs 8×H100 = 640 GB raw (~600 usable) — *does not fit*, and the TP-8 shard (83.9 GB/GPU) exceeds one
+H100's 80 GB anyway. 8×H200 = 1,128 GB → fits with ~450 GB for KV. MLA makes that KV budget huge:
+R1 caches `(512+64) × 61 L × 2 B = 70.3 KB/token` (vs Llama-70B GQA-8: 327.7 KB — 4.7×), so
+~450 GB ≈ **6.4 M cached tokens** (128 concurrent × 50 K ctx). Fallback if H200 unavailable:
+8×H100 serving **Qwen3-235B-A22B FP8** (235 GB — fits with 365 GB headroom); every primitive
+survives, only the R1 flag is lost. Budget-cut order: B200 → fold Tier 1 into the node day →
+the node itself is irreducible (frontier serving is a multi-GPU problem, definitionally).
 
 **Rental discipline (non-negotiable):**
 
@@ -74,6 +92,13 @@ rung that requires WGMMA/TMA needs a rented H100. Plan accordingly.
 3. Checkpoint every rung's results to `bench/RESULTS.md` before the instance terminates.
 4. On B200: read `tcgen05` PTX + Colfax Part 1–4 BEFORE renting. Compile locally first (cross-
    compile or check sm_120 ptx for sm_100 difference) to catch syntax bugs cheaply.
+5. **Node day is on-demand, never interruptible** — a preempted TP/EP bring-up burns the day. A
+   single-GPU kernel session may use interruptible pricing (work is checkpointed per rung).
+6. **Verify the node before the clock matters:** `nvidia-smi topo -m` must show NV-links (NV8/NV18)
+   between all pairs — reject PIX/PHB (PCIe) listings; ≥5 Gbps down + ≥1.5 TB disk (the R1 weight
+   pull is 671 GB: ~20 min at 5 Gbps, kill the listing if ETA > 90 min); engine flags (SGLang/vLLM
+   TP/EP/disagg) change fast — pin the engine image + smoke the exact launch command on Tier 0/1
+   *before* the node session.
 
 ---
 
@@ -413,10 +438,18 @@ NVFP4 native MMA throughput on B200 — batch with A3 rental.
 
 ### A6 — Distributed Training & Inference as One Communication Problem
 
+> **Inference re-aim (ADR-0012, 2026-07-03).** A6's *primitives* stand, but their execution vehicle
+> is the **Phase-4 serving day on 8×H200** (`PERF_PLAN.md` Phase 4): Rung 0 (topology + busbw) and
+> Rung 1 (TP MLP micro) run inside it; the serving-native distributed surface — TP×EP on a real
+> frontier MoE, NVLink collectives at decode message sizes, PD-disaggregation — replaces the
+> training-leaning depth. Rung 2 (1F1B pipeline: PP is a cross-node *serving* tool but a
+> single-node *training* exercise) and Rung 3 + §4.1/§4.3/§4.4 (multi-node) move to the optional
+> Phase 5 — the one fact they add for inference (the ~18× NVLink→IB cliff) is §4.2, learnable from
+> single-node numbers + nccl-tests docs.
+
 **Hardware:**
-- Rung 0 (NCCL baseline + topology map): need at least 2 GPUs; rent 8× H100 SXM node
-- Rungs 1–2 (TP/PP single-node): same 8× H100 node
-- Rung 3 + §4 (multi-node EP): 2-node, 16× H100 cluster
+- Rung 0 (NCCL baseline + topology map) + Rung 1 (TP micro): inside the Phase-4 **8× H200** day
+- Rung 2 (1F1B pipeline) + Rung 3 + §4 multi-node EP: **optional Phase 5** (2-node, 16× H100)
 
 **What to build (scope):**
 

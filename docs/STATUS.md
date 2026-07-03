@@ -94,8 +94,11 @@ gate. Tracked in the Capstone section below; the build spine is in
 > CS336 A5 RL / DELTA. A2–A5 kernel skills are direct DELTA prerequisites. Spec + plan:
 > [`performance/PERF_ENGINEERING_SPEC.md`](../performance/PERF_ENGINEERING_SPEC.md) ·
 > [`performance/PERF_PLAN.md`](../performance/PERF_PLAN.md).
-> Hardware: standing GPU (sm_120, 0.55 TB/s, ridge≈130 FLOP/byte) for Phase 1; rent H100 (Phase 2),
-> B200 (Phase 3), 8×H100 (Phase 4), 2-node (Phase 5). Estimated total: ~$250–$310 in GPU spend.
+> Hardware: standing GPU (sm_120, 0.55 TB/s, ridge≈130 FLOP/byte) for Phase 1; then **three
+> capability-tier rentals** ([ADR-0012](adr/ADR-0012-inference-rental-tiers.md)): 1× H100 SXM
+> (Phase 2, Hopper ISA + single-GPU serving), **1× 8×H200 NVLink node (Phase 4 — the frontier-MoE
+> serving day: DeepSeek-R1 FP8, TP×EP, MLA KV, PD-disagg)**, 1× B200 (Phase 3, tcgen05/NVFP4);
+> multi-node is optional. Estimated total: ~$235–460 in GPU spend, peak 8 GPUs concurrent.
 
 **Current node: Phase 1a — A1 Rung 4.1 (PagedAttention: reclaim the measured 1.27× padding tax)**
 _R0–R3 shipped 2026-07-01→03. R3b (2026-07-03): continuous batching measured **2.30× wall / 2.93×
@@ -122,8 +125,9 @@ A4 FlashA   1d (sm120)  R0-R3 + §4.3 variant + backward               ⬜  not 
             Phase 2     R4 FA3-class (H100)                            ⬜  gate: Phase 2
 A5 Quant    1e (sm120)  R0-R4 + §4.3 PTQ                              ⬜  not started
             Phase 3     §7 NVFP4 native MMA (B200)                    ⬜  gate: Phase 3
-A6 Dist     Phase 4     R0-R2 + §4.2-4.5 single-node (8×H100)        ⬜  gate: Phase 4
-            Phase 5     R3 + §4.1 multi-node (2-node, 16×H100)        ⬜  gate: Phase 5
+A6 Dist     Phase 4     R0-R1 inside the 8×H200 SERVING DAY (R1-FP8   ⬜  gate: Phase 4
+                        TP×EP · MLA KV · PD-disagg; ADR-0012)
+            Phase 5     R2 pipeline + R3/§4.1 multi-node — OPTIONAL    ⬜  opt-in only
 A7 Cap      Phase 5     Track B kernel suite                           ⬜  gate: A1-A6 done
 ```
 
@@ -204,4 +208,4 @@ and base share infrastructure, they do not compete.
 
 ADR-0001 tokenizer of record · ADR-0002 GQA in the substrate · ADR-0003 sampler parity · ADR-0004
 dense default / MoE opt-in · ADR-0006 rollout log-prob convention · ADR-0007 MoE FFN (opt-in A1
-extension) · ADR-0008 SGLang is Hopper-only on Ada · ADR-0011 kernel-framework policy (Triton-primary, CUDA/CUTLASS second-tier).
+extension) · ADR-0008 SGLang is Hopper-only on Ada · ADR-0011 kernel-framework policy (Triton-primary, CUDA/CUTLASS second-tier) · ADR-0012 inference rental tiers (3 sessions: H100 · 8×H200 serving day · B200; multi-node optional).
