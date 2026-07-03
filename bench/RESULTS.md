@@ -133,6 +133,33 @@ the kernel result itself will measure.
 Kill lines: gather ≠ bit-exact ⇒ table bug (fix first). frag >8% ⇒ allocator bug. Kernel slower ⇒
 ship capacity win alone, kernel → A4 tie-in with profile. Refcount leak after churn ⇒ CoW bug.
 
+### Measured — A1 R4.1 PagedAttention (2026-07-03, `bench/continuous.py --r41`; 13 new tests green)
+
+Four arms, heavy-tail ×8 waves, B=32, compiled decode + eager prefill, scheduling identical
+(1,396 continuous steps in every arm — storage is the only variable). dynamo unique_graphs=4.
+
+| # | rung / artifact | metric | predicted | measured | bound | root cause / note |
+|---|---|---|---|---|---|---|
+| P4.1.1 | frag + capacity | frag %, rows/GB | 4–8% heavy-tail; 10–20× | **frag 5.0%** (dead-center); **capacity ×9.3** (peak-alloc 7,040 tok vs 65,536 reserved) | — | frag exactly as derived (E[tail]≈8/⟨ℓ⟩≈160). Capacity ×9.3 on the STRICTEST accounting (peak concurrent allocation — the provisioning number) vs the band floor 10 (mean-based would read higher); band edge missed by 7%, mechanism confirmed |
+| P4.1.2 | contiguous-match oracle | bit-exact | torch.equal | **CONFIRMED** — paged == dense bit-exact on deliberately scattered blocks; boundary 15/16/17/32; poisoned free blocks; churn leak-free; CoW refcounts balance | — | 10 CPU tests; the kernel path additionally fp32 ≤1e-5 / bf16 ≤2e-2 + greedy token-exact e2e (3 GPU tests) |
+| P4.1.3 | paged-gather step (negative control) | +10–25% | **+6.3%** (10.26 vs 9.65 ms/step; ×2.11 vs wave-dense) | memory | direction CONFIRMED (paged storage alone loses throughput); magnitude below band — inductor fuses the gather into the attention read better than the hand model. Registering the miss: the gather-copy term was over-modeled ~2× |
+| P4.1.4 | fused Triton paged decode | ≤8.3 ms/step; ≥2.6× vs wave | **5.90 ms/step · ×3.52 vs wave-dense · 3,528 tok/s agg (+55% over dense-continuous)** | memory | **Reclaimed the ENTIRE 1.27× mixed-age tax and beat every dense arm**: ITL p50 6.2 ms ≈ wave-dense's 6.1 (uniform-march) — reading only real tokens via the table removes padding bytes AND the padded-SDPA compute. Tax decomposition (the open question from R3b): ~3.2 ms was fp32-score materialization + repeat_interleave + softmax-over-padding; only ~0.5 ms was bytes — as the spec hypothesized |
+
+**Engineering findings `[FACT]`:** two triton-under-`torch.compile` type-inference traps (both compile
+fine in eager triton): (1) a python-float loop carry (`m = -inf`) promotes to f64 → "loop-carried
+variable re-assigned to fp64"; carry explicitly-typed fp32 tensors. (2) a runtime python-float
+kernel arg (`scale`) is passed as f64 by the inductor wrapper and contaminates the whole
+online-softmax carry chain; cast the product to fp32 in-kernel.
+
+**Verdict (A1 R4.1 CLOSED — P4.1.1–P4.1.4 `[FACT]`):** PagedAttention delivers both halves on this
+card: **~20× less KV memory held** (5% frag vs 95% reservation waste; ×9.3 peak-provisioned
+capacity) *and* — only with the fused kernel — **+55% throughput** over the dense slab at identical
+scheduling (×3.52 vs static-wave overall). The pre-registered warning stands confirmed: paged
+storage WITHOUT a paged kernel is a throughput loss (+6.3%/step) — the win is storage+kernel as a
+unit, which is exactly what vLLM shipped. ITL p99 ~29 ms admission spikes persist in all arms —
+prefill-in-the-decode-stream, the freshly-measured motivation for **R4.2 (chunked prefill)**.
+The fixed-address block pool remains CUDA-graph-capturable (R4.4's substrate).
+
 ### Pre-registration — A1 R2 GQA/MQA reduction (predict-before-run, D5)
 
 Registered 2026-07-01 BEFORE running `bench/kv_memory.py`. Spec: `performance/notes/A1_R2_gqa.md`.

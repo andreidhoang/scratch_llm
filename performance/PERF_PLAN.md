@@ -12,8 +12,19 @@
 ## Current Node
 
 ```
-Phase: 1a — A1 R0–R3 DONE → R4.1 (PagedAttention) next
+Phase: 1a — A1 R0–R3 + R4.1 DONE → R4.2 (chunked prefill) next
 Hardware: Standing GPU (sm_120)
+Done (2026-07-03, R4.1): PagedKVCache (16-tok block pool, block table, on-demand alloc, trash-block
+  write safety, refcounted prefix sharing/CoW, committed-blocks admission guard) + fused Triton
+  paged decode kernel, behind the new SlotKVCache base (dense + paged, one slot contract). Measured
+  (RESULTS.md P4.1.1–P4.1.4): frag 5.0% (pred 4–8%), capacity ×9.3 peak-provisioned; gather-only
+  control +6.3%/step (paged storage alone LOSES — as registered); **kernel 5.90 ms/step = the whole
+  R3b mixed-age tax reclaimed and better: ×3.52 vs wave-dense, 3,528 tok/s (+55% over dense-cont)**.
+  Tax decomposition: ~3.2 ms padded-SDPA compute, ~0.5 ms bytes. 13 new tests; 157 CPU green.
+Next action (R4.2 — chunked prefill): interleave prefill chunks between decode steps; DoD =
+  TTFT/ITL curve vs chunk size, no output divergence (oracle = R3b greedy). Motivation measured:
+  ITL p99 ~29 ms admission spikes (prefill-in-the-decode-stream) in every R4.1 arm vs ~7 ms p50.
+  Then R4.3 (spec decode) → R4.4 (CUDA-graph decode over the fixed-address block pool).
 Done (2026-07-03): R3b continuous scheduler SHIPPED & MEASURED. model.py: BatchedKVCache static slot
   buffer (write-then-mask, per-row RoPE positions + key masks, NaN-free by construction) + PrefillView
   (admission prefill duck-types the uniform causal path); serving/continuous.py: one engine, two policies
@@ -85,8 +96,8 @@ Total est. (inference track, ADR-0012): ~$25–45 (P2) + ~$25–45 (P3) + ~$150�
 | 1: KV-cache decoder (contiguous) | 🔵 | token-exact ✅; decode measured + overhead-stripped (15%→53% HBM via fusion); wall-close deferred to R4.4 | sm_120 |
 | 2: GQA/MQA | ✅ | KV/token 128/32/4 KB (32:8:1); compiled decode MQA 1.92× MHA @16K; eager control ~1× (da64bfb→R2) | sm_120 |
 | 3: continuous batching (Orca-style) | ✅ | R3a agg 66× B=1, flip @B≈128; R3b continuous 2.30× wall / 2.93× steps vs static-wave (R3.4 PASS), TTFT p95 4.9× (R3.6), oracle green — padding tax 1.27× measured → R4.1 | sm_120 |
-| 4.1: PagedAttention (16-tok blocks, Triton) | ⬜ **next** | <4% waste; contiguous-match test; reclaim the measured 1.27× padding tax | sm_120 |
-| 4.2: chunked prefill | ⬜ | TTFT/ITL curve vs chunk size | sm_120 |
+| 4.1: PagedAttention (16-tok blocks, Triton) | ✅ | frag 5.0%, capacity ×9.3; contiguous-match bit-exact (scattered/boundary/poison/CoW); **kernel 5.90 ms/step, ×3.52 vs wave, +55% vs dense-cont** — whole padding tax reclaimed | sm_120 |
+| 4.2: chunked prefill | ⬜ **next** | TTFT/ITL curve vs chunk size; kills the measured ITL p99 ~29 ms admission spikes | sm_120 |
 | 4.3: speculative decoding (lossless) | ⬜ | greedy output token-exact | sm_120 |
 | 4.4: CUDA graphs decode | ⬜ | step-time reduction on nsys; **needs static KV buffer** (cat-cache broke reduce-overhead capture 2026-07-01) — closes the R1 wall; shares the refactor with R4.1 | sm_120 |
 | 4.5: MLA latent cache (toy scale) | ⬜ | weight-absorption identity verified | sm_120 |

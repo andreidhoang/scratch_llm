@@ -100,12 +100,14 @@ gate. Tracked in the Capstone section below; the build spine is in
 > serving day: DeepSeek-R1 FP8, TP×EP, MLA KV, PD-disagg)**, 1× B200 (Phase 3, tcgen05/NVFP4);
 > multi-node is optional. Estimated total: ~$235–460 in GPU spend, peak 8 GPUs concurrent.
 
-**Current node: Phase 1a — A1 Rung 4.1 (PagedAttention: reclaim the measured 1.27× padding tax)**
-_R0–R3 shipped 2026-07-01→03. R3b (2026-07-03): continuous batching measured **2.30× wall / 2.93×
-by steps** vs static-wave on the heavy-tail trace (R3.4 PASS), TTFT p95 **4.9×** (R3.6 PASS), on the
-new `BatchedKVCache` static slot buffer + `serving/continuous.py` engine (147 CPU tests green). The
-wall-vs-steps gap is the dense buffer's padding traffic — measured at ~1.27× — which is R4.1's
-motivation, quantified. Details: `bench/RESULTS.md` §2026-07-03, node pointer `performance/PERF_PLAN.md`._
+**Current node: Phase 1a — A1 Rung 4.2 (chunked prefill: kill the measured ITL p99 admission spikes)**
+_R0–R4.1 shipped 2026-07-01→03. R3b: continuous batching **2.30× wall / 2.93× by steps** vs
+static-wave (R3.4 PASS), TTFT p95 **4.9×** (R3.6 PASS) on the `BatchedKVCache` slot buffer +
+`serving/continuous.py` engine. R4.1: `PagedKVCache` (block table, CoW, admission guard) + the
+fused Triton paged decode kernel — **frag 5.0%, capacity ×9.3, kernel 5.90 ms/step = ×3.52 vs
+wave-dense, +55% over dense-continuous** at identical scheduling; the entire R3b padding tax
+reclaimed (decomposition: ~3.2 ms padded-SDPA compute, ~0.5 ms bytes). 157 CPU + 14 GPU-marked
+tests green. Details: `bench/RESULTS.md` §2026-07-03, node pointer `performance/PERF_PLAN.md`._
 
 > **Clean slate (2026-07-01).** The exploratory Jun-29 perf kernels (GEMV/GEMM/RMSNorm CUDA +
 > `kernels/bench.py`) were removed to build A1–A7 from scratch against `PERF_ENGINEERING_SPEC.md`.
@@ -115,7 +117,7 @@ motivation, quantified. Details: `bench/RESULTS.md` §2026-07-03, node pointer `
 ```
 Assignment  Phase       Rungs                                         Status
 ──────────  ──────────  ────────────────────────────────────────────  ──────
-A1 Infer    1a (sm120)  R0-R3 + 4.1 PagedAttn + 4.2-4.6 frontier     🔵  R0-R3 done → R4.1
+A1 Infer    1a (sm120)  R0-R3 + 4.1 PagedAttn + 4.2-4.6 frontier     🔵  R0-R4.1 done → R4.2
 A2 Kernel   1b (sm120)  R0-R6 CUDA-core ladder                        ⬜  not started
             Phase 2     §4.1-4.5 WGMMA+TMA+FP8 (H100)                ⬜  gate: Phase 1b done
 A3 TC       1c (sm120)  R0-R2 WMMA + mma.sync                         ⬜  not started
