@@ -8,8 +8,9 @@ MEASURED on the standing sm120 GPU** — metrics harness → decode roofline (15
 (MQA 1.92× @16K) → **continuous batching (2.30× wall / 2.93× by steps vs static-wave)** →
 **PagedAttention (frag 5.0%, capacity ×9.3, fused Triton decode kernel 5.90 ms/step = ×3.52 vs
 wave, +55% vs dense-continuous)**. Current node: **A1 R4.2 chunked prefill**
-(`performance/PERF_PLAN.md`). CS336-A2 distributed half (DDP ✅ → ZeRO-1 → FSDP + the 100B
-one-pager) parked behind the perf ordering mandate; A3/A4/A5 clean stubs. **157 CPU + 14
+(`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
+FSDP · 100B one-pager · comms algebra, W1–W4) **+ A3 scaling ✅** (fitter a=0.469/b=0.531 +
+query planner, W5–W6) under the Delivery-Mode sprint (ADR-0014); A4/A5 next. **230 CPU + 14
 GPU-marked tests green, ruff clean, pyright 0 errors.** Rentals decided: ADR-0012 (3
 capability-tier sessions: H100 · 8×H200 serving day · B200). Mastery lessons (VI):
 [`docs/learning/`](learning/INDEX.md).
@@ -57,25 +58,25 @@ BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ 
         byte ───────────── own every layer of a language model ───────────── RL update
 
  A1 Basics      ████████████ 100%  ✅  BPE · Transformer · AdamW · train · sample
- A2 Systems     ███████░░░░░  ~60% 🟡  parked behind the perf mandate — see breakdown below
- A3 Scaling     ░░░░░░░░░░░░    0%  ⬜  IsoFLOP / Chinchilla fitter (clean stub)
+ A2 Systems     ███████████░  ~95% 🟢  distributed half ✅ 2026-07-03 (W1–W4); only rental-tier serving left
+ A3 Scaling     ██████████░░  ~85% 🟢  fitter + planner ✅ (W5–W6); Stanford-API leaderboard BLOCKED-EXTERNAL
  A4 Data        ░░░░░░░░░░░░    0%  ⬜  extract → filter → classify → MinHash dedup (clean stub)
  A5 Alignment   ░░░░░░░░░░░░    0%  ⬜  SFT → Expert-Iter → GRPO/Dr.GRPO  ◄ first SHIP after perf track
  DELTA capstone  design ✅      0%  ⬜  GDN-2 decode kernel — base-first, gated on A5 ship + Step-0
 
- ►► ACTIVE FRONT: the Performance Curriculum (§ below) — A1-serving R0–R4.1 ✅ measured, node R4.2.
+ ►► TWO ACTIVE FRONTS: perf curriculum (node R4.2) · main-track Delivery sprint (W1–W6 ✅ → A4/A5).
 ```
 
-**A2 breakdown — CS336 systems (single-GPU half done; distributed half queued behind the mandate):**
+**A2 breakdown — CS336 systems (single-GPU half ✅; distributed half ✅ shipped 2026-07-03):**
 
 ```
  make ONE GPU fast  (single-GPU half ✅)        make MANY GPUs coherent  (distributed half, gloo)
  ─────────────────────────────────────          ─────────────────────────────────────────────
  FA2 forward (oracle + Triton)   ✅              DDP  naive → flat → overlap        ✅  D1
- FA2 backward (D-vector)         ✅  K           ZeRO-1 optimizer-state sharding    ⬜  D2  (after mandate)
- activation/selective ckpt       ✅  M1          + 100B memory one-pager (written)  ⬜  D2
- mixed-precision numerics        ✅  M2          FSDP2 per-param (graded)           ⬜  D3
- KV-cache · monitors · rollout   ✅              comms algebra (DP/FSDP/TP calcs)   ⬜  D4
+ FA2 backward (D-vector)         ✅  K           ZeRO-1 optimizer-state sharding    ✅  D2  (W1 d8142ef)
+ activation/selective ckpt       ✅  M1          + 100B memory one-pager (tested)   ✅  D2  (W2 7cfb114)
+ mixed-precision numerics        ✅  M2          FSDP per-param ZeRO-3 (graded)     ✅  D3  (W3 4c806bb)
+ KV-cache · monitors · rollout   ✅              comms algebra (DP/FSDP/TP calcs)   ✅  D4  (W4 06127b5)
  roofline (53% SDPA @4k, 4090)   ✅              ── then Phase C frontier labs (opt-in) ──
  paged-KV + continuous batching  ✅  (shipped    speculative · ring-CP · TP toy · FP8 sim
    via perf-curriculum R3b/R4.1)
@@ -186,14 +187,14 @@ estimator · RLOO · off-policy epochs>1. *Adoption is tracked as green commits 
 | `utils/monitors.py` | ✅ | entropy, the KL divergences, IS ratios + ESS, reward/length stats |
 | `rollout/` client seam + `LocalBackend` | ✅ | `Rollout`/`RolloutClient` contract + CPU `LocalBackend`; per-token log-probs feed `monitors`. Spec: [`design/L2_rollout_seam_SPEC.md`](design/L2_rollout_seam_SPEC.md) |
 | DDP (naive → flat-bucket → overlap) | ✅ | `utils/ddp.py` — naive/flat/overlap containers + 2-rank gloo equivalence (665b6e6) |
-| ZeRO-1 optimizer-state sharding | ⬜ | CPU/gloo — queued behind the perf ordering mandate (D2) |
-| FSDP | ⬜ | CPU/gloo; a full graded A2 deliverable |
-| 100B memory-math one-pager | ⬜ | the verbatim "train a 100B model" answer (params+grads+Adam ≈ 16–20 B/param) |
+| ZeRO-1 optimizer-state sharding | ✅ | `utils/zero1.py` — owner-broadcast sharded optimizer; 2-rank gloo equivalence ×3 seeds (W1, d8142ef) |
+| FSDP | ✅ | `utils/fsdp.py` — per-param ZeRO-3: gather-fwd, reduce-scatter grads, fp32 master shards; gloo trajectory equivalence (W3, 4c806bb) |
+| 100B memory-math one-pager | ✅ | `docs/design/A2_100B_MEMORY_ONEPAGER.md`, every number from tested `utils/memory_math.py` (W2, 7cfb114) |
 | real serving (SGLang, fp8/INT4-KV) | ⬜ Hopper box | `rollout/sglang_client.py` ready; SGLang needs sm90+ ([ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md)) |
 
 ## A3 Scaling · A4 Data · A5 Alignment — to build (clean stubs)
 
-- **A3** — `scaling/`: the IsoFLOP / Chinchilla fitter (CPU/numpy: min-picking, `N_opt ∝ C^a`, `C=6ND`, `a+b≈1`, extrapolation). The Stanford training-API leaderboard runs in `../lectures/assignment3-scaling`.
+- **A3** — ✅ shipped 2026-07-03: `scaling/isoflop.py` (a=0.469 · b=0.531 · a+b gate PASS · N_opt ≈70B @1e23 / ≈206B @1e24 · `bench/a3_isoflop.png`) + `scaling/planner.py` (budget reserve/refund semantics). Stanford-API leaderboard BLOCKED-EXTERNAL — runbook `deploy/runbooks/A3_stanford_api_leaderboard.md`.
 - **A4** — `data/`: extract → filter → quality-classify → exact + MinHash/LSH dedup; pipeline order + discard accounting.
 - **A5** — `algos/`, `rewards/`, `envs/`: SFT → Expert Iteration → GRPO/Dr.GRPO + DPO; the env/grader protocol (`envs/protocol.py`) is already in place. Frontier lab (GDM-aligned): `algos/distill.py` — knowledge distillation (logit / on-policy reverse-KL / sequence-level), the serve-cheap student track (see `FRONTIER_PRACTICE_2026.md` A5 🔵).
 

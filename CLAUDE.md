@@ -141,9 +141,8 @@ flat A1 substrate (`tokenizer.py`, `model.py`, `moe.py`, `optim.py`, `train.py`,
 A2→A5 finishing autonomously per `docs/EXECUTION_SPEC_CS336_FINISH.md` · A1 substrate ✅ · **perf-curriculum A1 serving R0–R4.1 ✅ measured**
 (continuous batching **2.30× wall / 2.93× by steps** vs static-wave; PagedAttention + fused Triton
 paged decode **5.90 ms/step = ×3.52 vs wave, +55% vs dense**; frag 5.0%, capacity ×9.3) — **current
-node: A1 R4.2 chunked prefill**, pointer in `performance/PERF_PLAN.md` · CS336-A2 distributed half
-(DDP ✅; ZeRO-1/FSDP + memory one-pager) parked behind the perf ordering mandate · A3/A4/A5 stubs.
-157 CPU tests green, ruff/pyright clean. Rentals: 3 capability-tier sessions
+node: A1 R4.2 chunked prefill**, pointer in `performance/PERF_PLAN.md` · CS336-A2 distributed half ✅ shipped 2026-07-03 (ZeRO-1 · FSDP · one-pager · comms algebra, W1–W4) + A3 ✅ (W5–W6) · A3/A4/A5 stubs.
+230 CPU tests green, ruff/pyright clean. Rentals: 3 capability-tier sessions
 ([ADR-0012](docs/adr/ADR-0012-inference-rental-tiers.md) — H100 · 8×H200 serving day · B200).
 The A5 RL "aha" + **Capstone DELTA** stay gated behind the perf curriculum (ordering mandate
 2026-06-30). See [`docs/STATUS.md`](docs/STATUS.md) and `../STRATEGY.md` §8.
