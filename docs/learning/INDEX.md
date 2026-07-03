@@ -18,6 +18,12 @@
   thuật ngữ kỹ thuật (tensor, mask, slot, cache, kernel…) giữ tiếng Anh khi tự nhiên hơn.
 - Mỗi bất biến nêu ra phải chỉ được **test nào găm nó** trong `tests/`.
 
+## Series 0 — Meta (cách hệ thống vận hành)
+
+| # | Bài | Nội dung | Trạng thái |
+|---|---|---|---|
+| 00 | [Claude Code vận hành thế nào trên repo này](00-how-claude-code-works.md) | first principles: LLM không trạng thái → git+docs là bộ nhớ, hook là kỷ luật; chuỗi file một session mới đi qua để biết "làm gì tiếp" | ✅ |
+
 ## Series 1 — Serving substrate (A1 R3b + R4.1: continuous batching → PagedAttention)
 
 Nền tảng đo lường: `bench/RESULTS.md` §2026-07-03 (R3.x, P4.1.x). Node curriculum:
