@@ -86,6 +86,7 @@ def serve(
     *,
     policy: Literal["continuous", "wave"],
     clock: Callable[[], float] = time.perf_counter,
+    prefill_model: TransformerLM | None = None,
 ) -> ServeResult:
     """Run ``requests`` to completion over ``n_slots`` static KV slots under one of two policies.
 
@@ -97,6 +98,13 @@ def serve(
     step over all ``n_slots`` rows (static shapes: inactive rows compute masked, discarded work).
     All requests are treated as arriving at t₀, so TTFT includes queue wait — the number that shows
     what wave scheduling does to a queued request.
+
+    ``prefill_model`` (default: ``model``) runs the admission prefills. Pass the UNCOMPILED module
+    here when ``model`` is ``torch.compile``d: at steady state admissions arrive in dribbles
+    (n_admit = 1, 2, 3, …) and every new admission width is a new shape — compiling the prefill
+    path floods the dynamo cache with per-width graphs (measured 2026-07-03: 47 graphs, ~35 s of
+    compile inside the run, plus a per-call linear guard scan taxing every step). Prefill is ~1% of
+    wall; the decode loop is the hot path that should own the compile budget.
     """
     if n_slots < 1:
         raise ValueError("n_slots must be ≥ 1")
@@ -181,8 +189,11 @@ def serve(
         if queue and free and (policy == "continuous" or len(free) == n_slots):
             admits = [queue.popleft() for _ in range(min(len(free), len(queue)))]
             slots = free[: len(admits)]
+            lens = [len(r.prompt_ids) for r in admits]
             t_pre = now()
-            first = _prefill(model, cache, admits, slots, dev)
+            first = _prefill(prefill_model if prefill_model is not None else model,
+                             cache, admits, slots, lens, dev)
+            cache.mirror_admit(slots, lens)  # python half of the admission (outside the graph)
             t_post = now()
             prefill_s += t_post - t_pre
             n_prefill_forwards += 1
@@ -208,6 +219,7 @@ def serve(
             assert isinstance(logits, Tensor)
             next_ids = logits[:, -1].argmax(dim=-1)
             last_ids = next_ids
+            cache.mirror_advance()  # python half of advance() (outside the graph)
             t_done = now()
             decode_s += t_done - t_step
             n_decode_steps += 1
@@ -234,9 +246,13 @@ def serve_continuous(
     device: str = "cpu",
     *,
     clock: Callable[[], float] = time.perf_counter,
+    prefill_model: TransformerLM | None = None,
 ) -> ServeResult:
     """Iteration-level (Orca) scheduling: freed slots are refilled every decode step."""
-    return serve(model, requests, n_slots, device, policy="continuous", clock=clock)
+    return serve(
+        model, requests, n_slots, device,
+        policy="continuous", clock=clock, prefill_model=prefill_model,
+    )
 
 
 def serve_static_wave(
@@ -246,9 +262,13 @@ def serve_static_wave(
     device: str = "cpu",
     *,
     clock: Callable[[], float] = time.perf_counter,
+    prefill_model: TransformerLM | None = None,
 ) -> ServeResult:
     """Request-level (static-wave) control: a wave runs until its longest row finishes."""
-    return serve(model, requests, n_slots, device, policy="wave", clock=clock)
+    return serve(
+        model, requests, n_slots, device,
+        policy="wave", clock=clock, prefill_model=prefill_model,
+    )
 
 
 @torch.no_grad()
@@ -257,13 +277,14 @@ def _prefill(
     cache: BatchedKVCache,
     admits: Sequence[Request],
     slots: Sequence[int],
+    lens: Sequence[int],
     dev: torch.device,
 ) -> Tensor:
     """One right-padded prefill forward for all admitted rows; returns each row's first greedy
     token ``(n,)``. Fresh slots start at offset 0, so this is the ordinary uniform-causal forward
     routed through :class:`PrefillView`; each row's first token comes from its LAST VALID position
-    (right-padding puts garbage logits after it)."""
-    lens = [len(r.prompt_ids) for r in admits]
+    (right-padding puts garbage logits after it). The caller mirrors the admission
+    (``cache.mirror_admit``) after this returns."""
     x = torch.zeros((len(admits), max(lens)), dtype=torch.long, device=dev)
     for i, r in enumerate(admits):
         x[i, : lens[i]] = torch.tensor(r.prompt_ids, dtype=torch.long, device=dev)

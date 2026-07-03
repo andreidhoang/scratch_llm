@@ -12,23 +12,24 @@
 ## Current Node
 
 ```
-Phase: 1a — A1 R0,R1,R2 done, R3a done → R3b (continuous scheduler) next
+Phase: 1a — A1 R0–R3 DONE → R4.1 (PagedAttention) next
 Hardware: Standing GPU (sm_120)
-Done (2026-07-01): R1 overhead-strip (torch.compile 15%→53% HBM). R2 GQA/MQA DONE (MQA 1.92× MHA @16K).
-  R3a static batched decode DONE — serving/batched.py + tests/test_batched_decode.py green (batched row ==
-  single-stream); bench/batched_decode.py measured: AI≈B exact, aggregate 185→9255 tok/s B=1→64, peak
-  12,220 @B=256 = 66× the B=1 rate, roofline crosses memory→compute at B≈128 (AI≈ridge 131). R3.1/R3.2/R3.3
-  [FACT]. (Correction: eager also amortizes — the fixed ~20ms launch overhead spreads over B.)
-Next action (R3b — continuous scheduler, Orca iteration-level): build the static BatchedKVCache
-  [B,H_kv,max_ctx,d_head] buffer + per-row length mask + per-row RoPE positions (variable lengths), then
-  the evict/admit/decode loop. DoD R3.4 (CORRECTED 2026-07-03 — the 128/512 trace's ≥2× was arithmetic
-  error, ceiling 1.6×): ≥2× aggregate vs static-wave on the heavy-tail trace 24×64+6×256+2×512 (predict
-  ~2.7×, ceiling 4.0×) + the 16/16 trace as sensitivity (~1.4–1.5×) + slot utilization explaining both;
-  R3.5/R3.6: ITL/TTFT via serving/metrics. Oracle: each request == standalone greedy. Kill: continuous
-  <0.8× analytic ceiling ⇒ check utilization (100% ⇒ prefill stalls; <90% ⇒ refill bug).
-LINCHPIN (built in R3b): the static BatchedKVCache buffer IS the R4.1 (paged) / R4.4 (cudagraph) prereq —
-  one refactor, three rungs. R3b needs the per-row-length attention path (extend model attention: per-row
-  positions + key-padding mask; uniform path unchanged).
+Done (2026-07-03): R3b continuous scheduler SHIPPED & MEASURED. model.py: BatchedKVCache static slot
+  buffer (write-then-mask, per-row RoPE positions + key masks, NaN-free by construction) + PrefillView
+  (admission prefill duck-types the uniform causal path); serving/continuous.py: one engine, two policies
+  (continuous vs static-wave — measured Δ is pure scheduling). Ownership contract: device state is
+  graph-owned, python mirror is scheduler-owned (in-graph list reads bake Dynamo ordering guards →
+  recompile storm; measured, fixed, unique_graphs=2). Oracle: 21 CPU tests (ragged == single-stream,
+  poisoned-slot invariance, utilization == hand analytics). Measured (RESULTS.md 2026-07-03):
+  R3.4 PASS 2.30× wall / 2.93× by steps on heavy-tail ×8 waves (util 24.9%→72.8%); R3.4s 1.11×/1.46×;
+  R3.6 PASS TTFT p95 4.9× (shallow queue); R3.5 ITL 5.4→9.6ms (the honest cost). Wall<steps gap = the
+  dense-buffer PADDING TRAFFIC, measured at ~1.27× (9.6 vs 6.3 ms/step) — R4.1's motivation, quantified.
+Next action (R4.1 — PagedAttention, Triton): 16-token blocks + block table over the R3b slot buffer;
+  contiguous-match oracle (paged == contiguous bit-for-bit on non-contiguous allocations); DoD <4% waste
+  + reclaim a measured share of the 1.27× padding tax on the R3b heavy-tail bench. R4.4 (cudagraph decode,
+  closes R1's 53%→wall gap) shares this buffer — order per plan is 4.1 → 4.2 → 4.3 → 4.4.
+LINCHPIN realized: the static buffer + serve() harness from R3b is the substrate every R4.x rung
+  measures against (bench/continuous.py is the standing workload).
 ```
 
 > **Reset 2026-07-01.** Built from scratch: the exploratory Jun-29 perf kernels were removed (tag
@@ -81,8 +82,8 @@ Total est. cost (rough): <$300 for A1–A5 (single-GPU); $100–200 H100 batch;
 | 0: metrics harness + PyTorch eager baseline | ✅ | metrics reproducible, fixed-seed (34f739e) | sm_120 |
 | 1: KV-cache decoder (contiguous) | 🔵 | token-exact ✅; decode measured + overhead-stripped (15%→53% HBM via fusion); wall-close deferred to R4.4 | sm_120 |
 | 2: GQA/MQA | ✅ | KV/token 128/32/4 KB (32:8:1); compiled decode MQA 1.92× MHA @16K; eager control ~1× (da64bfb→R2) | sm_120 |
-| 3: continuous batching (Orca-style) | 🔵 | R3a ✅ weight-amortization roofline (agg 66× B=1, memory→compute flip @B≈128); R3b scheduler (≥2× vs static) next | sm_120 |
-| 4.1: PagedAttention (16-tok blocks, Triton) | ⬜ | <4% waste; contiguous-match test | sm_120 |
+| 3: continuous batching (Orca-style) | ✅ | R3a agg 66× B=1, flip @B≈128; R3b continuous 2.30× wall / 2.93× steps vs static-wave (R3.4 PASS), TTFT p95 4.9× (R3.6), oracle green — padding tax 1.27× measured → R4.1 | sm_120 |
+| 4.1: PagedAttention (16-tok blocks, Triton) | ⬜ **next** | <4% waste; contiguous-match test; reclaim the measured 1.27× padding tax | sm_120 |
 | 4.2: chunked prefill | ⬜ | TTFT/ITL curve vs chunk size | sm_120 |
 | 4.3: speculative decoding (lossless) | ⬜ | greedy output token-exact | sm_120 |
 | 4.4: CUDA graphs decode | ⬜ | step-time reduction on nsys; **needs static KV buffer** (cat-cache broke reduce-overhead capture 2026-07-01) — closes the R1 wall; shares the refactor with R4.1 | sm_120 |

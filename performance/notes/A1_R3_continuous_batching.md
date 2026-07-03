@@ -126,12 +126,15 @@ killing head-of-line blocking + padding waste.
 token-exact, fixed seed. The per-row length mask is the load-bearing correctness surface: a short row
 must **not** attend another row's padding.
 
-**DoD (all `[FACT]`-logged):**
-- [ ] Batched row token-exact vs single-stream (R3.3).
-- [ ] Aggregate tok/s vs B measured; AI≈B shown three ways (hand roofline, %HBM, tok/s) (R3.1/R3.2).
-- [ ] Continuous ≥2× static-wave on the heavy-tail trace + the 16/16 sensitivity point, with
-      slot-utilization explaining both (R3.4/R3.4s).
-- [ ] TTFT/ITL/throughput/goodput reported via `serving/metrics.py` (R3.5).
+**DoD (all `[FACT]`-logged — CLOSED 2026-07-03, see `bench/RESULTS.md`):**
+- [x] Batched row token-exact vs single-stream (R3.3) — 21 CPU oracle tests incl. ragged churn +
+      poisoned-slot invariance.
+- [x] Aggregate tok/s vs B measured; AI≈B shown three ways (R3.1/R3.2) — R3a, 2026-07-01.
+- [x] Continuous ≥2× static-wave on the heavy-tail trace (**2.30× wall / 2.93× by steps, PASS**) +
+      the 16/16 sensitivity point (1.11×/1.46×), slot-utilization explaining both (24.9%→72.8% /
+      62.4%→90.9%); the wall-vs-steps gap = the dense-buffer padding tax (~1.27×), R4.1's target.
+- [x] TTFT/ITL/throughput reported via `serving/metrics.py` (R3.5: ITL 5.4→9.6 ms; R3.6: TTFT p95
+      4.9× on the shallow queue, PASS).
 
 **Kill criteria:**
 - Batched row ≠ single-stream → per-row length-mask / positions bug; fix before any throughput number.

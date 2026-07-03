@@ -53,6 +53,7 @@ def _prefill(
         x[i, : lens[i]] = torch.tensor(p, dtype=torch.long)
     view = PrefillView(cache, slots, lens)
     logits = model(x, view)
+    cache.mirror_admit(slots, lens)  # scheduler-owned python half of the admission
     last = logits[torch.arange(len(prompts)), torch.tensor(lens) - 1]  # (n, V) last VALID position
     return last.argmax(dim=-1)
 
@@ -68,6 +69,7 @@ def test_write_decode_lands_at_per_row_offsets() -> None:
     cache.py_lengths[0] = 3
     cache.py_active = [True, True]
     cache.active[:] = True
+    cache._recompute_view_len()  # direct pokes bypass the mirror ops that normally maintain it
     k_new = torch.arange(8, dtype=torch.float32).reshape(2, 1, 1, 4)  # row 0: 0..3, row 1: 4..7
     v_new = -k_new
     k_view, v_view = cache.write_decode(0, k_new, v_new)
@@ -81,19 +83,24 @@ def test_write_decode_lands_at_per_row_offsets() -> None:
 def test_view_len_covers_every_written_key() -> None:
     cache = BatchedKVCache(n_layers=1, n_slots=3, n_kv_heads=1, max_ctx=16, head_dim=2)
     assert cache.view_len == 1  # all fresh: only the about-to-be-written offset 0
-    cache.py_lengths = [5, 2, 0]
+    cache.mirror_admit([0, 1], [5, 2])  # view_len is maintained by the mirror ops (not in-graph)
     assert cache.view_len == 6  # row 0 writes at 5 → keys [0,6) must be visible
 
 
 def test_advance_bumps_only_active_rows() -> None:
+    """advance() is the graph-owned device half; mirror_advance() the scheduler-owned python
+    half — each bumps only active rows, and together they stay in lockstep."""
     cache = BatchedKVCache(n_layers=1, n_slots=3, n_kv_heads=1, max_ctx=8, head_dim=2)
     cache.py_lengths = [4, 2, 0]
     cache.py_active = [True, False, True]
     cache.lengths[:] = torch.tensor([4, 2, 0])
     cache.active[:] = torch.tensor([True, False, True])
     cache.advance(1)
-    assert cache.py_lengths == [5, 2, 1]
     assert cache.lengths.tolist() == [5, 2, 1]
+    assert cache.py_lengths == [4, 2, 0]  # device-only: the python half is the scheduler's call
+    cache.mirror_advance()
+    assert cache.py_lengths == [5, 2, 1]
+    assert cache.lengths.tolist() == cache.py_lengths
     with pytest.raises(ValueError, match="n=1"):
         cache.advance(2)
 
@@ -161,10 +168,12 @@ def test_ragged_batched_decode_matches_single_stream() -> None:
     x = first.unsqueeze(1)
     for _ in range(n_steps):
         logits = model(x, cache)
+        cache.mirror_advance()
         nid = logits[:, -1].argmax(dim=-1)
         for b in range(3):
             outs[b].append(int(nid[b]))
         x = nid.unsqueeze(1)
+    assert cache.lengths.tolist() == cache.py_lengths  # mirror stayed in lockstep with device
     for b, p in enumerate(prompts):
         single = generate(
             model, p, SamplingParams(temperature=0.0, max_tokens=n_steps + 1), device="cpu"
@@ -189,7 +198,9 @@ def test_padding_invariance_under_poisoned_slots() -> None:
     x = torch.tensor([[5], [0], [6], [0]], dtype=torch.long)
     for _ in range(3):
         logits_clean = model(x, caches[0])
+        caches[0].mirror_advance()
         logits_poisoned = model(x, caches[1])
+        caches[1].mirror_advance()
         assert isinstance(logits_clean, torch.Tensor)
         assert isinstance(logits_poisoned, torch.Tensor)
         for active_row in (0, 2):
@@ -215,6 +226,7 @@ def test_uniform_lengths_match_r3a_static_batch() -> None:
     x = first.unsqueeze(1)
     for _ in range(n - 1):
         logits = model(x, cache)
+        cache.mirror_advance()
         nid = logits[:, -1].argmax(dim=-1)
         for b in range(2):
             outs[b].append(int(nid[b]))

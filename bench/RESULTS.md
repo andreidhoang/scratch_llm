@@ -82,6 +82,38 @@ R3.3 (ragged oracle) and R3.5 (ITL cost) stand as registered. Kill lines updated
 *analytic ceiling* ⇒ measure slot utilization first (util≈100% ⇒ prefill stalls; <90% ⇒ refill bug);
 compile recompiling every step ⇒ a dynamic shape leaked (fix before benching — it forfeits R4.4 capture).
 
+### Measured — A1 R3b continuous batching (2026-07-03, `serving/continuous.py` + `bench/continuous.py`; 21 CPU oracle tests green)
+
+| date | rung / artifact | hardware | metric | predicted | measured | bound | root cause | next experiment |
+|---|---|---|---|---|---|---|---|---|
+| 2026-07-03 | A1 R3b · continuous vs static-wave, **heavy-tail** (24×64+6×256+2×512)×8 waves, B=32, compiled decode + eager prefill | RTX PRO 4000 Blackwell (sm120) | agg tok/s ratio | **≥2×** (point ~2.7×; ceiling 4.0×) | **R3.4 PASS: 2.30× wall** (2,283 vs 995 tok/s); **2.93× by step count** (1,396 vs 4,088) | memory | Iteration-level refill keeps util at 72.8% (drain-tail-limited) vs wave's 24.9% (== analytic exactly). Wall < step-ratio because the mixed-age batch holds `L_view` high most steps → **dense-buffer padding traffic: 9.6 ms/step vs wave 6.3** (the 2.93→2.30 gap ≈ 1.27×) | **R4.1 PagedAttention** — reclaim the measured padding tax; R4.4 cudagraphs on the same buffer |
+| 2026-07-03 | A1 R3b · sensitivity trace 16×128+16×512 (×8 waves) | RTX PRO 4000 Blackwell (sm120) | agg tok/s ratio | ~1.4–1.5× (ceiling 1.6×) | **1.11× wall · 1.46× by steps** (2,809 vs 4,088; util 90.9%) | memory | Step-ratio lands exactly in the predicted band (scheduling math confirmed); the same padding tax (10.4 vs 8.0 ms/step) compresses the wall ratio below it. Win is a fn of length dispersion, as registered | same |
+| 2026-07-03 | A1 R3b · TTFT p95, shallow queue (2 waves), heavy trace | RTX PRO 4000 Blackwell (sm120) | wave/continuous | **≥4×** | **R3.6 PASS: 4.9×** (852 ms vs 4,146 ms; p50 9.4×) | — | Admit-on-slot-free vs wait-for-wave-end. Sensitivity: on 16/16 the p95 ratio is 1.0× (a tail request waits on 512-len rows holding half the slots either way) while p50 is still 4.9× — the TTFT win also scales with length dispersion. At 8-wave saturation TTFT is queue-wait-dominated for both (not the R3.6 surface) | — |
+| 2026-07-03 | A1 R3b · ITL cost of batching (R3.5) | RTX PRO 4000 Blackwell (sm120) | ITL p50 | higher than B=1 | **B=1 5.4 ms → B=32 continuous 9.6–10.8 ms (~1.8–2×)** for ~12–15× aggregate; ITL p99 ~30 ms spikes at admission events (predicted — prefill in the decode stream) | memory | The honest throughput↔latency trade. Wave ITL p50 6.3 ms < continuous 9.6: the padding-traffic effect again (uniform-age batch reads a smaller mean `L_view`) | R4.2 chunked prefill would smooth the p99 admission spikes |
+
+**Engineering findings (the two dynamo leaks + the trace-design lesson, all `[FACT]`):**
+1. **Saturation is part of the spec:** at 2 wave-mixes the post-queue **drain tail** dominated (continuous
+   util 44%, ratio 1.70×) — the analytic model assumes a saturated queue, so the measured trace must be
+   deep enough (8 waves) that steady state dominates. Latency (R3.6) is measured at *shallow* queue, where
+   admission policy — not queue wait — sets TTFT; throughput (R3.4) at saturation. One trace can't do both.
+2. **Compiling the prefill path is a shape-churn trap:** steady-state admissions arrive as n=1,2,3,… and
+   every new width compiled a fresh graph (47 graphs, ~35 s of in-run compile, plus a per-call linear guard
+   scan taxing *every* step). Fix: **prefill runs eager** (it is ~1% of wall); decode owns the compile budget.
+3. **Python list state read in-graph bakes ordering guards:** `view_len = max(py_lengths)` traced into the
+   forward → Dynamo guarded on *which slot holds the max* (`py_lengths[26] > py_lengths[16]`); ragged churn
+   permutes it → recompile-limit hit → **eager fallback in the continuous arm only** (wave's uniform lengths
+   kept one stable ordering — a bias that *favored the baseline*). Fix: `view_len` is a plain int attribute
+   recomputed only by the scheduler-owned mirror ops. After both fixes: **unique_graphs = 2**.
+
+**Verdict (A1 Rung 3 CLOSED — R3.3/R3.4/R3.5/R3.6 `[FACT]`, R3.4s reported):** iteration-level scheduling
+delivers **2.93× fewer lockstep steps** on the heavy-tail trace (util 24.9%→72.8%) and **2.30× wall
+throughput** (gate ≥2× PASS); the 1.27× gap between the two is the **dense slot buffer's padding traffic,
+measured** — which is exactly the itch R4.1 (PagedAttention) exists to scratch, and the static buffer built
+here is its prerequisite (and R4.4's). Oracle: every request token-exact vs single-stream greedy across
+churn/ragged/poisoned-slot tests (21 CPU tests). Prediction quality: step-count ratios landed inside the
+corrected pre-registration (2.93 vs ceiling 4.0 with drain; 1.46 vs 1.4–1.5 band); the wall-ratio shortfall
+exposed a real unmodeled term (padding traffic) — logged, quantified, and now the next rung's target.
+
 ### Pre-registration — A1 R2 GQA/MQA reduction (predict-before-run, D5)
 
 Registered 2026-07-01 BEFORE running `bench/kv_memory.py`. Spec: `performance/notes/A1_R2_gqa.md`.

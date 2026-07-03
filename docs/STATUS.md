@@ -97,8 +97,12 @@ gate. Tracked in the Capstone section below; the build spine is in
 > Hardware: standing GPU (sm_120, 0.55 TB/s, ridge≈130 FLOP/byte) for Phase 1; rent H100 (Phase 2),
 > B200 (Phase 3), 8×H100 (Phase 4), 2-node (Phase 5). Estimated total: ~$250–$310 in GPU spend.
 
-**Current node: Phase 1a — A1 Rung 1 (KV-cache decoder: prove decode is memory-bound)**
-_Rung 0 shipped 2026-07-01 (`34f739e` serving metrics+baseline, `f3907fb` bench Blackwell spec)._
+**Current node: Phase 1a — A1 Rung 4.1 (PagedAttention: reclaim the measured 1.27× padding tax)**
+_R0–R3 shipped 2026-07-01→03. R3b (2026-07-03): continuous batching measured **2.30× wall / 2.93×
+by steps** vs static-wave on the heavy-tail trace (R3.4 PASS), TTFT p95 **4.9×** (R3.6 PASS), on the
+new `BatchedKVCache` static slot buffer + `serving/continuous.py` engine (147 CPU tests green). The
+wall-vs-steps gap is the dense buffer's padding traffic — measured at ~1.27× — which is R4.1's
+motivation, quantified. Details: `bench/RESULTS.md` §2026-07-03, node pointer `performance/PERF_PLAN.md`._
 
 > **Clean slate (2026-07-01).** The exploratory Jun-29 perf kernels (GEMV/GEMM/RMSNorm CUDA +
 > `kernels/bench.py`) were removed to build A1–A7 from scratch against `PERF_ENGINEERING_SPEC.md`.
@@ -108,7 +112,7 @@ _Rung 0 shipped 2026-07-01 (`34f739e` serving metrics+baseline, `f3907fb` bench 
 ```
 Assignment  Phase       Rungs                                         Status
 ──────────  ──────────  ────────────────────────────────────────────  ──────
-A1 Infer    1a (sm120)  R0-R3 + 4.1 PagedAttn + 4.2-4.6 frontier     🔵  R0 done → R1
+A1 Infer    1a (sm120)  R0-R3 + 4.1 PagedAttn + 4.2-4.6 frontier     🔵  R0-R3 done → R4.1
 A2 Kernel   1b (sm120)  R0-R6 CUDA-core ladder                        ⬜  not started
             Phase 2     §4.1-4.5 WGMMA+TMA+FP8 (H100)                ⬜  gate: Phase 1b done
 A3 TC       1c (sm120)  R0-R2 WMMA + mma.sync                         ⬜  not started

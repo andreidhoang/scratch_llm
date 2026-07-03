@@ -249,7 +249,12 @@ class BatchedKVCache:
 
     ``py_lengths``/``py_active`` mirror the device tensors so ``view_len`` and scheduler
     bookkeeping never pay a per-step ``.item()`` host sync (the R1 lesson: host syncs in the decode
-    loop are the overhead that hides the memory wall).
+    loop are the overhead that hides the memory wall). **Ownership contract:** the device tensors
+    are mutated *inside* the forward (graph-owned: ``write_decode``/``advance`` trace cleanly under
+    ``torch.compile``); the python mirror is **scheduler-owned** — call :meth:`mirror_admit` after
+    a prefill forward and :meth:`mirror_advance` after each decode forward, *outside* the compiled
+    region. Python list/bool state read inside the graph would become concrete Dynamo guards, and
+    the continuous scheduler's ever-changing active-pattern would force a recompile storm.
 
     The static buffer is the R4.1/R4.4 linchpin: fixed addresses are what CUDA-graph capture needs
     (R1's ``torch.cat`` cache broke capture), and the contiguous per-slot region is exactly what
@@ -281,13 +286,20 @@ class BatchedKVCache:
         self.n_slots = n_slots
         self.max_ctx = max_ctx
         self._slot_idx = torch.arange(n_slots, device=device)
+        self._view_len = 1
 
     @property
     def view_len(self) -> int:
         """Key positions visible this step: covers every row's just-written key (offset
-        ``lengths[b]``), so the attention view is ``[:, :, :view_len]``. A python int derived from
-        the mirror — no device sync."""
-        return min(self.max_ctx, 1 + max(self.py_lengths))
+        ``lengths[b]``), so the attention view is ``[:, :, :view_len]``. A plain int attribute,
+        recomputed only by the scheduler-owned mirror ops — no device sync, and safe to read
+        inside a compiled forward (a `max()` over ``py_lengths`` traced in-graph would bake
+        guards on the list's ORDERING; ragged churn permutes it → recompile storm → eager
+        fallback, measured 2026-07-03)."""
+        return self._view_len
+
+    def _recompute_view_len(self) -> None:
+        self._view_len = min(self.max_ctx, 1 + max(self.py_lengths))
 
     def free_slots(self) -> list[int]:
         """Slots available for admission (inactive)."""
@@ -300,6 +312,7 @@ class BatchedKVCache:
         self.py_active[slot] = False
         self.lengths[slot] = 0
         self.active[slot] = False
+        self._recompute_view_len()
 
     def write_decode(self, layer: int, k_new: Tensor, v_new: Tensor) -> tuple[Tensor, Tensor]:
         """Write one new K,V per row at that row's offset; return the attention view.
@@ -318,15 +331,29 @@ class BatchedKVCache:
 
     def advance(self, n: int) -> None:
         """Bump only *active* rows, once per forward after all layers (the :class:`KVCache`
-        contract). ``n`` must be 1 — batched decode processes exactly one token per row."""
+        contract). ``n`` must be 1 — batched decode processes exactly one token per row.
+        Device-only (graph-owned); the scheduler follows with :meth:`mirror_advance`."""
         if n != 1:
             raise ValueError(f"BatchedKVCache.advance expects n=1 (decode), got {n}")
         self.lengths += self.active.long()
+
+    def mirror_advance(self) -> None:
+        """Scheduler-owned python half of :meth:`advance` — call after each decode forward,
+        outside the compiled region (see the ownership contract in the class docstring)."""
         for b, a in enumerate(self.py_active):
             if a:
                 self.py_lengths[b] += 1
         if max(self.py_lengths) > self.max_ctx:
             raise ValueError("a slot exceeded max_ctx — the scheduler must evict at capacity")
+        self._recompute_view_len()
+
+    def mirror_admit(self, slots: Sequence[int], true_lengths: Sequence[int]) -> None:
+        """Scheduler-owned python half of a :class:`PrefillView` admission — call after the
+        prefill forward, outside the compiled region."""
+        for b, ln in zip(slots, true_lengths, strict=True):
+            self.py_lengths[b] = int(ln)
+            self.py_active[b] = True
+        self._recompute_view_len()
 
 
 class PrefillView:
@@ -338,7 +365,11 @@ class PrefillView:
     attention math. K,V are written through into the parent's slot rows. Rows are right-padded to
     the widest prompt; K/V beyond a row's true length is dead — masked by write-then-mask on later
     steps and overwritten as the row decodes. ``advance(s)`` (called once by the LM after all
-    layers) activates the slots at their TRUE lengths, not the padded width.
+    layers) activates the slots at their TRUE lengths, not the padded width — device tensors only
+    (graph-owned); the scheduler follows with ``parent.mirror_admit(slots, true_lengths)``.
+
+    All python-valued state (slot list, widths) is resolved to tensors/ints at construction —
+    *outside* any compiled region — so a traced ``append``/``advance`` guards only on stable ints.
     """
 
     def __init__(
@@ -354,9 +385,12 @@ class PrefillView:
             if not 0 < ln <= parent.max_ctx:
                 raise ValueError(f"true length {ln} outside (0, max_ctx={parent.max_ctx}]")
         self._parent = parent
-        self._slots = torch.tensor(list(slots), dtype=torch.long, device=parent.lengths.device)
-        self._py_slots = [int(b) for b in slots]
-        self._true_lengths = [int(x) for x in true_lengths]
+        device = parent.lengths.device
+        self._slots = torch.tensor(list(slots), dtype=torch.long, device=device)
+        self._true_lengths_t = torch.tensor(
+            [int(x) for x in true_lengths], dtype=torch.long, device=device
+        )
+        self._min_width = max(int(x) for x in true_lengths)
         self._block: list[tuple[Tensor, Tensor] | None] = [None] * len(parent._k)
 
     @property
@@ -365,7 +399,7 @@ class PrefillView:
 
     def append(self, layer: int, k_new: Tensor, v_new: Tensor) -> None:
         s = k_new.shape[2]
-        if s < max(self._true_lengths):
+        if s < self._min_width:
             raise ValueError("padded width must cover every row's true length")
         self._parent._k[layer][self._slots, :, :s] = k_new
         self._parent._v[layer][self._slots, :, :s] = v_new
@@ -375,15 +409,11 @@ class PrefillView:
         return self._block[layer]
 
     def advance(self, n: int) -> None:
-        """Activate the slots at their true (unpadded) lengths — called once, after all layers."""
+        """Activate the slots at their true (unpadded) lengths — called once, after all layers.
+        Device tensors only; the scheduler mirrors via ``parent.mirror_admit``."""
         parent = self._parent
-        parent.lengths[self._slots] = torch.tensor(
-            self._true_lengths, dtype=torch.long, device=parent.lengths.device
-        )
+        parent.lengths[self._slots] = self._true_lengths_t
         parent.active[self._slots] = True
-        for b, ln in zip(self._py_slots, self._true_lengths, strict=True):
-            parent.py_lengths[b] = ln
-            parent.py_active[b] = True
 
 
 AnyKVCache = KVCache | BatchedKVCache | PrefillView
