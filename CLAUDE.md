@@ -181,6 +181,7 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
 | **Daily operating rhythm** — the frontier-engineer day on this harness (`/standup` → deep-work → `/eod`); one active node, predict-before-run, measured>implemented | `docs/OPERATING_RHYTHM.md` |
 | **Measurement ledger** — durable predicted-vs-measured record (what git can't track; the "DoD is a profile" gate) | `bench/RESULTS.md` |
 | **Vision & plan (Vietnamese)** — tổng hợp tầm nhìn + specs + kế hoạch (synthesis, not source-of-truth) | `docs/VISION_VI.md` |
+| **Learning track (Vietnamese)** — chuỗi bài mastery Feynman/teach-back, trace code + số đo thật từng component (viết từng bài khi dạy, theo giao thức "one concept at a time") | `docs/learning/` (start at `INDEX.md`) |
 | **Per-assignment build guides** — every deliverable tagged + mapped to `src/scratch_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |
 | Design specs — KV-cache · rollout seam · FA2 roofline · MoE walkthrough | `docs/design/` |
