@@ -5,6 +5,12 @@
 > to build (the score); **this doc is the conductor** — the daily/weekly cadence that fuses how top
 > frontier optimization engineers/researchers actually spend a day with the commands you already have.
 > Lever 2 (on-demand). Read once; thereafter `/standup` and `/eod` enact it.
+>
+> **Execution-mode note ([ADR-0013](adr/ADR-0013-execution-mode-full-delegation.md), 2026-07-03).**
+> This doc describes the `learn`-mode day (human implements Mode-3 reps, teach-back gates concepts).
+> While `.claude/execution-mode` is **`delegate`**, agents implement everything end-to-end and the
+> teach-back/Mode-3 pauses in this rhythm do not gate; the measurement disciplines (one active node,
+> predict-before-run, measured>implemented, durable close) apply unchanged.
 
 ---
 

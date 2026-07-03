@@ -10,11 +10,16 @@
 > Rationale: A2–A5 kernel skills are direct prerequisites for DELTA (GDN-2 decode kernel); A7
 > capstone is the natural bridge. Building DELTA before owning the tools is premature.
 >
-> **Mode-3 boundary.** The kernel implementations (the GEMM inner loop, the online softmax tile,
-> the WGMMA mainloop) are Mode-3 territory: human implements from first principles. Claude agents
-> write the failing correctness tests (bench-writer), explain the mechanism (kernel-tutor), run
-> profiler diagnosis (roofline-analyst), and gate before commit (kernel-ship-reviewer). Never ask
-> Claude to write the kernel body from scratch.
+> **Mode-3 boundary — mode-switched ([ADR-0013](../docs/adr/ADR-0013-execution-mode-full-delegation.md)).**
+> In `learn` mode (`.claude/execution-mode`), the kernel implementations (the GEMM inner loop, the
+> online softmax tile, the WGMMA mainloop) are Mode-3 territory: human implements from first
+> principles; Claude agents write the failing correctness tests (bench-writer), explain the
+> mechanism (kernel-tutor), run profiler diagnosis (roofline-analyst), and gate before commit
+> (kernel-ship-reviewer). In **`delegate` mode (current, 2026-07-03)** Claude implements the kernel
+> bodies too, end-to-end; the separation that SURVIVES is bench-writer independence (the test/bench
+> author never writes the kernel under test — separation of duties, so tests can't be tuned to the
+> implementation) and the adversarial kernel-ship-reviewer gate before every commit. Every other
+> rule in this spec (pre-registration, oracle-first, D1–D7, DoD-is-a-profile) is mode-independent.
 
 ---
 
@@ -562,10 +567,12 @@ qualifiers is inadmissible.
 - Post-implementation profiler diagnosis: `roofline-analyst`
 - Pre-commit gate: `kernel-ship-reviewer`
 
-**The Mode-3 boundary in every rung:**
+**The implementation boundary in every rung (mode-switched, ADR-0013):**
 - Claude WRITES: the failing correctness test (oracle comparison), the benchmark harness, the roofline prediction
-- Human IMPLEMENTS: the kernel body (GEMV, softmax, GEMM loop, WGMMA mainloop, online softmax tile)
-- Claude REVIEWS: after implementation, before commit
+- The kernel body (GEMV, softmax, GEMM loop, WGMMA mainloop, online softmax tile) is implemented by:
+  the **human** in `learn` mode · **Claude** in `delegate` mode (current) — always by a different
+  context than the one that authored the tests (separation of duties)
+- Claude REVIEWS adversarially: after implementation, before commit (kernel-ship-reviewer), in both modes
 
 ---
 

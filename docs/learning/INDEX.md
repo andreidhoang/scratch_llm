@@ -42,3 +42,17 @@ Nền tảng đo lường: `bench/RESULTS.md` §2026-07-03 (R3.x, P4.1.x). Node 
 
 Series sau (dự kiến, mở khi tới node): kernel ladder A2 (GEMV→GEMM), tensor cores A3, FA A4,
 quantization A5 — theo `performance/PERF_PLAN.md`.
+
+## Study queue — mastery debt của chế độ `delegate` (ADR-0013)
+
+> **Đây là gì.** Từ 2026-07-03 repo chạy chế độ **`delegate`** (xem
+> [ADR-0013](../adr/ADR-0013-execution-mode-full-delegation.md)): agent build toàn bộ, mastery học
+> SAU qua code đã ship. Mỗi rung ship xong được **append một dòng vào bảng này** (rung → commit →
+> file chính → con số headline). Đây là *hàng đợi học* cho các session `/master` sau — nợ mastery
+> được TRACK, không bị bỏ rơi. Khi học xong một mục thì viết bài giảng tương ứng và tick ✅.
+>
+> Cột "Đã học": ⬜ chưa học · ✅ đã qua teach-back.
+
+| Rung | Commit | File chính | Con số headline | Đã học |
+|---|---|---|---|---|
+| _(append khi rung đầu tiên của run 2026-07-03 ship)_ | | | | |

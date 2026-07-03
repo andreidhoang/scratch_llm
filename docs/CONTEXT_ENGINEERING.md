@@ -138,6 +138,17 @@ This is the heart of the manual: for each file we authored, *why it exists*, *wh
   tokens (don't echo what CLAUDE.md already says); the commit list + node clear that bar because they
   change every session and are exactly what step 1 of the orient protocol reads before any code.
 
+### `.claude/execution-mode` + `.claude/hooks/kernel-write-guard.sh` — Lever 4 (the mode switch)
+- **What:** a one-word git-tracked file (`delegate` | `learn`) that selects which implementation
+  contract is live ([ADR-0013](adr/ADR-0013-execution-mode-full-delegation.md)), and the PreToolUse
+  Edit|Write hook that enforces the `learn` half (blocks agent writes to kernel-rep files, exit 2).
+  In `delegate` mode (current since 2026-07-03) the hook allows kernel writes; the teach-back gate
+  becomes the pull-based study queue in `docs/learning/INDEX.md`.
+- **Why a file, not a prose rule:** the boundary was enforced at four layers (prose, hook, agent
+  refusal text, commands) — flipping strategy by prose alone would leave the hook fighting the
+  agents. A single structural switch keeps the flip atomic, durable, and reversible in one line —
+  "a CLAUDE.md line is a suggestion; a hook is enforcement" applies to the *mode* too.
+
 ### `.claude/agents/*.md` — Levers 2 + 3
 Two specialists. The frontmatter is deliberately **minimal and verified** (`name`, `description`,
 `tools`, `model`) — I discarded several fields a docs-summary hallucinated, because an invented field

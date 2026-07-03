@@ -11,8 +11,11 @@
 - **RLHF:** **SFT (Ch 4) → Reward Modeling (Ch 5) → RL/GRPO (Ch 6) → DPO (Ch 8)**, with Over-optimization
   (Ch 14) = your RQ2 home turf and Regularization/KL (Ch 15) = your `monitors.py`.
 
-**The meat boundary applies to both:** CUDA **kernel bodies** and RLHF **math derivations** you reconstruct
-from blank. Agents scaffold/tutor/profile/review — never write the rep. (See `src/scratch_llm/kernels/CLAUDE.md`.)
+**The meat boundary applies to both** (in `learn` mode — [ADR-0013](adr/ADR-0013-execution-mode-full-delegation.md)):
+CUDA **kernel bodies** and RLHF **math derivations** you reconstruct from blank; agents
+scaffold/tutor/profile/review — never write the rep. (See `src/scratch_llm/kernels/CLAUDE.md`.)
+In `delegate` mode (current since 2026-07-03) the reps are agent-built and this map is the
+reading order for the post-hoc mastery pass.
 
 ---
 

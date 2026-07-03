@@ -410,7 +410,8 @@ Every session working a rung:
 1. /standup  →  orient: read "Current node" in this file; read the rung's spec in PERF_ENGINEERING_SPEC.md
 2. Write prediction in bench/RESULTS.md BEFORE running  (predicted | — | — | — | next hypothesis)
 3. Invoke bench-writer: "Write the failing correctness test + bench harness for [rung], oracle = [X]"
-4. Human implements the kernel (Mode-3 boundary)
+4. Implement the kernel — per `.claude/execution-mode` (ADR-0013): `delegate` (current) → Claude
+   implements end-to-end, in a different context than the bench-writer; `learn` → human implements (Mode-3)
 5. pytest -m gpu confirms oracle-correct
 6. Run bench; log measurement to bench/RESULTS.md (measured | bound | root-cause | next)
 7. Invoke roofline-analyst if the number doesn't match prediction

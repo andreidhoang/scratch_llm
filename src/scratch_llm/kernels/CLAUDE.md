@@ -1,12 +1,19 @@
 # Kernels — the meat boundary (loaded when working in `src/scratch_llm/kernels/`)
 
+> **MODE SWITCH ([ADR-0013](../../../docs/adr/ADR-0013-execution-mode-full-delegation.md)).** This
+> file describes the **`learn`-mode** contract. When `.claude/execution-mode` is **`delegate`**
+> (current since 2026-07-03), agents implement kernel bodies end-to-end; what survives is
+> oracle-first tests written by an independent context (bench-writer), the adversarial
+> kernel-ship-reviewer gate, and the profile-DoD. The sections below apply as written only in
+> `learn` mode; in `delegate` mode read them as the *study syllabus* for the post-hoc mastery pass.
+
 > **Why this file exists.** In the CUDA-for-Deep-Learning kernel sprint, **you reconstruct the kernel
 > from blank; agents do everything *around* it.** This isn't a preference: copying a kernel — from the
 > book OR from an agent — builds nothing (the "illusion of fluency"), and the live interview rounds are
 > AI-free. Guardrailed AI (hints, not answers) is the only kind that doesn't atrophy the skill you're
 > here to build (PNAS 2025; Lancet endoscopist study 2025).
 
-## The meat — HUMAN-only. Claude and all agents MUST NOT write these.
+## The meat — HUMAN-only in `learn` mode. (In `delegate` mode: agent-built, reviewer-gated.)
 
 - The `@triton.jit` kernel bodies and the rung implementations: `matmul_tiled`, the FlashAttention
   reconstruct, reductions, the GDN / NVFP4 decode kernel — anything that is the *learning rep*.

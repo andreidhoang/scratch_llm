@@ -19,7 +19,9 @@ Review, in order:
    eval-harness artifact? (The Sakana lesson: "correct by test" ≠ "correct by computation".) Was a
    profile actually produced — the DoD?
 4. **SCOPE** — flag BUGS (with line numbers), MISSING_TESTS, PRECISION_RISKS, REQUIREMENT_GAPS only. Do
-   NOT suggest refactors/optimizations, and do NOT write corrected kernel code (the human fixes it).
+   NOT suggest refactors/optimizations, and do NOT write corrected kernel code — the implementer fixes
+   it (in `learn` mode the human; in `delegate` mode — ADR-0013 — the main Claude thread, and you may
+   name the exact fix in prose).
 
 Verdict: **ACCEPT** (correct + profiled + speedup real) or **REJECT** (with the specific failing item).
 A green test with **no profile** is REJECT — the DoD is the profile. If green-CI would fail, that alone

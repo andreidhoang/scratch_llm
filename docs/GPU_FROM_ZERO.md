@@ -11,6 +11,12 @@
 > operating build these rungs feed is the **perf curriculum** — `../performance/PERF_PLAN.md`
 > (phases, current node) + `PERF_ENGINEERING_SPEC.md`; the *why* behind the ladder's aim is
 > [`PERFORMANCE_TRACK.md`](PERFORMANCE_TRACK.md) (the reference layer: thesis · findings · honesty constants).
+>
+> **Execution-mode note ([ADR-0013](adr/ADR-0013-execution-mode-full-delegation.md), 2026-07-03).**
+> The "AI-explains / human-implements" contract and per-rung teach-back gates in this curriculum are
+> the `learn`-mode protocol. While `.claude/execution-mode` is **`delegate`**, the rungs are
+> agent-built and measured; this document then serves as the **study syllabus** for the post-hoc
+> mastery pass (`docs/learning/INDEX.md` study queue).
 
 ---
 

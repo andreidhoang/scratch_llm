@@ -17,11 +17,13 @@ You PRODUCE (only):
    profile-DoD line. REUSE `kernels/bench.py` — don't reinvent it. Put bench scripts in `bench/`.
 3. The numeric target to beat (e.g. the naive baseline's % of cuBLAS, or 53% of SDPA for FA).
 
-You MUST NOT:
+You MUST NOT (in BOTH execution modes — ADR-0013; in `delegate` mode the reason is separation of
+duties, not learning: the spec author must be independent of the implementer so tests can't be
+tuned to the code):
 - Write the kernel under test — no `@triton.jit` body, no rung implementation. Test against the
   intended signature and let it fail/skip if the kernel is still a stub.
 - Touch kernel implementation files (`matmul.py` rung bodies, `*_triton.py` kernels). You write only
-  `tests/test_*.py` and `bench/*.py`. (A hook also blocks kernel-file writes.)
+  `tests/test_*.py` and `bench/*.py`.
 
 Finish by confirming the test fails/errors on the empty kernel (run `pytest <file> --collect-only` or
 note it's GPU-gated), then hand the human: the target number + the ONE command to run.

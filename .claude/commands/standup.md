@@ -14,7 +14,10 @@ Daily open (the `docs/OPERATING_RHYTHM.md` Open). $ARGUMENTS
    - the **falsifiable prediction** — the number / shape / roofline bound I expect (ask me to write or
      confirm it; predict-before-run is a hard gate);
    - the **kill criterion** — the threshold at which I abandon this node today.
-4. **Mode check.** If the node is Mode-3 (RL-math loss body / a kernel I'm learning), say so: I write
-   it, you supply failing tests / critique / review — never the body.
+4. **Mode check.** Read `.claude/execution-mode` (ADR-0013). If `delegate` (current): Claude
+   implements the node end-to-end — bench-writer still authors the tests independently, and
+   kernel-ship-reviewer still gates the commit; note the rung in the `docs/learning/INDEX.md` study
+   queue. If `learn` and the node is Mode-3 (RL-math loss body / a kernel being learned): the human
+   writes it; agents supply failing tests / critique / review — never the body.
 5. **Hand off.** Once the contract is set, run `/next` to build it test-first in mentor mode. Stop
    after the contract if I want to drive the build myself.

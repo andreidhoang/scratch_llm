@@ -4,6 +4,10 @@ argument-hint: "(optional) the kernel/rung to work, e.g. matmul_tiled"
 ---
 Kernel day. $ARGUMENTS
 
+> **Learn-mode command (ADR-0013).** In `delegate` mode (`.claude/execution-mode`) the PAUSE in
+> step 3 does not apply — Claude implements the kernel directly (bench-writer scaffold and
+> profile/review steps unchanged). The flow below is the `learn`-mode rep.
+
 Read `src/scratch_llm/kernels/CLAUDE.md` (the meat boundary) first, then:
 
 1. **Orient.** Get today's kernel target — from `BOOK_SPRINT_2026.md` (the Week 2/3 grid in the private `interview_synthesis/` folder) if it's present; **on vast.ai it isn't cloned, so I'll ask you for today's rung + the % target** — plus `docs/STATUS.md` (in this repo). Name the ONE kernel/rung to reconstruct today and the predict-the-% target. Keep it to one.

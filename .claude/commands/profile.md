@@ -6,4 +6,5 @@ Profile + diagnose. $ARGUMENTS
 
 1. **Measure.** Prefer `kernels/bench.py` (`matmul_roofline` / `roofline`); print the DoD line. Use `ncu --set full -o profile/ncu_$(date +%F).ncu-rep <cmd>` only when a full trace is wanted.
 2. **Diagnose.** Route the result to the **roofline-analyst** subagent → BOUND / WHY / NEXT EXPERIMENT / PREDICT. (It returns a short summary, not the raw report.)
-3. Hand me the next experiment to try — **I** implement it. Do not write the fix.
+3. Hand over the next experiment — per `.claude/execution-mode` (ADR-0013): `delegate` (current) →
+   Claude implements it; `learn` → the human implements it, do not write the fix.
