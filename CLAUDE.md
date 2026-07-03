@@ -185,6 +185,7 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
 | **Measurement ledger** — durable predicted-vs-measured record (what git can't track; the "DoD is a profile" gate) | `bench/RESULTS.md` |
 | **Vision & plan (Vietnamese)** — tổng hợp tầm nhìn + specs + kế hoạch (synthesis, not source-of-truth) | `docs/VISION_VI.md` |
 | **Learning track (Vietnamese)** — chuỗi bài mastery Feynman/teach-back, trace code + số đo thật từng component (viết từng bài khi dạy, theo giao thức "one concept at a time") | `docs/learning/` (start at `INDEX.md`) |
+| **Fresh-pod continuity** — rebuild everything on a newly rented Vast.ai GPU (Claude Code install · torch cu130/sm120 · hook re-link · **auto-memory restore**); the one-command `scripts/bootstrap-pod.sh` + what survives destroy vs what you rebuild | `docs/VASTAI_BOOTSTRAP.md` · `.claude/memory-snapshot/` |
 | **Per-assignment build guides** — every deliverable tagged + mapped to `src/scratch_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |
 | Design specs — KV-cache · rollout seam · FA2 roofline · MoE walkthrough | `docs/design/` |
