@@ -33,6 +33,18 @@ dev = [
     "ruff>=0.6",
     "pyright>=1.1.380",
 ]
+# A4 data-pipeline extras (`uv pip install -e ".[data]"`). Tests importorskip these,
+# so the CPU commit gate stays hermetic without them.
+data = [
+    "fastwarc>=0.14",
+    "resiliparse>=0.14",
+    "fasttext>=0.9.3",
+]
+# A3 plots + robust fits (`uv pip install -e ".[scaling]"`); core fitter is numpy-only.
+scaling = [
+    "scipy>=1.11",
+    "matplotlib>=3.8",
+]
 
 [project.urls]
 Homepage = "https://github.com/andreidhoang/scratch_llm"

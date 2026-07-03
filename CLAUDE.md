@@ -21,9 +21,28 @@
 3. **Roofline-first / predict-the-number.** Predict the bound (comm vs flop vs memory) and the number before the run. Kernel & perf DoD is a *profile*, not a green test. Name the next unmodeled constraint a coding agent misses (launch / latch / occupancy / bank-conflict).
 4. **Claims honesty.** Label `[FACT]` / `[INFERENCE]` / `[UNCERTAIN]`. "Implemented" ≠ "measured" — only a measured/profiled run is a result. Verify against primary sources; never overclaim.
 5. **Research-as-MDP / taste.** One active experiment at a time. Pull the high-variance signal node (A5 convergence, DELTA roofline), not deterministic scaffolding. Ruthless kill criteria. Subtract-before-add.
-6. **AI-mode boundary.** Mode 1 delegate (plumbing) · Mode 2 human-leads-AI-assists (research-critical) · Mode 3 AI-OFF (the RL-math + kernel reps the interview tests). Agents MUST refuse to write Mode-3 targets (the loss bodies, the kernel the human is learning) from scratch — offer failing tests, a Socratic critique, or a post-hoc review instead.
+6. **AI-mode boundary — governed by the execution-mode switch ([ADR-0013](docs/adr/ADR-0013-execution-mode-full-delegation.md)).** The taxonomy stands: Mode 1 delegate (plumbing) · Mode 2 human-leads-AI-assists (research-critical) · Mode 3 AI-OFF (the RL-math + kernel reps the interview tests). *Which* contract applies is set by `.claude/execution-mode`: **`delegate`** (current, 2026-07-03) — agents implement everything end-to-end, kernel bodies included; mastery is post-hoc via the `docs/learning/INDEX.md` study queue; the teach-back gate never blocks the build. **`learn`** — the historical contract: agents MUST refuse to write Mode-3 targets from scratch — offer failing tests, a Socratic critique, or a post-hoc review instead. All other FOPs (pre-registration, roofline-first, claims honesty, green-CI, adversarial review) apply identically in both modes.
 7. **Citation-tree mastery.** Traverse to the non-redundant gap; reuse before re-deriving; don't rebuild owned work.
 <!-- FOP:end -->
+
+## ⚡ Two active fronts (2026-07-03) — pick your lane before building
+
+> Execution mode is **`delegate`** (`.claude/execution-mode`,
+> [ADR-0013](docs/adr/ADR-0013-execution-mode-full-delegation.md)): agents implement everything
+> end-to-end; mastery is post-hoc via the study queue / mastery-debt ledger. Two agent fronts run
+> concurrently on this checkout ([ADR-0014](docs/adr/ADR-0014-cs336-main-track-delivery-sprint.md)):
+>
+> - **Perf front** — the `performance/` curriculum (node pointer `performance/PERF_PLAN.md`).
+>   Zone: `performance/`, `src/scratch_llm/serving/`, `kernels/paged_decode_triton.py`, perf
+>   sections of `bench/RESULTS.md`.
+> - **Main-track front** — the CS336 A2→A5 finish, plan =
+>   [`docs/EXECUTION_SPEC_CS336_FINISH.md`](docs/EXECUTION_SPEC_CS336_FINISH.md) (task DAG W1–W11,
+>   per-node DoD, rental runbooks for >24 GB work). Zone: `utils/` (distributed), `scaling/`,
+>   `data/`, `algos/`, `rewards/`, `envs/` + main-track docs/tests. The 2026-06-30 "perf first"
+>   ordering mandate is dissolved — the main track no longer queues behind perf.
+>
+> Shared files (`CLAUDE.md`, `docs/STATUS.md`, `pyproject.toml`, `bench/RESULTS.md`): pull-rebase
+> before every commit, additive edits only, never `git add -A`.
 
 ## Orient before you build — the standing protocol (every agent, every session)
 
@@ -70,6 +89,11 @@ repo that you can explain from first principles is the end.
 Two mandates, every session. The Navigator (the user) is leveling to senior frontier-RE; treat
 every load-bearing concept as something they must own, not just ship.
 
+> **Execution-mode note (ADR-0013, 2026-07-03).** In `delegate` mode the "master understanding"
+> protocol below is **pull-based, not gating**: agents build and ship without waiting for
+> teach-backs; every shipped rung is appended to the `docs/learning/INDEX.md` study queue and the
+> protocol runs later, on demand (`/master`). In `learn` mode it gates, as written.
+
 **Master understanding (forced).** For each load-bearing concept, before/while we build it:
 1. **First principles** — derive the mechanism (don't assert it): the problem, the math, why this design.
 2. **Visualize, three lenses** — the **tensor shapes** through the op (+ the exact `src/scratch_llm/…` lines), the **system/data-flow** (ASCII), and a **tiny worked numeric example** (hand-traced small numbers).
@@ -113,7 +137,8 @@ GPU steps are **developed on the standing GPU** (rented out only for what this c
 Module layout: `src/scratch_llm/{algos,rewards,envs,rollout,scaling,data,utils,kernels}/` plus the
 flat A1 substrate (`tokenizer.py`, `model.py`, `moe.py`, `optim.py`, `train.py`, `sampling.py`).
 
-**Build status (2026-07-03):** A1 substrate ✅ · **perf-curriculum A1 serving R0–R4.1 ✅ measured**
+**Build status (2026-07-03):** ⚡ two-front Delivery sprint active (ADR-0013/0014): main track
+A2→A5 finishing autonomously per `docs/EXECUTION_SPEC_CS336_FINISH.md` · A1 substrate ✅ · **perf-curriculum A1 serving R0–R4.1 ✅ measured**
 (continuous batching **2.30× wall / 2.93× by steps** vs static-wave; PagedAttention + fused Triton
 paged decode **5.90 ms/step = ×3.52 vs wave, +55% vs dense**; frag 5.0%, capacity ×9.3) — **current
 node: A1 R4.2 chunked prefill**, pointer in `performance/PERF_PLAN.md` · CS336-A2 distributed half

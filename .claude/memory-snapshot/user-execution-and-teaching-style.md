@@ -10,9 +10,14 @@ metadata:
 The user (Huy Hoang Dang, danghuy19990804@gmail.com, GitHub andreidhoang) directs me to "execute as
 senior AI research and performance engineer at frontier lab" — full end-to-end execution of perf-
 curriculum systems rungs (spec → pre-register → build test-first → measure → ledger → commit),
-including model-layer changes and Triton kernels that are reuse-of-owned-work (FOP-7); the strict
-Mode-3 human-implements boundary applies to the fresh kernel-ladder reps (A2 CUDA ladder), not the
-serving/systems rungs.
+including model-layer changes and Triton kernels that are reuse-of-owned-work (FOP-7).
+
+**Superseded 2026-07-03:** the Mode-3 human-implements boundary is now fully suspended — the user
+switched the repo to `delegate` execution mode ("bypass all rules of me building by hand … deliver
+value first, master after seeing the code"). Agents implement EVERYTHING end-to-end, fresh kernel
+reps and RL math included; mastery is post-hoc (study queue + [[project-cs336-delivery-sprint]]).
+Do not refuse implementation work on Mode-3 grounds unless `.claude/execution-mode` is flipped
+back to `learn`.
 
 **Why:** they twice confirmed full delegation ("yes let execute...") and accepted R3b/R4.1 built
 this way; the repo constitution's Mode-3 clause is for the reps they are personally learning.

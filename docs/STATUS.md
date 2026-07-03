@@ -14,6 +14,14 @@ GPU-marked tests green, ruff clean, pyright 0 errors.** Rentals decided: ADR-001
 capability-tier sessions: H100 · 8×H200 serving day · B200). Mastery lessons (VI):
 [`docs/learning/`](learning/INDEX.md).
 
+> ⚡ **Delivery-Mode sprint opened (2026-07-03 · ADR-0013 `delegate` + ADR-0014).** Two agent
+> fronts now run concurrently: the perf curriculum continues at its own node, and the **CS336 main
+> track (A2 distributed finish → A3 → A4 → A5) is being finished autonomously** per
+> [`EXECUTION_SPEC_CS336_FINISH.md`](EXECUTION_SPEC_CS336_FINISH.md) (task DAG W1–W11; >24 GB work
+> ships code-complete + `deploy/runbooks/`). The 2026-06-30 "perf first" ordering mandate is
+> dissolved into the two-front split. Official scaffolds re-cloned to `/workspace/lectures/`
+> (adapter tests = acceptance oracle). Mastery is post-hoc: `learning/MASTERY_DEBT.md`.
+
 > ✅ **Green-CI restored (2026-06-29).** The checkout had lost several files (no git to restore from):
 > rebuilt `rollout/` (types/local/__init__ per `design/L2_rollout_seam_SPEC.md`), `envs/protocol.py`
 > + the `algos/rewards/envs/scaling/data` package stubs, and `importorskip`'d the missing Mode-3
