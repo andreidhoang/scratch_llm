@@ -30,7 +30,13 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from scratch_llm.model import BatchedKVCache, PrefillView, TransformerLM
+from scratch_llm.model import (
+    BatchedKVCache,
+    PagedKVCache,
+    PrefillView,
+    SlotKVCache,
+    TransformerLM,
+)
 from scratch_llm.serving.metrics import RequestRecord
 
 
@@ -71,6 +77,9 @@ class ServeResult:
     n_prefill_forwards: int
     prefill_s: float
     decode_s: float
+    # paged storage only (P4.1.1 accounting; None for the dense slab):
+    paged_frag_mean: float | None = None  # mean internal fragmentation across decode steps
+    paged_alloc_peak_tokens: int | None = None  # peak allocated block-tokens
 
     @property
     def mean_utilization(self) -> float:
@@ -87,6 +96,9 @@ def serve(
     policy: Literal["continuous", "wave"],
     clock: Callable[[], float] = time.perf_counter,
     prefill_model: TransformerLM | None = None,
+    cache_kind: Literal["dense", "paged"] = "dense",
+    paged_n_blocks: int | None = None,
+    paged_use_kernel: bool = False,
 ) -> ServeResult:
     """Run ``requests`` to completion over ``n_slots`` static KV slots under one of two policies.
 
@@ -105,6 +117,14 @@ def serve(
     path floods the dynamo cache with per-width graphs (measured 2026-07-03: 47 graphs, ~35 s of
     compile inside the run, plus a per-call linear guard scan taxing every step). Prefill is ~1% of
     wall; the decode loop is the hot path that should own the compile budget.
+
+    ``cache_kind="paged"`` swaps the dense slab for :class:`PagedKVCache` (A1 R4.1): same engine,
+    same policies — the measured Δ isolates storage. Admission then runs a **committed-blocks
+    guard**: a request is admitted only if the pool can hold *every* active request run to its
+    full budget (Σ ⌈(prompt+max_new)/16⌉ ≤ usable blocks) — with budget-only requests this makes
+    pool exhaustion impossible without preemption machinery. FCFS is preserved: a blocked head
+    stalls admission (no skip-ahead). ``paged_n_blocks`` defaults to the trivially safe
+    ``n_slots × max_request_blocks + 1``.
     """
     if n_slots < 1:
         raise ValueError("n_slots must be ≥ 1")
@@ -128,15 +148,35 @@ def serve(
     model.eval()
     dev = torch.device(device)
     dtype = next(model.parameters()).dtype
-    cache = BatchedKVCache(
-        n_layers=model.cfg.n_layers,
-        n_slots=n_slots,
-        n_kv_heads=model.cfg.kv_heads,
-        max_ctx=max_ctx,
-        head_dim=model.cfg.head_dim,
-        device=dev,
-        dtype=dtype,
-    )
+
+    def _blocks_needed(r: Request) -> int:
+        total = len(r.prompt_ids) + r.max_new_tokens
+        return (total + PagedKVCache.BLOCK - 1) // PagedKVCache.BLOCK
+
+    cache: SlotKVCache
+    if cache_kind == "paged":
+        n_blocks = paged_n_blocks or n_slots * max(_blocks_needed(r) for r in requests) + 1
+        cache = PagedKVCache(
+            n_layers=model.cfg.n_layers,
+            n_slots=n_slots,
+            n_kv_heads=model.cfg.kv_heads,
+            max_ctx=max_ctx,
+            head_dim=model.cfg.head_dim,
+            n_blocks=n_blocks,
+            device=dev,
+            dtype=dtype,
+        )
+        cache.use_kernel = paged_use_kernel  # R4.1b: fused Triton decode instead of gather+SDPA
+    else:
+        cache = BatchedKVCache(
+            n_layers=model.cfg.n_layers,
+            n_slots=n_slots,
+            n_kv_heads=model.cfg.kv_heads,
+            max_ctx=max_ctx,
+            head_dim=model.cfg.head_dim,
+            device=dev,
+            dtype=dtype,
+        )
 
     def now() -> float:
         if dev.type == "cuda":
@@ -155,12 +195,18 @@ def serve(
     n_prefill_forwards = 0
     prefill_s = 0.0
     decode_s = 0.0
+    committed_blocks = 0  # paged admission guard: worst-case blocks promised to active slots
+    frag_samples: list[float] = []
+    alloc_peak = 0
 
     t0 = now()  # every request "arrives" here: TTFT includes time spent queued
 
     def finish(slot: int) -> None:
+        nonlocal committed_blocks
         req = slot_req[slot]
         assert req is not None
+        if isinstance(cache, PagedKVCache):
+            committed_blocks -= _blocks_needed(req)
         completed.append(
             Completed(
                 request=req,
@@ -184,15 +230,31 @@ def serve(
             if req is not None and len(slot_tokens[b]) >= req.max_new_tokens:
                 finish(b)
 
-        # 2) admit — continuous: whenever a slot is free; wave: only into an all-free batch
+        # 2) admit — continuous: whenever a slot is free; wave: only into an all-free batch.
+        # Paged: the committed-blocks guard admits a request only if the pool can hold every
+        # active request run to its FULL budget (no preemption needed, FCFS preserved).
         free = [b for b, r in enumerate(slot_req) if r is None]
+        admits: list[Request] = []
         if queue and free and (policy == "continuous" or len(free) == n_slots):
-            admits = [queue.popleft() for _ in range(min(len(free), len(queue)))]
+            for _ in range(min(len(free), len(queue))):
+                if isinstance(cache, PagedKVCache):
+                    need = _blocks_needed(queue[0])
+                    if committed_blocks + need > cache.n_blocks - 1:  # block 0 is trash
+                        break  # head blocked ⇒ admission stalls (no skip-ahead)
+                    committed_blocks += need
+                admits.append(queue.popleft())
+        if admits:
             slots = free[: len(admits)]
             lens = [len(r.prompt_ids) for r in admits]
             t_pre = now()
-            first = _prefill(prefill_model if prefill_model is not None else model,
-                             cache, admits, slots, lens, dev)
+            first = _prefill(
+                prefill_model if prefill_model is not None else model,
+                cache,
+                admits,
+                slots,
+                lens,
+                dev,
+            )
             cache.mirror_admit(slots, lens)  # python half of the admission (outside the graph)
             t_post = now()
             prefill_s += t_post - t_pre
@@ -214,6 +276,11 @@ def serve(
         # 3) one lockstep decode step over ALL slots (static shapes; inactive rows are masked)
         if any(r is not None for r in slot_req):
             utilization.append(sum(r is not None for r in slot_req) / n_slots)
+            cache.pre_decode_reserve()  # paged: boundary rows get a private block (outside graph)
+            if isinstance(cache, PagedKVCache):
+                alloc_tok, _, frag = cache.waste_stats()
+                frag_samples.append(frag)
+                alloc_peak = max(alloc_peak, alloc_tok)
             t_step = now()
             logits = model(last_ids.unsqueeze(1), cache)
             assert isinstance(logits, Tensor)
@@ -236,6 +303,8 @@ def serve(
         n_prefill_forwards=n_prefill_forwards,
         prefill_s=prefill_s,
         decode_s=decode_s,
+        paged_frag_mean=(sum(frag_samples) / len(frag_samples)) if frag_samples else None,
+        paged_alloc_peak_tokens=alloc_peak if frag_samples else None,
     )
 
 
@@ -247,11 +316,22 @@ def serve_continuous(
     *,
     clock: Callable[[], float] = time.perf_counter,
     prefill_model: TransformerLM | None = None,
+    cache_kind: Literal["dense", "paged"] = "dense",
+    paged_n_blocks: int | None = None,
+    paged_use_kernel: bool = False,
 ) -> ServeResult:
     """Iteration-level (Orca) scheduling: freed slots are refilled every decode step."""
     return serve(
-        model, requests, n_slots, device,
-        policy="continuous", clock=clock, prefill_model=prefill_model,
+        model,
+        requests,
+        n_slots,
+        device,
+        policy="continuous",
+        clock=clock,
+        prefill_model=prefill_model,
+        cache_kind=cache_kind,
+        paged_n_blocks=paged_n_blocks,
+        paged_use_kernel=paged_use_kernel,
     )
 
 
@@ -263,18 +343,29 @@ def serve_static_wave(
     *,
     clock: Callable[[], float] = time.perf_counter,
     prefill_model: TransformerLM | None = None,
+    cache_kind: Literal["dense", "paged"] = "dense",
+    paged_n_blocks: int | None = None,
+    paged_use_kernel: bool = False,
 ) -> ServeResult:
     """Request-level (static-wave) control: a wave runs until its longest row finishes."""
     return serve(
-        model, requests, n_slots, device,
-        policy="wave", clock=clock, prefill_model=prefill_model,
+        model,
+        requests,
+        n_slots,
+        device,
+        policy="wave",
+        clock=clock,
+        prefill_model=prefill_model,
+        cache_kind=cache_kind,
+        paged_n_blocks=paged_n_blocks,
+        paged_use_kernel=paged_use_kernel,
     )
 
 
 @torch.no_grad()
 def _prefill(
     model: TransformerLM,
-    cache: BatchedKVCache,
+    cache: SlotKVCache,
     admits: Sequence[Request],
     slots: Sequence[int],
     lens: Sequence[int],

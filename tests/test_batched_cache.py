@@ -72,7 +72,8 @@ def test_write_decode_lands_at_per_row_offsets() -> None:
     cache._recompute_view_len()  # direct pokes bypass the mirror ops that normally maintain it
     k_new = torch.arange(8, dtype=torch.float32).reshape(2, 1, 1, 4)  # row 0: 0..3, row 1: 4..7
     v_new = -k_new
-    k_view, v_view = cache.write_decode(0, k_new, v_new)
+    cache.write_decode(0, k_new, v_new)
+    k_view, v_view = cache.decode_view(0)
     assert k_view.shape == (2, 1, cache.view_len, 4)
     assert torch.equal(cache._k[0][0, 0, 3], torch.tensor([0.0, 1.0, 2.0, 3.0]))
     assert torch.equal(cache._k[0][1, 0, 0], torch.tensor([4.0, 5.0, 6.0, 7.0]))

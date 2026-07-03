@@ -114,6 +114,25 @@ churn/ragged/poisoned-slot tests (21 CPU tests). Prediction quality: step-count 
 corrected pre-registration (2.93 vs ceiling 4.0 with drain; 1.46 vs 1.4–1.5 band); the wall-ratio shortfall
 exposed a real unmodeled term (padding traffic) — logged, quantified, and now the next rung's target.
 
+### Pre-registration — A1 R4.1 PagedAttention (predict-before-run, 2026-07-03)
+
+Registered BEFORE building. Spec: `performance/notes/A1_R41_paged_attention.md`. Thesis: paged KV
+converts the slab's **reservation waste** (~95% on this trace: slots reserve max_ctx=2048, E[ℓ]≈96)
+into **internal fragmentation** (E≈8 tok/row) → 10–20× capacity; but paged *storage alone* is a
+throughput LOSS (gather adds traffic; the padded-SDPA compute stays) — only the fused paged decode
+kernel reclaims the R3b-measured 1.27× mixed-age tax, whose decomposition (bytes ≈0.5 ms of 3.3)
+the kernel result itself will measure.
+
+| # | experiment | predicted | measured | bound | note |
+|---|---|---|---|---|---|
+| P4.1.1 | frag (paged) vs reservation waste (slab); capacity ratio | frag 4–8% heavy-tail, ≤4% 16/16; slab ≈95%; **10–20× rows/GB** | — (pending) | — | the headline |
+| P4.1.2 | paged-gather vs contiguous, scattered blocks + churn + poison | **bit-exact** | — (pending) | — | oracle before any number |
+| P4.1.3 | paged-gather step vs dense (negative control) | **+10–25%** (wall ratio 2.30→~1.9–2.1×) | — (pending) | memory | gather ≈ +1.6–2 ms/step |
+| P4.1.4 | Triton paged decode kernel | step 9.6→**≤8.3 ms**; wall ratio **≥2.6×**; allclose + greedy-exact | — (pending) | memory/compute | kill: kernel > gather+SDPA at B=32, L≤544 |
+
+Kill lines: gather ≠ bit-exact ⇒ table bug (fix first). frag >8% ⇒ allocator bug. Kernel slower ⇒
+ship capacity win alone, kernel → A4 tie-in with profile. Refcount leak after churn ⇒ CoW bug.
+
 ### Pre-registration — A1 R2 GQA/MQA reduction (predict-before-run, D5)
 
 Registered 2026-07-01 BEFORE running `bench/kv_memory.py`. Spec: `performance/notes/A1_R2_gqa.md`.

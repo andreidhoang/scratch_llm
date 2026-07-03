@@ -70,6 +70,7 @@ include = ["src", "tests"]
 # only on a GPU box — type-checked there by execution, not here.
 exclude = [
     "src/scratch_llm/kernels/flash_attention_triton.py",
+    "src/scratch_llm/kernels/paged_decode_triton.py",
     "src/scratch_llm/kernels/gemv_triton.py",
     "src/scratch_llm/kernels/matmul.py",
     "src/scratch_llm/kernels/bench.py",

@@ -237,28 +237,29 @@ class KVCache:
         self._length += n
 
 
-class BatchedKVCache:
-    """Static per-slot K/V buffers for iteration-level (continuous) batching — A1 R3b.
+class SlotKVCache:
+    """Slot machinery shared by every ragged-batch KV store (A1 R3b/R4.1) — storage-agnostic.
 
-    One preallocated ``(n_slots, n_kv_heads, max_ctx, head_dim)`` K and V buffer per layer; slot
-    ``b`` owns row ``b`` and holds ``lengths[b]`` valid positions. A decode step writes each row's
-    new K,V at its *own* offset (**write-then-mask**: the per-row mask admits keys
-    ``j ≤ lengths[b]``, so every row — active or not — attends at least its just-written key: no
-    all-masked softmax row, hence no NaN by construction). ``advance(1)`` bumps only *active* rows,
-    once per forward, after all layers (the same contract as :class:`KVCache`).
+    Slot ``b`` holds ``lengths[b]`` valid positions. A decode step writes each row's new K,V at
+    its *own* offset (**write-then-mask**: the per-row mask admits keys ``j ≤ lengths[b]``, so
+    every row — active or not — attends at least its just-written key: no all-masked softmax row,
+    hence no NaN by construction). ``advance(1)`` bumps only *active* rows, once per forward,
+    after all layers (the same contract as :class:`KVCache`).
 
     ``py_lengths``/``py_active`` mirror the device tensors so ``view_len`` and scheduler
-    bookkeeping never pay a per-step ``.item()`` host sync (the R1 lesson: host syncs in the decode
-    loop are the overhead that hides the memory wall). **Ownership contract:** the device tensors
-    are mutated *inside* the forward (graph-owned: ``write_decode``/``advance`` trace cleanly under
-    ``torch.compile``); the python mirror is **scheduler-owned** — call :meth:`mirror_admit` after
-    a prefill forward and :meth:`mirror_advance` after each decode forward, *outside* the compiled
-    region. Python list/bool state read inside the graph would become concrete Dynamo guards, and
-    the continuous scheduler's ever-changing active-pattern would force a recompile storm.
+    bookkeeping never pay a per-step ``.item()`` host sync (the R1 lesson). **Ownership
+    contract:** device tensors are mutated *inside* the forward (graph-owned: ``write_decode``/
+    ``advance`` trace cleanly under ``torch.compile``); the python mirror and **every allocation
+    decision** are **scheduler-owned** — call :meth:`mirror_admit` after a prefill forward,
+    :meth:`mirror_advance` after each decode forward, and :meth:`pre_decode_reserve` before it,
+    all *outside* the compiled region. Python list/bool state read inside the graph bakes concrete
+    Dynamo guards; ragged churn permutes them → recompile storm → eager fallback (measured
+    2026-07-03).
 
-    The static buffer is the R4.1/R4.4 linchpin: fixed addresses are what CUDA-graph capture needs
-    (R1's ``torch.cat`` cache broke capture), and the contiguous per-slot region is exactly what
-    PagedAttention later replaces with 16-token blocks + a block table.
+    Storage is a subclass concern: :class:`BatchedKVCache` (dense contiguous slots — the R4.4
+    CUDA-graph substrate) and :class:`PagedKVCache` (16-token blocks + block table — R4.1).
+    Subclasses implement ``_write_decode_kv`` / ``decode_view`` / ``_write_prefill_kv`` and may
+    override the reserve hooks.
 
     Interview question this answers: how does an inference engine decode a *ragged* batch in
     lockstep without one row leaking into another?
@@ -275,27 +276,48 @@ class BatchedKVCache:
         dtype: torch.dtype = torch.float32,
     ) -> None:
         if n_layers < 1 or n_slots < 1 or n_kv_heads < 1 or max_ctx < 1 or head_dim < 1:
-            raise ValueError("all BatchedKVCache dimensions must be ≥ 1")
-        shape = (n_slots, n_kv_heads, max_ctx, head_dim)
-        self._k = [torch.zeros(shape, device=device, dtype=dtype) for _ in range(n_layers)]
-        self._v = [torch.zeros(shape, device=device, dtype=dtype) for _ in range(n_layers)]
+            raise ValueError("all cache dimensions must be ≥ 1")
+        self.n_layers = n_layers
+        self.n_slots = n_slots
+        self.n_kv_heads = n_kv_heads
+        self.max_ctx = max_ctx
+        self.head_dim = head_dim
+        self.dtype = dtype
         self.lengths = torch.zeros(n_slots, dtype=torch.long, device=device)
         self.active = torch.zeros(n_slots, dtype=torch.bool, device=device)
         self.py_lengths: list[int] = [0] * n_slots
         self.py_active: list[bool] = [False] * n_slots
-        self.n_slots = n_slots
-        self.max_ctx = max_ctx
         self._slot_idx = torch.arange(n_slots, device=device)
         self._view_len = 1
 
+    # ------------------------------------------------------------------ storage hooks
+    def _write_decode_kv(self, layer: int, pos: Tensor, k_new: Tensor, v_new: Tensor) -> None:
+        raise NotImplementedError
+
+    def decode_view(self, layer: int) -> tuple[Tensor, Tensor]:
+        """The dense ``(B, H_kv, view_len, d)`` K,V the generic SDPA path attends over."""
+        raise NotImplementedError
+
+    def _write_prefill_kv(self, layer: int, slots: Tensor, k_new: Tensor, v_new: Tensor) -> None:
+        raise NotImplementedError
+
+    def _free_storage(self, slot: int) -> None:
+        """Storage-specific eviction (e.g. return blocks to the pool). Default: nothing."""
+
+    def reserve_prefill(self, slots: Sequence[int], true_lengths: Sequence[int]) -> None:
+        """Allocate storage for an admission (scheduler-owned, eager path). Default: nothing."""
+
+    def pre_decode_reserve(self) -> None:
+        """Allocate storage the next decode write needs (scheduler-owned, called by the engine
+        before each decode forward, outside the graph). Default: nothing."""
+
+    # ------------------------------------------------------------------ shared machinery
     @property
     def view_len(self) -> int:
         """Key positions visible this step: covers every row's just-written key (offset
-        ``lengths[b]``), so the attention view is ``[:, :, :view_len]``. A plain int attribute,
-        recomputed only by the scheduler-owned mirror ops — no device sync, and safe to read
-        inside a compiled forward (a `max()` over ``py_lengths`` traced in-graph would bake
-        guards on the list's ORDERING; ragged churn permutes it → recompile storm → eager
-        fallback, measured 2026-07-03)."""
+        ``lengths[b]``). A plain int attribute, recomputed only by the scheduler-owned mirror
+        ops — no device sync, and safe to read inside a compiled forward (a ``max()`` over
+        ``py_lengths`` traced in-graph bakes guards on the list's ORDERING; measured 2026-07-03)."""
         return self._view_len
 
     def _recompute_view_len(self) -> None:
@@ -306,35 +328,34 @@ class BatchedKVCache:
         return [b for b, a in enumerate(self.py_active) if not a]
 
     def free_slot(self, slot: int) -> None:
-        """Evict: deactivate + zero the slot's length. The stale K/V is *not* zeroed — it is
-        unreachable (masked) and overwritten by the next admission's prefill."""
+        """Evict: deactivate + zero the slot's length. Stale K/V is *not* zeroed — it is
+        unreachable (masked) and overwritten/reused by the next admission."""
+        self._free_storage(slot)
         self.py_lengths[slot] = 0
         self.py_active[slot] = False
         self.lengths[slot] = 0
         self.active[slot] = False
         self._recompute_view_len()
 
-    def write_decode(self, layer: int, k_new: Tensor, v_new: Tensor) -> tuple[Tensor, Tensor]:
-        """Write one new K,V per row at that row's offset; return the attention view.
+    def write_decode(self, layer: int, k_new: Tensor, v_new: Tensor) -> None:
+        """Write one new K,V per row at that row's offset (graph-owned).
 
         ``k_new``/``v_new``: ``(n_slots, n_kv_heads, 1, head_dim)``. Row ``b`` lands at position
-        ``lengths[b]`` (inactive rows harmlessly rewrite offset 0). Returns
-        ``(k, v)`` sliced to ``view_len`` — a view of the static buffer, no copy.
+        ``lengths[b]`` (inactive rows harmlessly rewrite offset 0 / the trash block). The
+        attention view is fetched separately via :meth:`decode_view` — the paged kernel path
+        (R4.1b) reads storage directly and never materializes it.
         """
         if k_new.shape[0] != self.n_slots or k_new.shape[2] != 1:
             raise ValueError(f"expected ({self.n_slots}, H_kv, 1, d), got {tuple(k_new.shape)}")
         pos = self.lengths.clamp(max=self.max_ctx - 1)  # scheduler guarantees no active overflow
-        self._k[layer][self._slot_idx, :, pos] = k_new[:, :, 0]
-        self._v[layer][self._slot_idx, :, pos] = v_new[:, :, 0]
-        length = self.view_len
-        return self._k[layer][:, :, :length], self._v[layer][:, :, :length]
+        self._write_decode_kv(layer, pos, k_new, v_new)
 
     def advance(self, n: int) -> None:
         """Bump only *active* rows, once per forward after all layers (the :class:`KVCache`
         contract). ``n`` must be 1 — batched decode processes exactly one token per row.
         Device-only (graph-owned); the scheduler follows with :meth:`mirror_advance`."""
         if n != 1:
-            raise ValueError(f"BatchedKVCache.advance expects n=1 (decode), got {n}")
+            raise ValueError(f"SlotKVCache.advance expects n=1 (decode), got {n}")
         self.lengths += self.active.long()
 
     def mirror_advance(self) -> None:
@@ -356,24 +377,239 @@ class BatchedKVCache:
         self._recompute_view_len()
 
 
+class BatchedKVCache(SlotKVCache):
+    """Dense contiguous slot storage — A1 R3b.
+
+    One preallocated ``(n_slots, n_kv_heads, max_ctx, head_dim)`` K and V buffer per layer: fixed
+    addresses (what R4.4 CUDA-graph capture needs; R1's ``torch.cat`` cache broke capture), zero
+    gather cost — and **reservation waste**: every slot holds ``max_ctx`` whether it uses it or
+    not, and decode reads a view padded to ``view_len`` (the mixed-age padding tax measured at
+    ~1.27× in R3b). :class:`PagedKVCache` trades exactly the other way.
+    """
+
+    def __init__(
+        self,
+        n_layers: int,
+        n_slots: int,
+        n_kv_heads: int,
+        max_ctx: int,
+        head_dim: int,
+        device: str | torch.device = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> None:
+        super().__init__(n_layers, n_slots, n_kv_heads, max_ctx, head_dim, device, dtype)
+        shape = (n_slots, n_kv_heads, max_ctx, head_dim)
+        self._k = [torch.zeros(shape, device=device, dtype=dtype) for _ in range(n_layers)]
+        self._v = [torch.zeros(shape, device=device, dtype=dtype) for _ in range(n_layers)]
+
+    def _write_decode_kv(self, layer: int, pos: Tensor, k_new: Tensor, v_new: Tensor) -> None:
+        self._k[layer][self._slot_idx, :, pos] = k_new[:, :, 0]
+        self._v[layer][self._slot_idx, :, pos] = v_new[:, :, 0]
+
+    def decode_view(self, layer: int) -> tuple[Tensor, Tensor]:
+        length = self.view_len
+        return self._k[layer][:, :, :length], self._v[layer][:, :, :length]
+
+    def _write_prefill_kv(self, layer: int, slots: Tensor, k_new: Tensor, v_new: Tensor) -> None:
+        s = k_new.shape[2]
+        self._k[layer][slots, :, :s] = k_new
+        self._v[layer][slots, :, :s] = v_new
+
+
+class PagedKVCache(SlotKVCache):
+    """Paged slot storage — KV memory as virtual memory (A1 R4.1, vLLM's design).
+
+    Per layer, a pool of ``n_blocks`` fixed 16-token blocks ``(n_blocks, H_kv, 16, d)``; slot
+    ``b`` maps logical block ``i`` → physical block via ``block_table[b, i]``. Allocation is
+    on-demand (a new block only when a row's length crosses a 16 boundary), so waste collapses
+    from *reservation* (``max_ctx − ℓ`` per slot, ~95% on short traces) to *internal
+    fragmentation* (≤15 tokens in the last block, E≈8 — the 10–20× capacity win, P4.1.1).
+
+    **Block 0 is the reserved trash block**: freed/inactive rows' table entry 0 points at it, so
+    the static-shape decode write (every row writes — R3b design) lands harmlessly and the
+    write-then-mask NaN guarantee carries over verbatim. Unallocated table entries are 0 too:
+    the gather view reads trash there, and the per-row mask hides it.
+
+    **Prefix sharing + CoW (block granularity):** :meth:`share_prefix` points a fresh slot's
+    leading table entries at another slot's physical blocks (refcounted). Sharing is full-block
+    only, and a row's next write lands at its own length — which sits at a block boundary right
+    after a shared prefix — so :meth:`pre_decode_reserve` allocates it a *private* block and no
+    shared block is ever written (CoW degenerates to copy-never; the refcount invariant is
+    asserted every step). Partial-block CoW (beam search) is explicitly out of scope.
+
+    Allocator state (free list, refcounts, python table) is **scheduler-owned** (never read in
+    the graph); the device ``block_table`` is a graph *input* updated between steps.
+    """
+
+    BLOCK = 16
+
+    def __init__(
+        self,
+        n_layers: int,
+        n_slots: int,
+        n_kv_heads: int,
+        max_ctx: int,
+        head_dim: int,
+        n_blocks: int,
+        device: str | torch.device = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> None:
+        super().__init__(n_layers, n_slots, n_kv_heads, max_ctx, head_dim, device, dtype)
+        if n_blocks < 2:
+            raise ValueError("n_blocks must be ≥ 2 (block 0 is the reserved trash block)")
+        self.n_blocks = n_blocks
+        self.max_blocks = (max_ctx + self.BLOCK - 1) // self.BLOCK
+        shape = (n_blocks, n_kv_heads, self.BLOCK, head_dim)
+        self._pool_k = [torch.zeros(shape, device=device, dtype=dtype) for _ in range(n_layers)]
+        self._pool_v = [torch.zeros(shape, device=device, dtype=dtype) for _ in range(n_layers)]
+        # 0 everywhere = "points at trash": safe for the always-writes decode and the gather view
+        self.block_table = torch.zeros((n_slots, self.max_blocks), dtype=torch.long, device=device)
+        self._py_table: list[list[int]] = [[] for _ in range(n_slots)]
+        self._free: list[int] = list(range(n_blocks - 1, 0, -1))  # block 0 never allocated
+        self._refcount: list[int] = [0] * n_blocks
+        self.use_kernel = False  # R4.1b: route decode attention through the paged Triton kernel
+
+    # ------------------------------------------------------------------ allocator (scheduler-owned)
+    @property
+    def n_free_blocks(self) -> int:
+        return len(self._free)
+
+    def _alloc_block(self) -> int:
+        if not self._free:
+            raise RuntimeError(
+                "PagedKVCache pool exhausted — admission accounting must prevent this"
+            )
+        blk = self._free.pop()
+        self._refcount[blk] = 1
+        return blk
+
+    def _release_block(self, blk: int) -> None:
+        self._refcount[blk] -= 1
+        if self._refcount[blk] == 0:
+            self._free.append(blk)
+
+    def _free_storage(self, slot: int) -> None:
+        for blk in self._py_table[slot]:
+            self._release_block(blk)
+        self._py_table[slot] = []
+        self.block_table[slot] = 0  # everything points back at trash
+
+    def reserve_prefill(self, slots: Sequence[int], true_lengths: Sequence[int]) -> None:
+        """Allocate ⌈ℓ/16⌉ blocks per admitted slot (eager admission path)."""
+        for slot, ln in zip(slots, true_lengths, strict=True):
+            if self._py_table[slot]:
+                raise ValueError(f"slot {slot} still holds blocks — evict before re-admitting")
+            n_needed = (int(ln) + self.BLOCK - 1) // self.BLOCK
+            blocks = [self._alloc_block() for _ in range(n_needed)]
+            self._py_table[slot] = blocks
+            self.block_table[slot, :n_needed] = torch.tensor(
+                blocks, dtype=torch.long, device=self.block_table.device
+            )
+
+    def pre_decode_reserve(self) -> None:
+        """Before each decode forward: give boundary rows a fresh private block; assert no row
+        is about to write into a shared block (full-block sharing makes that impossible)."""
+        for b, (ln, a) in enumerate(zip(self.py_lengths, self.py_active, strict=True)):
+            if not a:
+                continue
+            idx = ln // self.BLOCK
+            if ln % self.BLOCK == 0:
+                if idx >= self.max_blocks:
+                    raise RuntimeError("slot at max_ctx — the scheduler must evict at capacity")
+                if len(self._py_table[b]) != idx:
+                    raise RuntimeError("block-table bookkeeping out of sync with lengths")
+                blk = self._alloc_block()
+                self._py_table[b].append(blk)
+                self.block_table[b, idx] = blk
+            elif self._refcount[self._py_table[b][idx]] != 1:
+                raise RuntimeError("decode write aimed at a shared block — CoW invariant broken")
+
+    def share_prefix(self, src_slot: int, dst_slot: int, n_tokens: int) -> None:
+        """Point fresh ``dst_slot`` at ``src_slot``'s first ``n_tokens`` (full blocks only) —
+        the prefix-cache primitive. ``dst`` becomes active at length ``n_tokens``; its next
+        write allocates a private block (see class docstring)."""
+        if n_tokens % self.BLOCK != 0 or n_tokens == 0:
+            raise ValueError("prefix sharing is full-block only")
+        if self.py_active[dst_slot] or self._py_table[dst_slot]:
+            raise ValueError(f"slot {dst_slot} is not fresh")
+        n_shared = n_tokens // self.BLOCK
+        if len(self._py_table[src_slot]) < n_shared:
+            raise ValueError("source slot holds fewer blocks than the requested prefix")
+        shared = self._py_table[src_slot][:n_shared]
+        for blk in shared:
+            self._refcount[blk] += 1
+        self._py_table[dst_slot] = list(shared)
+        self.block_table[dst_slot, :n_shared] = torch.tensor(
+            shared, dtype=torch.long, device=self.block_table.device
+        )
+        self.mirror_admit([dst_slot], [n_tokens])
+        self.lengths[dst_slot] = n_tokens
+        self.active[dst_slot] = True
+
+    def waste_stats(self) -> tuple[int, int, float]:
+        """(allocated_tokens, live_tokens, fragmentation) — the P4.1.1 accounting. Shared blocks
+        count once (they occupy HBM once)."""
+        allocated_blocks = self.n_blocks - 1 - len(self._free)
+        allocated_tokens = allocated_blocks * self.BLOCK
+        live = sum(ln for ln, a in zip(self.py_lengths, self.py_active, strict=True) if a)
+        frag = 0.0 if allocated_tokens == 0 else 1.0 - live / allocated_tokens
+        return allocated_tokens, live, frag
+
+    # ------------------------------------------------------------------ storage hooks (graph-owned)
+    def _write_decode_kv(self, layer: int, pos: Tensor, k_new: Tensor, v_new: Tensor) -> None:
+        blk_idx = pos // self.BLOCK
+        offset = pos % self.BLOCK
+        phys = self.block_table[self._slot_idx, blk_idx]  # (B,)
+        self._pool_k[layer][phys, :, offset] = k_new[:, :, 0]
+        self._pool_v[layer][phys, :, offset] = v_new[:, :, 0]
+
+    def decode_view(self, layer: int) -> tuple[Tensor, Tensor]:
+        """Gather the dense padded view from the pool (the oracle path — bit-exact vs contiguous
+        storage, and the P4.1.3 negative control: this copy is the price paged storage pays
+        without a paged kernel)."""
+        length = self.view_len
+        n_blocks = (length + self.BLOCK - 1) // self.BLOCK
+        phys = self.block_table[:, :n_blocks]  # (B, nb); unallocated → 0 → trash → masked
+        k = self._pool_k[layer][phys]  # (B, nb, H_kv, 16, d)
+        v = self._pool_v[layer][phys]
+        b = self.n_slots
+        k = k.permute(0, 2, 1, 3, 4).reshape(b, self.n_kv_heads, n_blocks * self.BLOCK, -1)
+        v = v.permute(0, 2, 1, 3, 4).reshape(b, self.n_kv_heads, n_blocks * self.BLOCK, -1)
+        return k[:, :, :length], v[:, :, :length]
+
+    def _write_prefill_kv(self, layer: int, slots: Tensor, k_new: Tensor, v_new: Tensor) -> None:
+        # Eager admission path: scatter the padded block into each slot's blocks, 16 tokens at a
+        # time. Chunks beyond a row's own blocks index table entry 0 (trash) — harmless garbage.
+        s = k_new.shape[2]
+        n_chunks = (s + self.BLOCK - 1) // self.BLOCK
+        for j in range(n_chunks):
+            lo, hi = j * self.BLOCK, min((j + 1) * self.BLOCK, s)
+            phys = self.block_table[slots, j]  # (n,)
+            self._pool_k[layer][phys, :, : hi - lo] = k_new[:, :, lo:hi]
+            self._pool_v[layer][phys, :, : hi - lo] = v_new[:, :, lo:hi]
+
+
 class PrefillView:
-    """Routes one right-padded batched prefill into fresh :class:`BatchedKVCache` slots — A1 R3b.
+    """Routes one right-padded batched prefill into fresh :class:`SlotKVCache` slots — A1 R3b.
 
     Duck-types the :class:`KVCache` interface the attention layer uses (``length``/``append``/
     ``get``/``advance``), so a batched admission prefill IS the ordinary uniform-causal forward:
     fresh slots start at offset 0 ⇒ standard causal mask + shared positions ``0..s−1`` — no new
-    attention math. K,V are written through into the parent's slot rows. Rows are right-padded to
-    the widest prompt; K/V beyond a row's true length is dead — masked by write-then-mask on later
-    steps and overwritten as the row decodes. ``advance(s)`` (called once by the LM after all
-    layers) activates the slots at their TRUE lengths, not the padded width — device tensors only
-    (graph-owned); the scheduler follows with ``parent.mirror_admit(slots, true_lengths)``.
+    attention math. K,V are written through the parent's storage hook (dense rows or paged
+    blocks). Rows are right-padded to the widest prompt; K/V beyond a row's true length is dead —
+    masked by write-then-mask on later steps and overwritten as the row decodes. Construction
+    reserves storage (``parent.reserve_prefill`` — a no-op for dense, block allocation for paged;
+    the admission path is eager, so allocation here honors the ownership contract). ``advance(s)``
+    (called once by the LM after all layers) activates the slots at their TRUE lengths, not the
+    padded width — device tensors only (graph-owned); the scheduler follows with
+    ``parent.mirror_admit(slots, true_lengths)``.
 
     All python-valued state (slot list, widths) is resolved to tensors/ints at construction —
     *outside* any compiled region — so a traced ``append``/``advance`` guards only on stable ints.
     """
 
     def __init__(
-        self, parent: BatchedKVCache, slots: Sequence[int], true_lengths: Sequence[int]
+        self, parent: SlotKVCache, slots: Sequence[int], true_lengths: Sequence[int]
     ) -> None:
         if len(slots) == 0 or len(slots) != len(true_lengths):
             raise ValueError("slots and true_lengths must be non-empty and equal-length")
@@ -384,6 +620,7 @@ class PrefillView:
                 raise ValueError(f"slot {b} is not fresh — evict before re-admitting")
             if not 0 < ln <= parent.max_ctx:
                 raise ValueError(f"true length {ln} outside (0, max_ctx={parent.max_ctx}]")
+        parent.reserve_prefill(list(slots), [int(x) for x in true_lengths])
         self._parent = parent
         device = parent.lengths.device
         self._slots = torch.tensor(list(slots), dtype=torch.long, device=device)
@@ -391,7 +628,7 @@ class PrefillView:
             [int(x) for x in true_lengths], dtype=torch.long, device=device
         )
         self._min_width = max(int(x) for x in true_lengths)
-        self._block: list[tuple[Tensor, Tensor] | None] = [None] * len(parent._k)
+        self._block: list[tuple[Tensor, Tensor] | None] = [None] * parent.n_layers
 
     @property
     def length(self) -> int:
@@ -401,8 +638,7 @@ class PrefillView:
         s = k_new.shape[2]
         if s < self._min_width:
             raise ValueError("padded width must cover every row's true length")
-        self._parent._k[layer][self._slots, :, :s] = k_new
-        self._parent._v[layer][self._slots, :, :s] = v_new
+        self._parent._write_prefill_kv(layer, self._slots, k_new, v_new)
         self._block[layer] = (k_new, v_new)  # this prefill attends exactly its own block
 
     def get(self, layer: int) -> tuple[Tensor, Tensor] | None:
@@ -416,9 +652,9 @@ class PrefillView:
         parent.active[self._slots] = True
 
 
-AnyKVCache = KVCache | BatchedKVCache | PrefillView
-"""Cache forms accepted by the model forward: single-request (:class:`KVCache`), batched slot
-decode (:class:`BatchedKVCache`), or slot-routed prefill (:class:`PrefillView`)."""
+AnyKVCache = KVCache | SlotKVCache | PrefillView
+"""Cache forms accepted by the model forward: single-request (:class:`KVCache`), ragged slot
+decode (:class:`SlotKVCache`: dense or paged), or slot-routed prefill (:class:`PrefillView`)."""
 
 
 class MultiHeadSelfAttention(nn.Module):
@@ -464,19 +700,35 @@ class MultiHeadSelfAttention(nn.Module):
 
         past_len = 0
         row_mask: Tensor | None = None  # per-row key mask for ragged batched decode
-        if isinstance(cache, BatchedKVCache):
-            # Iteration-level batched decode (R3b): one token per slot, each row at its own offset.
+        kernel_out: Tensor | None = None  # paged Triton decode path bypasses SDPA entirely
+        if isinstance(cache, SlotKVCache):
+            # Iteration-level batched decode (R3b/R4.1): one token per slot, each at its offset.
             if layer_idx is None:
-                raise ValueError("BatchedKVCache decode requires layer_idx")
+                raise ValueError("slot-cache decode requires layer_idx")
             if s != 1:
-                raise ValueError("BatchedKVCache decode processes exactly one token per row")
+                raise ValueError("slot-cache decode processes exactly one token per row")
             lengths = cache.lengths  # (B,) pre-write lengths; advance() bumps after all layers
-            k, v = cache.write_decode(layer_idx, k, v)  # views [:, :, :view_len]
-            # Write-then-mask: row b attends keys j ≤ lengths[b] — its history plus the key it
-            # just wrote. An inactive row (length 0) attends exactly its own garbage key at j=0:
-            # no all-masked softmax row ⇒ no NaN; its output is discarded by the scheduler.
-            k_pos = torch.arange(k.shape[2], device=x.device)
-            row_mask = (k_pos.unsqueeze(0) <= lengths.unsqueeze(1))[:, None, None, :]
+            cache.write_decode(layer_idx, k, v)
+            if isinstance(cache, PagedKVCache) and cache.use_kernel:
+                # R4.1b: fused paged decode — reads blocks via the table; no gathered padded
+                # view, no materialized scores, no GQA repeat (the R3b padding tax removed).
+                from scratch_llm.kernels.paged_decode_triton import paged_decode_attention
+
+                kernel_out = paged_decode_attention(
+                    q,
+                    cache._pool_k[layer_idx],
+                    cache._pool_v[layer_idx],
+                    cache.block_table,
+                    lengths,
+                )
+            else:
+                # Gather path (dense: a free slice; paged: the P4.1.3 gather copy — the oracle).
+                k, v = cache.decode_view(layer_idx)
+                # Write-then-mask: row b attends keys j ≤ lengths[b] — its history plus the key
+                # it just wrote. An inactive row (length 0) attends exactly its own garbage key
+                # at j=0: no all-masked softmax row ⇒ no NaN; the scheduler discards its output.
+                k_pos = torch.arange(k.shape[2], device=x.device)
+                row_mask = (k_pos.unsqueeze(0) <= lengths.unsqueeze(1))[:, None, None, :]
         elif cache is not None and layer_idx is not None:
             past_len = cache.length  # constant across layers within one forward
             cache.append(layer_idx, k, v)
@@ -484,24 +736,27 @@ class MultiHeadSelfAttention(nn.Module):
             assert full is not None  # just appended
             k, v = full  # K, V now span [past ; new]
 
-        if self.n_kv != self.n_heads:  # GQA: each kv head serves a group of query heads
-            repeats = self.n_heads // self.n_kv
-            k = k.repeat_interleave(repeats, dim=1)
-            v = v.repeat_interleave(repeats, dim=1)
-
-        # Causal mask over absolute positions: query row i (abs past_len+i) may attend key j iff
-        # j <= past_len+i. A single new token (s==1) attends all cached keys → no mask needed.
-        if row_mask is not None:
-            mask = row_mask  # (B, 1, 1, view_len) — ragged per-row visibility
-        elif s == 1:
-            mask = None
+        if kernel_out is not None:
+            out = kernel_out  # (B, H, 1, head_dim)
         else:
-            total = past_len + s
-            q_pos = torch.arange(past_len, total, device=x.device).unsqueeze(1)  # (s, 1)
-            k_pos = torch.arange(total, device=x.device).unsqueeze(0)  # (1, total)
-            mask = k_pos <= q_pos  # (s, total) bool, True = attend
+            if self.n_kv != self.n_heads:  # GQA: each kv head serves a group of query heads
+                repeats = self.n_heads // self.n_kv
+                k = k.repeat_interleave(repeats, dim=1)
+                v = v.repeat_interleave(repeats, dim=1)
 
-        out = scaled_dot_product_attention(q, k, v, mask)  # (B, H, S, head_dim)
+            # Causal mask over absolute positions: query row i (abs past_len+i) may attend key j
+            # iff j <= past_len+i. A single new token (s==1) attends all cached keys → no mask.
+            if row_mask is not None:
+                mask = row_mask  # (B, 1, 1, view_len) — ragged per-row visibility
+            elif s == 1:
+                mask = None
+            else:
+                total = past_len + s
+                q_pos = torch.arange(past_len, total, device=x.device).unsqueeze(1)  # (s, 1)
+                k_pos = torch.arange(total, device=x.device).unsqueeze(0)  # (1, total)
+                mask = k_pos <= q_pos  # (s, total) bool, True = attend
+
+            out = scaled_dot_product_attention(q, k, v, mask)  # (B, H, S, head_dim)
         out = out.transpose(1, 2).reshape(b, s, self.n_heads * self.head_dim)
         return self.o_proj(out)
 
@@ -575,7 +830,7 @@ class TransformerLM(nn.Module):
         to the dense build. ``return_aux=True`` returns ``(logits, AuxOutput)`` with the summed
         MoE aux/z losses and per-layer routing diagnostics for the training objective."""
         s = token_ids.shape[1]
-        if isinstance(cache, BatchedKVCache):
+        if isinstance(cache, SlotKVCache):
             # Ragged batched decode: each slot's next token sits at its own absolute position.
             positions = cache.lengths.unsqueeze(1)  # (B, 1) per-row RoPE positions
         else:

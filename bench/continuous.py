@@ -85,6 +85,13 @@ def report(name: str, res: ServeResult) -> ServingReport:
         f"TTFT p50/p95 {rep.ttft_ms.p50:>6.0f}/{rep.ttft_ms.p95:>6.0f} ms | "
         f"ITL p50/p95/p99 {rep.itl_ms.p50:>5.1f}/{rep.itl_ms.p95:>5.1f}/{rep.itl_ms.p99:>6.1f} ms"
     )
+    if res.paged_frag_mean is not None:
+        print(
+            f"               paged: frag {res.paged_frag_mean * 100:.1f}% | "
+            f"alloc peak {res.paged_alloc_peak_tokens} tok "
+            f"(dense reserves {N_SLOTS * RUNG1_CONFIG.context_length} tok → "
+            f"capacity ×{N_SLOTS * RUNG1_CONFIG.context_length / max(res.paged_alloc_peak_tokens or 1, 1):.1f})"
+        )
     return rep
 
 
@@ -121,6 +128,49 @@ def _measure(
         print(f"               [SM clock after pass: {_sm_clock_mhz()} MHz]")
         torch.cuda.empty_cache()
     return results
+
+
+def run_r41(model: TransformerLM, prefill_model: TransformerLM, device: str, waves: int) -> None:
+    """A1 R4.1 — storage comparison on the heavy-tail saturated trace, scheduling held fixed:
+    dense slab vs paged-gather (P4.1.3 negative control) vs paged Triton kernel (P4.1.4), with
+    a wave-dense arm for the wall-ratio denominators. Steps are identical by construction —
+    per-step time, wall, and the P4.1.1 waste accounting are the deltas."""
+    warm_reqs = make_trace("heavy", WAVES_WARM)
+    reqs = make_trace("heavy", waves)
+    arms: list[tuple[str, object, dict[str, object]]] = [
+        ("wave dense", serve_static_wave, {}),
+        ("cont dense", serve_continuous, {}),
+        ("cont paged-gathr", serve_continuous, {"cache_kind": "paged"}),
+        ("cont paged-kernl", serve_continuous, {"cache_kind": "paged", "paged_use_kernel": True}),
+    ]
+    print(
+        f"\n# R4.1 storage comparison | heavy-tail ×{waves} waves, B={N_SLOTS}, prompt={PROMPT_LEN} | "
+        f"pre-reg: frag 4–8%, gather +10–25%/step, kernel ≤8.3 ms/step & ≥2.6× vs wave"
+    )
+    results: dict[str, ServeResult] = {}
+    for name, fn, kwargs in arms:
+        fn(model, warm_reqs, N_SLOTS, device, prefill_model=prefill_model, **kwargs)  # type: ignore[operator]
+        res = fn(model, reqs, N_SLOTS, device, prefill_model=prefill_model, **kwargs)  # type: ignore[operator]
+        results[name] = res
+        report(name, res)
+        print(f"               [SM clock after pass: {_sm_clock_mhz()} MHz]")
+        torch.cuda.empty_cache()
+
+    wave = results["wave dense"]
+    wave_tok_s = sum(c.request.max_new_tokens for c in wave.completed) / (
+        wave.decode_s + wave.prefill_s
+    )
+    print()
+    for name in ("cont dense", "cont paged-gathr", "cont paged-kernl"):
+        res = results[name]
+        step_ms = 1e3 * res.decode_s / max(res.n_decode_steps, 1)
+        tok_s = sum(c.request.max_new_tokens for c in res.completed) / (
+            res.decode_s + res.prefill_s
+        )
+        print(
+            f"  → {name:<16} {step_ms:>5.2f} ms/step | {tok_s:>6.0f} tok/s | "
+            f"×{tok_s / wave_tok_s:.2f} vs wave-dense"
+        )
 
 
 def run_trace(
@@ -176,6 +226,7 @@ def main() -> None:
     ap.add_argument("--no-compile", action="store_true")
     ap.add_argument("--trace", choices=[*TRACES, "all"], default="all")
     ap.add_argument("--waves", type=int, default=WAVES_MEASURE)
+    ap.add_argument("--r41", action="store_true", help="A1 R4.1 storage comparison (dense vs paged-gather vs paged-kernel)")
     args = ap.parse_args()
 
     torch.manual_seed(0)
@@ -191,9 +242,12 @@ def main() -> None:
         tag = "compiled[default] decode + eager prefill"
     print(f"# A1 R3b continuous batching ({tag}) | GQA-4 {n_params / 1e9:.2f}B bf16 | {torch.cuda.get_device_name(0)}")
 
-    itl_reference_b1(run, prefill_model, args.device)
-    for kind in TRACES if args.trace == "all" else [args.trace]:
-        run_trace(run, prefill_model, kind, args.device, args.waves)
+    if args.r41:
+        run_r41(run, prefill_model, args.device, args.waves)
+    else:
+        itl_reference_b1(run, prefill_model, args.device)
+        for kind in TRACES if args.trace == "all" else [args.trace]:
+            run_trace(run, prefill_model, kind, args.device, args.waves)
 
     if not args.no_compile:
         try:
