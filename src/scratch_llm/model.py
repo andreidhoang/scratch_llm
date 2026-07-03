@@ -19,6 +19,7 @@ Design decisions:
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -163,12 +164,17 @@ class RotaryPositionalEmbedding(nn.Module):
         self.register_buffer("sin", freqs.sin(), persistent=False)
 
     def forward(self, x: Tensor, positions: Tensor) -> Tensor:
-        # x: (..., seq, head_dim); positions: (seq,)
-        cos = self.cos[positions]  # (seq, head_dim/2)
+        # x: (..., seq, head_dim); positions: (seq,) shared across the batch, or (B, seq)
+        # per-row (ragged batched decode: each slot's token sits at its own absolute position).
+        cos = self.cos[positions]  # (seq, head_dim/2) or (B, seq, head_dim/2)
         sin = self.sin[positions]
-        shape = (1,) * (x.dim() - 2) + cos.shape  # broadcast over leading (batch, head) dims
-        cos = cos.view(shape)
-        sin = sin.view(shape)
+        if positions.dim() == 2:  # per-row: align batch dim, broadcast over heads → (B,1,seq,d/2)
+            cos = cos.unsqueeze(1)
+            sin = sin.unsqueeze(1)
+        else:  # shared: broadcast over all leading (batch, head) dims
+            shape = (1,) * (x.dim() - 2) + cos.shape
+            cos = cos.view(shape)
+            sin = sin.view(shape)
         x_even = x[..., 0::2]
         x_odd = x[..., 1::2]
         rot_even = x_even * cos - x_odd * sin
@@ -231,6 +237,160 @@ class KVCache:
         self._length += n
 
 
+class BatchedKVCache:
+    """Static per-slot K/V buffers for iteration-level (continuous) batching — A1 R3b.
+
+    One preallocated ``(n_slots, n_kv_heads, max_ctx, head_dim)`` K and V buffer per layer; slot
+    ``b`` owns row ``b`` and holds ``lengths[b]`` valid positions. A decode step writes each row's
+    new K,V at its *own* offset (**write-then-mask**: the per-row mask admits keys
+    ``j ≤ lengths[b]``, so every row — active or not — attends at least its just-written key: no
+    all-masked softmax row, hence no NaN by construction). ``advance(1)`` bumps only *active* rows,
+    once per forward, after all layers (the same contract as :class:`KVCache`).
+
+    ``py_lengths``/``py_active`` mirror the device tensors so ``view_len`` and scheduler
+    bookkeeping never pay a per-step ``.item()`` host sync (the R1 lesson: host syncs in the decode
+    loop are the overhead that hides the memory wall).
+
+    The static buffer is the R4.1/R4.4 linchpin: fixed addresses are what CUDA-graph capture needs
+    (R1's ``torch.cat`` cache broke capture), and the contiguous per-slot region is exactly what
+    PagedAttention later replaces with 16-token blocks + a block table.
+
+    Interview question this answers: how does an inference engine decode a *ragged* batch in
+    lockstep without one row leaking into another?
+    """
+
+    def __init__(
+        self,
+        n_layers: int,
+        n_slots: int,
+        n_kv_heads: int,
+        max_ctx: int,
+        head_dim: int,
+        device: str | torch.device = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> None:
+        if n_layers < 1 or n_slots < 1 or n_kv_heads < 1 or max_ctx < 1 or head_dim < 1:
+            raise ValueError("all BatchedKVCache dimensions must be ≥ 1")
+        shape = (n_slots, n_kv_heads, max_ctx, head_dim)
+        self._k = [torch.zeros(shape, device=device, dtype=dtype) for _ in range(n_layers)]
+        self._v = [torch.zeros(shape, device=device, dtype=dtype) for _ in range(n_layers)]
+        self.lengths = torch.zeros(n_slots, dtype=torch.long, device=device)
+        self.active = torch.zeros(n_slots, dtype=torch.bool, device=device)
+        self.py_lengths: list[int] = [0] * n_slots
+        self.py_active: list[bool] = [False] * n_slots
+        self.n_slots = n_slots
+        self.max_ctx = max_ctx
+        self._slot_idx = torch.arange(n_slots, device=device)
+
+    @property
+    def view_len(self) -> int:
+        """Key positions visible this step: covers every row's just-written key (offset
+        ``lengths[b]``), so the attention view is ``[:, :, :view_len]``. A python int derived from
+        the mirror — no device sync."""
+        return min(self.max_ctx, 1 + max(self.py_lengths))
+
+    def free_slots(self) -> list[int]:
+        """Slots available for admission (inactive)."""
+        return [b for b, a in enumerate(self.py_active) if not a]
+
+    def free_slot(self, slot: int) -> None:
+        """Evict: deactivate + zero the slot's length. The stale K/V is *not* zeroed — it is
+        unreachable (masked) and overwritten by the next admission's prefill."""
+        self.py_lengths[slot] = 0
+        self.py_active[slot] = False
+        self.lengths[slot] = 0
+        self.active[slot] = False
+
+    def write_decode(self, layer: int, k_new: Tensor, v_new: Tensor) -> tuple[Tensor, Tensor]:
+        """Write one new K,V per row at that row's offset; return the attention view.
+
+        ``k_new``/``v_new``: ``(n_slots, n_kv_heads, 1, head_dim)``. Row ``b`` lands at position
+        ``lengths[b]`` (inactive rows harmlessly rewrite offset 0). Returns
+        ``(k, v)`` sliced to ``view_len`` — a view of the static buffer, no copy.
+        """
+        if k_new.shape[0] != self.n_slots or k_new.shape[2] != 1:
+            raise ValueError(f"expected ({self.n_slots}, H_kv, 1, d), got {tuple(k_new.shape)}")
+        pos = self.lengths.clamp(max=self.max_ctx - 1)  # scheduler guarantees no active overflow
+        self._k[layer][self._slot_idx, :, pos] = k_new[:, :, 0]
+        self._v[layer][self._slot_idx, :, pos] = v_new[:, :, 0]
+        length = self.view_len
+        return self._k[layer][:, :, :length], self._v[layer][:, :, :length]
+
+    def advance(self, n: int) -> None:
+        """Bump only *active* rows, once per forward after all layers (the :class:`KVCache`
+        contract). ``n`` must be 1 — batched decode processes exactly one token per row."""
+        if n != 1:
+            raise ValueError(f"BatchedKVCache.advance expects n=1 (decode), got {n}")
+        self.lengths += self.active.long()
+        for b, a in enumerate(self.py_active):
+            if a:
+                self.py_lengths[b] += 1
+        if max(self.py_lengths) > self.max_ctx:
+            raise ValueError("a slot exceeded max_ctx — the scheduler must evict at capacity")
+
+
+class PrefillView:
+    """Routes one right-padded batched prefill into fresh :class:`BatchedKVCache` slots — A1 R3b.
+
+    Duck-types the :class:`KVCache` interface the attention layer uses (``length``/``append``/
+    ``get``/``advance``), so a batched admission prefill IS the ordinary uniform-causal forward:
+    fresh slots start at offset 0 ⇒ standard causal mask + shared positions ``0..s−1`` — no new
+    attention math. K,V are written through into the parent's slot rows. Rows are right-padded to
+    the widest prompt; K/V beyond a row's true length is dead — masked by write-then-mask on later
+    steps and overwritten as the row decodes. ``advance(s)`` (called once by the LM after all
+    layers) activates the slots at their TRUE lengths, not the padded width.
+    """
+
+    def __init__(
+        self, parent: BatchedKVCache, slots: Sequence[int], true_lengths: Sequence[int]
+    ) -> None:
+        if len(slots) == 0 or len(slots) != len(true_lengths):
+            raise ValueError("slots and true_lengths must be non-empty and equal-length")
+        if len(set(slots)) != len(slots):
+            raise ValueError("slots must be distinct")
+        for b, ln in zip(slots, true_lengths, strict=True):
+            if parent.py_active[b] or parent.py_lengths[b] != 0:
+                raise ValueError(f"slot {b} is not fresh — evict before re-admitting")
+            if not 0 < ln <= parent.max_ctx:
+                raise ValueError(f"true length {ln} outside (0, max_ctx={parent.max_ctx}]")
+        self._parent = parent
+        self._slots = torch.tensor(list(slots), dtype=torch.long, device=parent.lengths.device)
+        self._py_slots = [int(b) for b in slots]
+        self._true_lengths = [int(x) for x in true_lengths]
+        self._block: list[tuple[Tensor, Tensor] | None] = [None] * len(parent._k)
+
+    @property
+    def length(self) -> int:
+        return 0  # fresh slots by contract: prefill is an offset-0, uniform-causal forward
+
+    def append(self, layer: int, k_new: Tensor, v_new: Tensor) -> None:
+        s = k_new.shape[2]
+        if s < max(self._true_lengths):
+            raise ValueError("padded width must cover every row's true length")
+        self._parent._k[layer][self._slots, :, :s] = k_new
+        self._parent._v[layer][self._slots, :, :s] = v_new
+        self._block[layer] = (k_new, v_new)  # this prefill attends exactly its own block
+
+    def get(self, layer: int) -> tuple[Tensor, Tensor] | None:
+        return self._block[layer]
+
+    def advance(self, n: int) -> None:
+        """Activate the slots at their true (unpadded) lengths — called once, after all layers."""
+        parent = self._parent
+        parent.lengths[self._slots] = torch.tensor(
+            self._true_lengths, dtype=torch.long, device=parent.lengths.device
+        )
+        parent.active[self._slots] = True
+        for b, ln in zip(self._py_slots, self._true_lengths, strict=True):
+            parent.py_lengths[b] = ln
+            parent.py_active[b] = True
+
+
+AnyKVCache = KVCache | BatchedKVCache | PrefillView
+"""Cache forms accepted by the model forward: single-request (:class:`KVCache`), batched slot
+decode (:class:`BatchedKVCache`), or slot-routed prefill (:class:`PrefillView`)."""
+
+
 class MultiHeadSelfAttention(nn.Module):
     """Causal multi-head self-attention with RoPE and GQA. Heads are a batch dim."""
 
@@ -254,7 +414,7 @@ class MultiHeadSelfAttention(nn.Module):
         self,
         x: Tensor,
         positions: Tensor,
-        cache: KVCache | None = None,
+        cache: AnyKVCache | None = None,
         layer_idx: int | None = None,
     ) -> Tensor:
         b, s, _ = x.shape
@@ -272,14 +432,27 @@ class MultiHeadSelfAttention(nn.Module):
         q = self.rope(q, positions)
         k = self.rope(k, positions)
 
-        if cache is not None and layer_idx is not None:
+        past_len = 0
+        row_mask: Tensor | None = None  # per-row key mask for ragged batched decode
+        if isinstance(cache, BatchedKVCache):
+            # Iteration-level batched decode (R3b): one token per slot, each row at its own offset.
+            if layer_idx is None:
+                raise ValueError("BatchedKVCache decode requires layer_idx")
+            if s != 1:
+                raise ValueError("BatchedKVCache decode processes exactly one token per row")
+            lengths = cache.lengths  # (B,) pre-write lengths; advance() bumps after all layers
+            k, v = cache.write_decode(layer_idx, k, v)  # views [:, :, :view_len]
+            # Write-then-mask: row b attends keys j ≤ lengths[b] — its history plus the key it
+            # just wrote. An inactive row (length 0) attends exactly its own garbage key at j=0:
+            # no all-masked softmax row ⇒ no NaN; its output is discarded by the scheduler.
+            k_pos = torch.arange(k.shape[2], device=x.device)
+            row_mask = (k_pos.unsqueeze(0) <= lengths.unsqueeze(1))[:, None, None, :]
+        elif cache is not None and layer_idx is not None:
             past_len = cache.length  # constant across layers within one forward
             cache.append(layer_idx, k, v)
             full = cache.get(layer_idx)
             assert full is not None  # just appended
             k, v = full  # K, V now span [past ; new]
-        else:
-            past_len = 0
 
         if self.n_kv != self.n_heads:  # GQA: each kv head serves a group of query heads
             repeats = self.n_heads // self.n_kv
@@ -288,7 +461,9 @@ class MultiHeadSelfAttention(nn.Module):
 
         # Causal mask over absolute positions: query row i (abs past_len+i) may attend key j iff
         # j <= past_len+i. A single new token (s==1) attends all cached keys → no mask needed.
-        if s == 1:
+        if row_mask is not None:
+            mask = row_mask  # (B, 1, 1, view_len) — ragged per-row visibility
+        elif s == 1:
             mask = None
         else:
             total = past_len + s
@@ -329,7 +504,7 @@ class TransformerBlock(nn.Module):
         self,
         x: Tensor,
         positions: Tensor,
-        cache: KVCache | None = None,
+        cache: AnyKVCache | None = None,
         layer_idx: int | None = None,
     ) -> tuple[Tensor, MoEStats | None]:
         x = x + self.attn(self.attn_norm(x), positions, cache, layer_idx)
@@ -364,14 +539,18 @@ class TransformerLM(nn.Module):
             self.lm_head.weight = self.token_emb.weight
 
     def forward(
-        self, token_ids: Tensor, cache: KVCache | None = None, return_aux: bool = False
+        self, token_ids: Tensor, cache: AnyKVCache | None = None, return_aux: bool = False
     ) -> Tensor | tuple[Tensor, AuxOutput]:
         """``return_aux=False`` (default, and the decode path) returns just logits — identical
         to the dense build. ``return_aux=True`` returns ``(logits, AuxOutput)`` with the summed
         MoE aux/z losses and per-layer routing diagnostics for the training objective."""
         s = token_ids.shape[1]
-        start = 0 if cache is None else cache.length
-        positions = torch.arange(start, start + s, device=token_ids.device)
+        if isinstance(cache, BatchedKVCache):
+            # Ragged batched decode: each slot's next token sits at its own absolute position.
+            positions = cache.lengths.unsqueeze(1)  # (B, 1) per-row RoPE positions
+        else:
+            start = 0 if cache is None else cache.length
+            positions = torch.arange(start, start + s, device=token_ids.device)
         x = self.token_emb(token_ids)
         layer_stats: list[MoEStats] = []
         for layer_idx, block in enumerate(self.blocks):
