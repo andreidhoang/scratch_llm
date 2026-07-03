@@ -45,29 +45,32 @@ Two orderings, both true: **BUILD** is numeric (each layer rests on the last); *
 (scarcest-skill-first, per [`../STRATEGY.md`](../STRATEGY.md) §8).
 
 ```
-BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ A5 "aha" · (A2 finish ∥ OSS) · DELTA
+BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ perf A1–A7 (mandate 06-30) → A5 "aha" → DELTA
         byte ───────────── own every layer of a language model ───────────── RL update
 
  A1 Basics      ████████████ 100%  ✅  BPE · Transformer · AdamW · train · sample
- A2 Systems     ███████░░░░░  ~60% 🟡  ACTIVE — see breakdown below
+ A2 Systems     ███████░░░░░  ~60% 🟡  parked behind the perf mandate — see breakdown below
  A3 Scaling     ░░░░░░░░░░░░    0%  ⬜  IsoFLOP / Chinchilla fitter (clean stub)
  A4 Data        ░░░░░░░░░░░░    0%  ⬜  extract → filter → classify → MinHash dedup (clean stub)
- A5 Alignment   ░░░░░░░░░░░░    0%  ⬜  SFT → Expert-Iter → GRPO/Dr.GRPO  ◄ highest-EV SHIP target
+ A5 Alignment   ░░░░░░░░░░░░    0%  ⬜  SFT → Expert-Iter → GRPO/Dr.GRPO  ◄ first SHIP after perf track
  DELTA capstone  design ✅      0%  ⬜  GDN-2 decode kernel — base-first, gated on A5 ship + Step-0
+
+ ►► ACTIVE FRONT: the Performance Curriculum (§ below) — A1-serving R0–R4.1 ✅ measured, node R4.2.
 ```
 
-**A2 breakdown — the active front (the densest interview surface):**
+**A2 breakdown — CS336 systems (single-GPU half done; distributed half queued behind the mandate):**
 
 ```
  make ONE GPU fast  (single-GPU half ✅)        make MANY GPUs coherent  (distributed half, gloo)
  ─────────────────────────────────────          ─────────────────────────────────────────────
  FA2 forward (oracle + Triton)   ✅              DDP  naive → flat → overlap        ✅  D1
- FA2 backward (D-vector)         ✅  K           ZeRO-1 optimizer-state sharding    ⬜  D2  ◄ NEXT
+ FA2 backward (D-vector)         ✅  K           ZeRO-1 optimizer-state sharding    ⬜  D2  (after mandate)
  activation/selective ckpt       ✅  M1          + 100B memory one-pager (written)  ⬜  D2
  mixed-precision numerics        ✅  M2          FSDP2 per-param (graded)           ⬜  D3
  KV-cache · monitors · rollout   ✅              comms algebra (DP/FSDP/TP calcs)   ⬜  D4
  roofline (53% SDPA @4k, 4090)   ✅              ── then Phase C frontier labs (opt-in) ──
-                                                 paged-KV · speculative · ring-CP · TP toy · FP8 sim
+ paged-KV + continuous batching  ✅  (shipped    speculative · ring-CP · TP toy · FP8 sim
+   via perf-curriculum R3b/R4.1)
 ```
 
 **Resourcing — we develop on a standing GPU now.** Hardware (2026-06-29): **NVIDIA RTX PRO 4000
