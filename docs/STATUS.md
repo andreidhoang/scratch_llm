@@ -85,7 +85,8 @@ A bigger / multi-GPU box is rented (`vastai` skill) only for what this card can'
 throughput vs H100/B200, real multi-GPU NCCL ([ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md) is
 an open re-check on sm120). The `pytest -m "not gpu"` gate stays as the HW-agnostic commit/CI floor.
 
-**Next ship — EV-ranked, not numeric (per [`../STRATEGY.md`](../STRATEGY.md) §8): the A5 RL "aha".**
+**Next ship after the perf curriculum — EV-ranked, not numeric (per [`../STRATEGY.md`](../STRATEGY.md) §8,
+gated by the 2026-06-30 ordering mandate): the A5 RL "aha".**
 `algos/` SFT masked-CE → GRPO/Dr.GRPO wired to `utils/monitors.py` → reproduce the R1-Zero "aha" on
 Countdown (Qwen2.5-1.5B; CPU-scaffolded + one ~$30–100 burst). The A2 distributed finish + OSS Rung-1
 run in parallel; **DELTA is base-first** — its kernel is gated behind the A5 ship + the Step-0 gate.
@@ -176,8 +177,8 @@ estimator · RLOO · off-policy epochs>1. *Adoption is tracked as green commits 
 | KV-cache (incremental decode) | ✅ | `KVCache` + cache-aware attention/forward; cached == recompute (MHA/GQA/batch). Spec: [`design/L2_kv_cache_SPEC.md`](design/L2_kv_cache_SPEC.md) |
 | `utils/monitors.py` | ✅ | entropy, the KL divergences, IS ratios + ESS, reward/length stats |
 | `rollout/` client seam + `LocalBackend` | ✅ | `Rollout`/`RolloutClient` contract + CPU `LocalBackend`; per-token log-probs feed `monitors`. Spec: [`design/L2_rollout_seam_SPEC.md`](design/L2_rollout_seam_SPEC.md) |
-| DDP (naive → flat-bucket → overlap) | ⬜ **next** | CPU-buildable via the gloo backend |
-| ZeRO-1 optimizer-state sharding | ⬜ | CPU/gloo |
+| DDP (naive → flat-bucket → overlap) | ✅ | `utils/ddp.py` — naive/flat/overlap containers + 2-rank gloo equivalence (665b6e6) |
+| ZeRO-1 optimizer-state sharding | ⬜ | CPU/gloo — queued behind the perf ordering mandate (D2) |
 | FSDP | ⬜ | CPU/gloo; a full graded A2 deliverable |
 | 100B memory-math one-pager | ⬜ | the verbatim "train a 100B model" answer (params+grads+Adam ≈ 16–20 B/param) |
 | real serving (SGLang, fp8/INT4-KV) | ⬜ Hopper box | `rollout/sglang_client.py` ready; SGLang needs sm90+ ([ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md)) |
@@ -196,7 +197,7 @@ kernel for **GatedDeltaNet-2** (NVIDIA, arXiv 2605.22791), targeting ≥85% of t
 roofline and the "erase/write decoupling is free at decode" thesis. Design + plan live in the **workspace
 root** (one dir up from this repo).
 
-> ⚠️ **Re-aim (2026-06-27).** The *plain* GDN-decode gap is now **closed** — FlashInfer ships `gated_delta_rule_decode` and MLSys-2026 has a GDN contest track. Re-point the spike to **NVFP4 on the GDN recurrent state** (production NVFP4 keeps the recurrent state in BF16; FP4-state error-accumulation vs context length is unmeasured) and land it as **the public artifact** (`ROADMAP.md` G3). The Phase-1 harness (= the A2 finish) is unchanged.
+> ⚠️ **Re-aim (2026-06-27).** The *plain* GDN-decode gap is now **closed** — FlashInfer ships `gated_delta_rule_decode` and MLSys-2026 has a GDN contest track. Re-point the spike to **NVFP4 on the GDN recurrent state** (production NVFP4 keeps the recurrent state in BF16; FP4-state error-accumulation vs context length is unmeasured) and land it as **the public artifact** (goal G3 of the private workspace `ROADMAP.md` — not in this repo). The Phase-1 harness (= the A2 finish) is unchanged.
 >
 > **Artifact target (ready to scope).** The MLSys-2026 FlashInfer GDN track has *concluded* (winners public) — so its problem + harness are now a gold **reference to reproduce-and-beat**, not a live submission. Ship: (1) a fused **GDN-decode** kernel matched to that benchmark; (2) the **NVFP4-on-recurrent-state** numerics probe — error vs context length, the genuinely open seam. → as a **FlashInfer/SGLang PR + a GPU MODE leaderboard entry** (permanent) + a short writeup. **Kill gate:** if the plain GDN-decode kernel can't get within ~10% of FlashInfer's, drop to "NVFP4-state numerics writeup only." Gated on the A5 ship + a rented H100 (Step-0).
 

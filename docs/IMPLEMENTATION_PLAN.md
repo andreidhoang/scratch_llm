@@ -32,18 +32,27 @@ If a change doesn't build, test, or defend one of the five assignments to this s
 
 ## 1. Current state (what is green, what is greenfield)
 
-From `docs/STATUS.md` (92 tests green, ruff/pyright clean, ~16 s CPU suite):
+From `docs/STATUS.md` (157 CPU + 14 GPU-marked tests green, ruff/pyright clean — STATUS carries the
+live numbers; this table tracks the CS336 track only, the perf curriculum lives in
+`performance/PERF_PLAN.md`):
 
 | Assignment | Built & green | To build |
 |---|---|---|
 | **A1** Basics | ✅ tokenizer · model (RMSNorm/RoPE/SwiGLU/GQA-ready MHA + opt-in QK-norm) · MoE (opt-in) · AdamW+clip+cosine · train · sampling | — (complete) |
-| **A2** Systems | ✅ FlashAttention-2 (oracle+Triton+roofline) · KV-cache · `utils/monitors.py` · rollout seam (`LocalBackend`) | ⬜ DDP (naive→overlap) · ZeRO-1 · FSDP · 100B memory one-pager · real SGLang serving (Hopper) |
+| **A2** Systems | ✅ FlashAttention-2 (oracle+Triton+roofline) · KV-cache · `utils/monitors.py` · rollout seam (`LocalBackend`) | ✅ DDP (naive→flat→overlap, gloo) · ⬜ ZeRO-1 · FSDP · 100B memory one-pager · real SGLang serving (Hopper) — queued behind the perf mandate |
 | **A3** Scaling | — | ⬜ `scaling/` IsoFLOP/Chinchilla fitter (the Stanford-API leaderboard runs in the official scaffold) |
 | **A4** Data | — | ⬜ `data/` extract·filter·quality-classify·dedup |
 | **A5** Alignment | ✅ env/grader protocol (`envs/protocol.py`) | ⬜ `algos/` (SFT·EI·GRPO/Dr.GRPO·DPO) · `rewards/` · `envs/` |
 | **Capstone** DELTA | ✅ design doc + 4-week barbell plan (fact-checked 2026-06-14) | ⬜ Step-0 gate → Phase-1 harness (= A2 finish) → Triton decode kernel → ablations → postmortem (see §7) |
 
-`algos/`, `rewards/`, `envs/`, `scaling/`, `data/` are clean stubs today. **Build-order is numeric
+`algos/`, `rewards/`, `envs/`, `scaling/`, `data/` are clean stubs today.
+
+> **Ordering mandate (2026-06-30) — supersedes the ship-order below until done.** The
+> `performance/` curriculum (A1–A7) ships first; its current node lives in
+> `performance/PERF_PLAN.md`. The A5 RL "aha" and DELTA are **gated behind it** (A2–A5 kernel
+> skills are direct DELTA prerequisites). The paragraph below is the canonical post-mandate sequence.
+
+**Build-order is numeric
 (each layer builds on the last); ship-order is EV-ranked — they are not the same thing.** A1's substrate
 is the policy A5 fine-tunes and A2's systems make A5's rollouts cheap, so A1/A2 are the foundation; but
 with **A1 ✅ done**, the **next artifact to *ship* is the A5 RL "aha"** (the scarcest 2026 cluster,
@@ -152,7 +161,7 @@ An assignment is "mastered to production" when:
 - Per-assignment how-to (the load-bearing 20%): `docs/assignment_guides/A{1..5}_*_BUILD_GUIDE.md` (start at `INDEX.md`).
 - Lecture → assignment → source map (which slides to read first, in what order): `docs/LECTURE_MAP.md`.
 - Frontier-practice layer (2026 modern defaults · build labs · interview-awareness, per pillar, fact-checked): `docs/FRONTIER_PRACTICE_2026.md`.
-- **Performance & inference spine** (the decode-memory-wall storyline across A2/A5/DELTA · 2026 frontier findings · EV-ranked perf build list): `docs/PERFORMANCE_TRACK.md`; the **GPU-from-zero curriculum** (rung 0→9, no GPU background assumed): `docs/GPU_FROM_ZERO.md`.
+- **Performance curriculum (the active front):** `performance/PERF_PLAN.md` (phases, current node, rentals) + `performance/PERF_ENGINEERING_SPEC.md` (per-assignment falsifiable predictions, DoD, kill criteria). Reference layer: `docs/PERFORMANCE_TRACK.md` (thesis · 2026 findings · honesty constants); on-ramp: `docs/GPU_FROM_ZERO.md` (rung 0→9, no GPU background assumed).
 - Build status (single source of truth): `docs/STATUS.md`.
 - Constitution + disciplines + green-CI: `CLAUDE.md`.
 - Workspace map + interview-readiness: `../README.md`.

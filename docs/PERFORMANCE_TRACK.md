@@ -13,6 +13,13 @@
 > stream returning cited, confidence-tagged findings + an EV-ranked build list. Claims here are tagged
 > `[FACT]` (primary source) / `[INFERENCE]` (derived). Verify a specific number against the cited
 > primary before quoting it in an interview.
+>
+> **Superseded as the operating plan (2026-07-01).** This doc's build list spawned the
+> `performance/` curriculum two days after it was written; the perf build now runs on
+> **`performance/PERF_PLAN.md`** (phases, current node, rentals) + **`PERF_ENGINEERING_SPEC.md`**
+> (predictions, DoD, kill criteria). What stays live here is the **reference layer**: the thesis
+> (§0), the 2026 findings (§2), the subtract-list (§4), and the honesty constants (§5 — cited by
+> `bench/RESULTS.md`). §1 and §3 are retired below with their resolutions.
 
 ---
 
@@ -52,20 +59,14 @@ is the seed of a coherent decode-performance portfolio.
 
 ---
 
-## 1. Where the repo stands (perf/inference subset)
+## 1. Where the repo stands — RETIRED (2026-07-03)
 
-From [`STATUS.md`](STATUS.md) + a direct disk check (2026-06-29):
-
-**✅ Already frontier-aligned:** FA2 oracle + Triton fwd + the **honest 53%-of-SDPA roofline negative**
-(a principal-grade claims-honesty artifact); KV-cache; `utils/monitors.py` (entropy + the three KLs +
-IS/ESS); `utils/mixed_precision.py`; selective checkpointing; the `kl_train_infer` design spec.
-
-**🔴 Live blocker:** `tests/test_rollout.py:5` imports `scratch_llm.rollout`, which is **absent on disk**
-(STATUS claims "rollout seam ✅" — a doc/disk discrepancy). pytest collection fails → the green-CI hook
-blocks every commit. **Tier-0: resolve before any commit.**
-
-**🕳️ The wedge (highest-value first result):** the KV-cache is **correctness-tested but never *timed*.**
-You own the asset that *is* the decode memory-wall and have never measured it against a roofline.
+Build state lives in [`STATUS.md`](STATUS.md); the current perf node lives in
+`performance/PERF_PLAN.md`. The 2026-06-29 snapshot that sat here aged out within days and is kept
+only in git history: its "live blocker" (the missing `rollout/` package) was resolved the same day
+(green-CI restored, see STATUS), and its "wedge" (the KV-cache **never timed**) was measured
+2026-07-01 as perf-curriculum **A1 R1** (51 → 173 tok/s eager→compiled, 15%→53% HBM —
+`bench/RESULTS.md`).
 
 ---
 
@@ -111,35 +112,22 @@ more; MiniMax CISPO clips the IS weight. Mandatory dashboard: entropy · KL(cur�
 
 ---
 
-## 3. The 80/20 build spine (EV-ranked, Mode-aware)
+## 3. The 80/20 build spine — RETIRED; each item's resolution (2026-07-03)
 
-Collapsed from the five ~7-item research lists (~35 items) for *this* repo, weighting EV/effort ×
-scarcity × builds-on-existing × Mode-3-respecting. **Every deliverable is a measured profile/curve, not
-a green test.** Mode tag: *(you)* = Mode-3 human body; *(AI)* = agent-buildable harness/scaffold.
+The EV-ranked list that sat here became the `performance/` curriculum; the original tables are in
+git history (`1a0900c`). Where every item landed:
 
-### Tier 0 — Unblock *(today, ~30 min, AI)*
-Resolve the `rollout` import → green CI. Prerequisite to every commit. **Do not blindly stub** — confirm
-why `rollout/` is missing (uncommitted? checkout state?) before restoring or skipping.
-
-### Tier 1 — The spine seed *(highest EV, CPU/cheap)*
-| # | Build | Deliverable | Predict anchor | Mode |
-|---|---|---|---|---|
-| 1 | **Roofline + predict-the-number harness** (`bench/roofline.py`) — generalizes the one-off FA2 roofline. Spec: [`design/PERF_roofline_harness_SPEC.md`](design/PERF_roofline_harness_SPEC.md) | a roofline-PNG generator + per-token (weights+KV) breakdown, reused by every item below | "decode B=1 ≈ 300× below the H100 ridge" | you count FLOPs/bytes; AI scaffolds plot+table |
-| 2 | **Time the existing KV-cache decode** (cheap vast.ai burst). Spec: [`design/PERF_decode_roofline_SPEC.md`](design/PERF_decode_roofline_SPEC.md) | measured-vs-predicted tok/s + nsys profile: tensor cores idle, HBM saturated → *proves* memory-bound | "70B BF16 ≈ 24 tok/s = 140GB ÷ 3.35TB/s" | you read the profile; AI scaffolds the bench |
-
-### Tier 2 — Scarce differentiators *(map to the stated ship-order)*
-| # | Build | Why scarce | Mode |
-|---|---|---|---|
-| 3 | **A5 RL train↔infer logprob-drift + IS correction** (builds on `monitors.py` + the `kl_train_infer` spec) | THE hot 2025–26 RL-systems result; A5 is the repo's highest-EV next ship | GRPO loss body *(you)*; drift bench + dashboard *(AI)* |
-| 4 | **Continuous-batching scheduler** (Orca-style, CPU-simulatable on the A1 model) | the core 2026 serving primitive; reproduces 8–23× on your stack | *(AI)* |
-| 5 | **Quant-error-vs-bits harness** (CPU) — sweep granularity × format | cheapest "thinks in numbers" quant artifact; feeds DELTA's NVFP4-on-state | *(AI)*; the FP8 GEMM body *(you)* |
-
-### Tier 3 — Kernel reps + the A2 distributed finish *(your Mode-3 reps; AI scaffolds/profiles)*
-- **Decode-attention kernel** (split-K / Flash-Decoding + GQA + paged-KV gather) — graded on **% HBM
-  bandwidth**. The scarce decode-kernel skill, *directly the DELTA axis*. *(you write the Triton body)*
-- **Spec-decode batch-erosion curve** — acceptance-τ + the crossover where spec-decode loses at B≥8.
-- **A2 finish** (already the stated parallel ship): ZeRO-1 → FSDP2 → **comms-roofline harness** (reuses
-  Tier-1) + the 100B/671B memory one-pager; **MoE all-to-all** dispatch/combine as the stretch.
+| Was (tier · item) | Landed as | Status |
+|---|---|---|
+| T0 · unblock `rollout/` import | rebuilt same day (STATUS "Green-CI restored 2026-06-29") | ✅ done |
+| T1 #1 · roofline + predict-the-number harness | `src/scratch_llm/bench/` (`gpu_specs` · `roofline` · `harness` · `ledger`) | ✅ built 06-29, in daily use |
+| T1 #2 · time the KV-cache decode | perf A1 **R1** (`bench/decode_roofline.py` + `decode_overhead_strip.py`) — on the standing GPU, no rental | ✅ measured 07-01 |
+| T2 #3 · RL train↔infer drift + IS correction | A5 track — **gated behind the perf mandate** (2026-06-30) | ⬜ queued |
+| T2 #4 · continuous-batching scheduler ("CPU-simulatable") | perf A1 **R3a/R3b** — real engine, measured 2.30× wall / 2.93× steps vs static-wave | ✅ measured 07-03 |
+| T2 #5 · quant-error-vs-bits harness | perf **A5/Phase 1e** (INT8→INT4→NVFP4 numerics rungs) | ⬜ queued (planned) |
+| T3 · decode-attention kernel (paged-KV) | perf A1 **R4.1** — fused Triton paged decode, 5.90 ms/step = ×3.52 vs wave | ✅ measured 07-03 |
+| T3 · spec-decode batch-erosion curve | perf A1 **R4.3** (lossless spec-decode rung) | ⬜ queued (planned) |
+| T3 · A2 distributed finish (ZeRO-1 → FSDP2 → comms) | DDP ✅ (665b6e6); ZeRO-1/FSDP queued behind the mandate | 🟡 partial |
 
 ---
 
@@ -162,7 +150,9 @@ why `rollout/` is missing (uncommitted? checkout state?) before restoring or ski
 
 ## 6. Pointers
 
-- The from-zero ladder (rung 0→9): [`GPU_FROM_ZERO.md`](GPU_FROM_ZERO.md)
+- **The operating perf plan (current node, phases, rentals): `../performance/PERF_PLAN.md` +
+  `../performance/PERF_ENGINEERING_SPEC.md`** — this doc is its reference layer.
+- The from-zero on-ramp (rung 0→9): [`GPU_FROM_ZERO.md`](GPU_FROM_ZERO.md)
 - Per-deliverable specs: `docs/design/PERF_*_SPEC.md` (+ the existing `L2_*_SPEC.md`)
 - Per-pillar frontier defaults: [`FRONTIER_PRACTICE_2026.md`](FRONTIER_PRACTICE_2026.md)
 - The assignment spine + DELTA: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7, `../../DELTA.md`

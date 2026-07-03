@@ -30,7 +30,7 @@
 
 ```
 A1 Basics ✅      substrate: BPE · Transformer · AdamW · training · sampling          (the policy)
-A2 Systems 🟡     FA2 ✅ · KV-cache ✅ · monitors ✅ · rollout ✅ → DDP/ZeRO-1/FSDP + memory math   (next)
+A2 Systems 🟡     FA2 ✅ · KV-cache ✅ · monitors ✅ · rollout ✅ · DDP ✅ → ZeRO-1/FSDP + memory math (queued behind the perf mandate)
 A3 Scaling ⬜     IsoFLOP / Chinchilla fitter (+ the Stanford-API leaderboard in the official scaffold)
 A4 Data ⬜        extract → filter → quality-classify → exact + MinHash/LSH dedup
 A5 Alignment ⬜   SFT → Expert Iteration → GRPO/Dr.GRPO → DPO + safety        (the RL crown)

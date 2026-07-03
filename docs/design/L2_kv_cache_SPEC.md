@@ -1,6 +1,10 @@
 # Design spec — L2 KV-cache (incremental decoding)
 
-> **Status:** spec / not yet built. The next implementation after L1 substrate + `utils/monitors.py`.
+> **Status:** ✅ built & green (cached == recompute across MHA/GQA/batch — `tests/test_kv_cache.py`).
+> This spec documents the original contiguous single-request `KVCache`; it was **extended 2026-07-03**
+> by the slot-cache family (`SlotKVCache` → `BatchedKVCache`/`PagedKVCache` + `PrefillView`) for
+> ragged batched serving — design records: `performance/notes/A1_R3_continuous_batching.md` +
+> `performance/notes/A1_R41_paged_attention.md`.
 > **Layer:** L2 Systems (A2) — the CPU-buildable half (FA2/SGLang/DDP need a GPU box).
 > **Files touched:** `src/scratch_llm/model.py` (cache-aware attention + forward), `src/scratch_llm/sampling.py`
 > (cache-driven `generate`), new `tests/test_kv_cache.py`.

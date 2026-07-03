@@ -1,7 +1,8 @@
 # Design spec — Decode-step roofline (time the KV-cache)
 
-> **Status:** spec written (2026-06-29); **not built**. Needs a cheap rented GPU (vast.ai) — CPU
-> correctness of the KV-cache already exists; this measures it.
+> **Status:** ✅ built & measured 2026-07-01 as perf-curriculum **A1 R1** — on the standing sm120
+> GPU, no rental needed (`bench/decode_roofline.py` + `bench/decode_overhead_strip.py`; 51 → 173
+> tok/s eager→compiled, 15%→53% HBM; `bench/RESULTS.md` §A1 R1). Kept as the design record.
 > **Layer:** Perf spine, Tier-1 #2. See [`../PERFORMANCE_TRACK.md`](../PERFORMANCE_TRACK.md) §1 ("the
 > wedge") and [`../GPU_FROM_ZERO.md`](../GPU_FROM_ZERO.md) Rung 6.
 > **The deliverable is the profile:** the first *measured* decode result — tok/s vs the bandwidth bound

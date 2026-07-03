@@ -1,7 +1,8 @@
 # Design spec — L2 rollout seam (the train↔infer comparison harness)
 
-> **Status:** spec / building now. The CPU-buildable step after the KV-cache (see
-> [`L2_kv_cache_SPEC.md`](L2_kv_cache_SPEC.md) §6).
+> **Status:** ✅ built & green — `rollout/` (`types.py` · `local.py` · exports) with per-token
+> logprobs feeding `utils/monitors.py`; rebuilt to this spec 2026-06-29 after the checkout-loss
+> incident (see `STATUS.md`).
 > **Layer:** L2 Systems (A2.3) — the rollout/inference engine over which the `kl_train_infer`
 > measurement compares training-engine and serving-engine logits.
 > **Files touched:** new `src/scratch_llm/rollout/types.py`, `src/scratch_llm/rollout/local.py`,

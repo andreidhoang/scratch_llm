@@ -1,6 +1,8 @@
 # Design spec — Roofline + predict-the-number harness
 
-> **Status:** spec written (2026-06-29); **not built** — the body is YOURS to write (Rung 1).
+> **Status:** ✅ built same day (2026-06-29) and in daily use — landed as `src/scratch_llm/bench/`
+> (`gpu_specs` · `roofline` · `harness` · `ledger`); every perf rung measures through it
+> (`bench/RESULTS.md`). Kept as the design record.
 > **Layer:** Perf spine (the seed every later kernel/system rung reuses). See
 > [`../PERFORMANCE_TRACK.md`](../PERFORMANCE_TRACK.md) §3 Tier-1 and [`../GPU_FROM_ZERO.md`](../GPU_FROM_ZERO.md) Rung 1.
 > **The deliverable is the discipline, not the script:** a reusable way to *predict the bound and the

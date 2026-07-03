@@ -1,6 +1,10 @@
 # Design spec — L2 kl_train_infer (training-engine vs inference-engine KL)
 
-> **Status:** building on the rented 4090 (SGLang serving).
+> **Status:** 🟡 the measurement harness (`bench/kl_train_infer.py`) + `utils/monitors.py` are
+> built; the engine-pair backends this spec names (`rollout/sglang_client.py` /
+> `rollout/hf_reference.py`) were **lost in the 2026-06-29 checkout incident and not yet rebuilt**.
+> Real SGLang serving stays deferred per [ADR-0008](../adr/ADR-0008-sglang-hopper-only-on-ada.md)
+> (written on the rented-4090 era; sm120 re-check open).
 > **Layer:** L2 Systems (A2.3) — an A2 systems measurement of the gap between the training and
 > serving engines. See [`../IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md) and
 > [`../STATUS.md`](../STATUS.md) for where it sits in the build.

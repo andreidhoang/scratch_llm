@@ -15,7 +15,8 @@ Distilled from the FOP (`CLAUDE.md`), research-as-MDP (`CONTEXT_ENGINEERING.md �
 
 1. **One active node.** The day orbits the single highest-variance *open* node — one experiment, one
    load-bearing step — chosen by EV (success-rate ÷ time), not a queue. Pull the signal node; defer
-   the deterministic scaffolding. (Right now: ZeRO-1 / A2-D2, *or* SFT masked-CE / A5 — never both in one day.)
+   the deterministic scaffolding. (The current node lives in `performance/PERF_PLAN.md` §Current
+   Node — one rung at a time; never two experiments in one day.)
 2. **Predict-before-run is the open of every run.** Write the falsifiable number/shape/bound *first* —
    the roofline bound (comm vs flop vs memory) and the number, before launch. It is simultaneously the
    debugging anchor and the learning anchor. A run with no pre-written prediction is wasted signal.
@@ -128,20 +129,17 @@ Glance at these at `/eod` and on Friday — they catch drift before it compounds
 
 ---
 
-## 6. Mapping to the current state (2026-06-29)
+## 6. Where the current node lives (don't hardcode it here)
 
-Two live nodes; the rhythm says **pick one per day**, EV-ranked.
+Hardcoded node lists in a process doc rot: the 2026-06-29 snapshot that used to sit in this section
+named A5-SFT and A2-D2/ZeRO-1 as the two live nodes — both were parked by the perf ordering mandate
+**the next day** (2026-06-30). Orient instead from the three durable pointers, in this order:
 
-- **A5 SFT masked-CE** (highest-EV ship). `/standup` → node = "`response_mask` + `sft_microbatch_train_step`
-  correct." Prediction: loss-at-init on the SFT head ≈ log V over unmasked positions; overfit-one-batch → ~0.
-  Mode-3 — *you* write the masked-CE body; I supply the failing tests (`response_mask` alignment,
-  masked-mean, overfit). Wire `utils/monitors.py` logging *before* any GRPO run.
-- **A2-D2 ZeRO-1** (systems finish, = DELTA Phase-1 infra). Node = "optimizer-state sharded across ranks,
-  2-rank gloo equivalence to single-process AdamW." Prediction: per-rank optimizer memory ≈ (1/N)× the
-  unsharded state; param/grad unchanged. Test-first: the 2-rank gloo equivalence (×5 seeds). Pair it with
-  the **100B memory one-pager** (params+grads+Adam ≈ 16–20 B/param → why DP+TP+PP).
+1. `performance/PERF_PLAN.md` §Current Node — the active front (the perf curriculum).
+2. `docs/STATUS.md` — build state, mandate, what's parked.
+3. `bench/RESULTS.md` — the last measured result and the pre-registered next experiment.
 
-A3/A4 are thin slices only — not day-nodes until A5 ships and the A2 distributed half is green.
+`/standup` reads these; the day's contract (§1) is written against them, never against this file.
 
 ---
 

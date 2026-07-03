@@ -8,7 +8,9 @@
 >
 > **The organizing law you will internalize:** *decode is memory-bandwidth-bound; every 2026 inference
 > technique is one lever to raise decode arithmetic intensity back toward the bandwidth ceiling.* The
-> spine that ties these rungs to the assignments is [`PERFORMANCE_TRACK.md`](PERFORMANCE_TRACK.md).
+> operating build these rungs feed is the **perf curriculum** — `../performance/PERF_PLAN.md`
+> (phases, current node) + `PERF_ENGINEERING_SPEC.md`; the *why* behind the ladder's aim is
+> [`PERFORMANCE_TRACK.md`](PERFORMANCE_TRACK.md) (the reference layer: thesis · findings · honesty constants).
 
 ---
 
@@ -74,6 +76,14 @@ treat CUDA/CUTLASS/CuTe as the read-and-contribute tier for FlashInfer/FA. The r
 
 Climb **in order** — each rung's mental model is load-bearing for the next. You may *ship* out of order
 (the repo's SHIP order is EV-ranked), but you *learn* the ladder bottom-up.
+
+> **Execution status (2026-07-03) — where each rung's build target already landed.** Rung 1
+> (roofline harness) ✅ `scratch_llm.bench`; rung 6's decode-attention target ✅ shipped as perf-track
+> **A1 R4.1** (`kernels/paged_decode_triton.py` — fused paged decode, 5.90 ms/step measured); rungs
+> 2–5 and 7 land as perf-track **Phases 1b–1e** (`../performance/PERF_PLAN.md` — GEMV/softmax/GEMM
+> ladders, FA, quant numerics); rung 8: DDP ✅ (`utils/ddp.py`), ZeRO-1/FSDP queued behind the
+> ordering mandate; rung 9 follows the A5 track after the mandate. The *mental-model* climb below
+> is unchanged — this note only maps each rung to its executing vehicle.
 
 ---
 

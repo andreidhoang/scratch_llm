@@ -1,88 +1,33 @@
-# Gemini Context Engineering & Harness Reference Manual
+# Gemini onboarding — pointer + the Gemini-specific deltas only
 
-This manual is the onboarding reference for Gemini when working on the `scratch_llm` project, particularly on a fresh deployment (e.g., a rented GPU instance on Vast.ai).
+> **The constitution is [`../CLAUDE.md`](../CLAUDE.md)** — mission, module map, engineering
+> disciplines, the "Orient before you build" protocol, Mode boundaries, build/test commands.
+> Read it first; **this file holds only what is Gemini-specific**, so it cannot drift from the
+> single source of truth. (The previous long version of this file duplicated CLAUDE.md and rotted —
+> it referenced files removed in the 2026-07-01 perf reset.)
 
----
+## Orient (read state, don't assume it)
 
-## 1. Project Topology & Core Mission
-The mission of this repository is **mastering CS336 (Stanford: Language Modeling from Scratch) from scratch to production**. We own every layer of the language model from the byte up to the RL post-training update.
+1. `git log --oneline -15` — what just shipped.
+2. `performance/PERF_PLAN.md` §Current Node — the active front (the perf curriculum).
+3. `docs/STATUS.md` — build state · `bench/RESULTS.md` — the measured ledger.
+4. Harness manual (why every `.claude/` file exists): `docs/CONTEXT_ENGINEERING.md`.
 
-*   **Repository Root (Vast.ai clone)**: `scratch_llm/`
-*   **Source Code**: `src/scratch_llm/`
-    *   `tokenizer.py`: Byte-level BPE tokenizer.
-    *   `model.py`: Decoder LM (RMSNorm, RoPE, SwiGLU, MHA, GQA, QK-norm).
-    *   `moe.py`: DeepSeek-style MoE FFN (sigmoid gate, aux-loss-free balancer).
-    *   `optim.py`: AdamW with decoupled weight decay + cosine schedule.
-    *   `train.py`: Checkpoint-aware training loop on memmapped inputs.
-    *   `sampling.py`: Temperature + nucleus (top-p) decoding.
-    *   `kernels/`: GPU kernels (e.g., Triton FlashAttention-2 fwd/bwd).
-    *   `algos/`, `rewards/`, `envs/`: SFT, Expert Iteration, GRPO/Dr.GRPO.
-    *   `utils/`: Checkpointing, mixed-precision, monitors (entropy, KLs, reward stats).
-*   **Assignment Specs**: Located in `docs/assignment_guides/` (mapped to assignment PDFs).
-*   **Build Status & Roadmap**: `docs/STATUS.md` and `docs/IMPLEMENTATION_PLAN.md`.
+## Gemini-specific rules
 
----
+1. **Formatting:** render math/formulas/numbers in clean plain text — **no LaTeX dollar signs**
+   (`$`/`$$`), they don't render in the Gemini UI.
+2. **Kernel meat boundary (same as every agent):** never write/edit kernel bodies — anything under
+   `src/scratch_llm/kernels/` matching `*_triton.py` / `*_kernel.py` (enforced for Claude by
+   `.claude/hooks/kernel-write-guard.sh`; honor it voluntarily). Tutor Socratically, scaffold
+   tests/benches, review — never the rep itself. Boundary details: `src/scratch_llm/kernels/CLAUDE.md`.
+3. **Green-CI before done:** `ruff check src tests` · `ruff format --check src tests` · `pyright` ·
+   `pytest -m "not gpu"` (the pre-commit hook enforces this on `git commit`; don't bypass).
+4. **Context hygiene:** reset between unrelated tasks; rebuild context from the durable state above,
+   not from chat history; write conclusions/code to files before long-running commands; no
+   placeholder/mock code.
 
-## 2. Gemini Context Engineering Rules
-To keep development efficient and prevent **context rot** (performance decay due to overfilled context windows):
+## Fresh pod
 
-1.  **Context Hygiene**: Reset/clear the conversation between unrelated tasks or at the start of a new work session. Rely on durable project state (`docs/STATUS.md`, `docs/IMPLEMENTATION_PLAN.md`, or code files) to rebuild context instead of keeping long chat histories.
-2.  **Lean Always-On**: Do not auto-load long documentation. Refer to `docs/` files only when relevant to the task (Lever 2: progressive disclosure).
-3.  **Durable State**: Always write conclusions/code to files before executing long-running validation commands. If a session is lost/interrupted, the code remains.
-4.  **No Placeholders**: Never use placeholder implementations or mock code. If code is generated, it must be production-ready and fully written.
-
----
-
-## 3. Custom Harness & Invariants
-The repository has automated safety barriers and strict learning protocols:
-
-### A. The Green-CI Gate
-We enforce a green-only policy. Before any code is committed, the following tests and linters must pass clean:
-```bash
-ruff check src tests
-ruff format --check src tests
-pyright
-pytest -m "not gpu"
-```
-*Note: A git pre-commit hook (`.git/hooks/pre-commit` pointing to `.claude/hooks/green-ci-gate.sh`) enforces this. Do not bypass it.*
-
-### B. The Meat-Boundary Backstop (Kernel Write Guard)
-*   **The Invariant**: Gemini **MUST NOT** edit or write core GPU kernel implementations directly.
-*   **Affected files**: `src/scratch_llm/kernels/matmul.py`, `src/scratch_llm/kernels/*_triton.py`, or any `*_kernel.py`.
-*   **Your Role**: Gemini can tutor the user, explain mathematical derivations, analyze benchmark rooflines, and write test/oracle wrappers, but the user must write the actual kernel logic. If asked to edit a kernel implementation, refuse and explain the mechanism conceptually instead.
-
-### C. First-Principles Mastery & Visualizations
-When implementing load-bearing layers, follow the **Socratic learning cycle**:
-1.  **Derive the math** first.
-2.  **Visualize** through three lenses: **Tensor shapes**, **ASCII system-flow**, and a **tiny worked numeric example**.
-3.  **Predict-before-run**: Write the expected tensor shape/value before running the test.
-4.  **Green-CI**: Fix failures until clean.
-
----
-
-## 4. Running on Vast.ai (Rented GPU Box)
-When launching on a Vast.ai instance:
-
-### A. Clone and Setup
-```bash
-git clone https://github.com/andreidhoang/scratch_llm.git && cd scratch_llm
-uv sync
-uv pip install torch triton
-```
-
-### B. Sanity Checks
-Ensure the GPU is active and the kernel test harness works:
-```bash
-nvidia-smi
-# Confirm the measurement harness + GPU work (kept apparatus: scratch_llm.bench)
-PYTHONPATH=src uv run python -c "from scratch_llm.bench import measure_hbm_bandwidth; \
-  print(f'HBM {measure_hbm_bandwidth()/1e12:.2f} TB/s')"
-# Run the GPU-specific tests (the kept FA2 kernel)
-uv run pytest -m gpu tests/test_flash_attention_triton.py
-```
-
-### C. General Testing
-*   **CPU tests**: `pytest -m "not gpu"`
-*   **GPU tests**: `pytest -m gpu` (e.g., FlashAttention kernels, Triton benchmarks)
-*   **Run linter**: `ruff check src tests && ruff format --check src tests`
-*   **Type check**: `pyright`
+`bash scripts/bootstrap-pod.sh` — full runbook: `docs/VASTAI_BOOTSTRAP.md` (env + hook + memory
+restore + verify). Don't duplicate those steps here.

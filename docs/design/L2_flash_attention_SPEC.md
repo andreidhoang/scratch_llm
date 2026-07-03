@@ -1,6 +1,9 @@
 # Design spec — L2 FlashAttention-2 (forward kernel + roofline)
 
-> **Status:** oracle built (CPU, green); Triton kernel + roofline next (GPU box, rented 4090).
+> **Status:** ✅ built & measured — oracle + Triton forward + the honest roofline (**53% of SDPA @
+> seq 4k**, logged in `bench/RESULTS.md`) + the recomputation backward (D-vector, grads == SDPA
+> autograd). The 4090 era ended — the standing GPU is sm120 Blackwell; re-measuring % of SDPA on
+> this card is an open item in the ledger.
 > **Layer:** L2 Systems (A2.1) — the headline systems artifact. **The deliverable is the roofline
 > number, not the kernel** (A2 guide §6/§8): a slow-but-correct kernel + an honest "% of SDPA" is
 > complete.
