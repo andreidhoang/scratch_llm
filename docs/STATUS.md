@@ -3,10 +3,16 @@
 Single source of truth for what is built, tested, and green. Updated as modules land.
 Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m "not gpu"`.
 
-**As of 2026-06-27: A1 substrate complete; A2 systems — the single-GPU half is done (FA2 fwd+bwd,
-activation/selective checkpointing, mixed-precision numerics, KV-cache, monitors, rollout seam); the
-distributed half (DDP ✅ → ZeRO-1 → FSDP + the 100B memory one-pager) is in progress, all
-CPU/gloo-buildable. A3/A4/A5 are clean stubs. 106 tests green, ruff clean, pyright 0 errors.**
+**As of 2026-07-03: A1 substrate complete; perf-curriculum A1 serving rungs R0–R4.1 SHIPPED &
+MEASURED on the standing sm120 GPU** — metrics harness → decode roofline (15%→53% HBM) → GQA/MQA
+(MQA 1.92× @16K) → **continuous batching (2.30× wall / 2.93× by steps vs static-wave)** →
+**PagedAttention (frag 5.0%, capacity ×9.3, fused Triton decode kernel 5.90 ms/step = ×3.52 vs
+wave, +55% vs dense-continuous)**. Current node: **A1 R4.2 chunked prefill**
+(`performance/PERF_PLAN.md`). CS336-A2 distributed half (DDP ✅ → ZeRO-1 → FSDP + the 100B
+one-pager) parked behind the perf ordering mandate; A3/A4/A5 clean stubs. **157 CPU + 14
+GPU-marked tests green, ruff clean, pyright 0 errors.** Rentals decided: ADR-0012 (3
+capability-tier sessions: H100 · 8×H200 serving day · B200). Mastery lessons (VI):
+[`docs/learning/`](learning/INDEX.md).
 
 > ✅ **Green-CI restored (2026-06-29).** The checkout had lost several files (no git to restore from):
 > rebuilt `rollout/` (types/local/__init__ per `design/L2_rollout_seam_SPEC.md`), `envs/protocol.py`

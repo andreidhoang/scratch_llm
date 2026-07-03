@@ -202,6 +202,13 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
   set), each with a falsifiable invariant and a dated source. Lever 2 like the rest of `docs/`: `CLAUDE.md`
   holds the pointer, this doc holds the depth, and 🟢-adoption is tracked back in `STATUS.md`'s build state
   (no separate ledger). Its provenance header records the fact-check pass + the later GDM-alignment batch.
+- **[`learning/`](learning/INDEX.md)** — the mastery track (Vietnamese): one Feynman/teach-back lesson per
+  *shipped and measured* component, tracing exact `src/` functions (line anchors pinned to a commit), a
+  hand-worked tensor example, the invariant→test map, and the teach-back gate with collapsed answers. This
+  is §3.8's mentor mode made **durable**: lessons are written *at teach time*, one concept per session —
+  never ahead of the build (FOP-1) — so the doc always describes code that exists and numbers that were
+  measured. Lever 2 to the letter: `CLAUDE.md` carries only the one pointer row; a future session re-runs
+  the gate from the doc instead of re-deriving the lesson.
 - **Why Lever 2, not Lever 1:** plan + guides are thousands of lines. Inlining them into `CLAUDE.md`
   would pay for *all* of it on *every* turn (§0.1) and trigger context rot (§0.2) — to surface a single
   per-assignment brief the model needs only while working that layer. Progressive disclosure (§1) is exactly

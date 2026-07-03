@@ -113,12 +113,15 @@ GPU steps are **developed on the standing GPU** (rented out only for what this c
 Module layout: `src/scratch_llm/{algos,rewards,envs,rollout,scaling,data,utils,kernels}/` plus the
 flat A1 substrate (`tokenizer.py`, `model.py`, `moe.py`, `optim.py`, `train.py`, `sampling.py`).
 
-**Build status (2026-06-20):** A1 substrate ✅ (BPE · model · MoE opt-in · AdamW · train · sampling) ·
-A2 partial (FlashAttention-2 oracle+Triton+roofline ✅ · KV-cache ✅ · `utils/monitors.py` ✅ · rollout
-seam ✅; **DDP/ZeRO-1/FSDP + the memory one-pager remain**) · A3/A4/A5 to build. 92 tests green,
-ruff/pyright clean; last code commit Jun 8. **Next ship (EV-ranked): the A5 RL "aha"** (GRPO/Dr.GRPO) ·
-**Capstone DELTA** (GDN-2 decode kernel): design + plan written, **base-first** — gated behind the A5
-ship + the Step-0 gate. See [`docs/STATUS.md`](docs/STATUS.md) and `../STRATEGY.md` §8.
+**Build status (2026-07-03):** A1 substrate ✅ · **perf-curriculum A1 serving R0–R4.1 ✅ measured**
+(continuous batching **2.30× wall / 2.93× by steps** vs static-wave; PagedAttention + fused Triton
+paged decode **5.90 ms/step = ×3.52 vs wave, +55% vs dense**; frag 5.0%, capacity ×9.3) — **current
+node: A1 R4.2 chunked prefill**, pointer in `performance/PERF_PLAN.md` · CS336-A2 distributed half
+(DDP ✅; ZeRO-1/FSDP + memory one-pager) parked behind the perf ordering mandate · A3/A4/A5 stubs.
+157 CPU tests green, ruff/pyright clean. Rentals: 3 capability-tier sessions
+([ADR-0012](docs/adr/ADR-0012-inference-rental-tiers.md) — H100 · 8×H200 serving day · B200).
+The A5 RL "aha" + **Capstone DELTA** stay gated behind the perf curriculum (ordering mandate
+2026-06-30). See [`docs/STATUS.md`](docs/STATUS.md) and `../STRATEGY.md` §8.
 
 ## Engineering disciplines (how labs silently screen — bake these into tests)
 
