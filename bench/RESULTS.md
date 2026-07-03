@@ -223,3 +223,34 @@ the wall* — is now **demonstrated in trend** on the standing GPU: stripping la
 SoL Memory%≫Compute%") — the last ~47% to the wall is the residual per-token launch overhead that only
 static-graph capture removes, and that is blocked by the `cat`-cache. Next node **R4.4** (static KV
 buffer → CUDA graphs) is now the pre-registered continuation, with the cudagraph failure as its spec.
+
+---
+
+## Main track (CS336 A2→A5) — analysis results
+
+> Additive section for the main-track front ([ADR-0014](../docs/adr/ADR-0014-cs336-main-track-delivery-sprint.md);
+> spec `../docs/EXECUTION_SPEC_CS336_FINISH.md`). CPU-analysis fits go here — same predict-before-run
+> discipline, no GPU profile required.
+
+### W5 · A3 — IsoFLOP / Chinchilla fit (2026-07-03, `scripts/a3_isoflop.py` → `bench/a3_isoflop.png`)
+
+Fit of the course dataset `lectures/assignment3-scaling/data/isoflops_curves.json` (9 budgets, 72 runs;
+per-budget argmin loss → log-log linfit, both exponents free). Deterministic: two runs give identical
+stdout and identical PNG. Tests: `tests/test_scaling.py` 8/8 green.
+
+| date | node / artifact | metric | predicted (pre-registered) | measured | note |
+|---|---|---|---|---|---|
+| 2026-07-03 | W5 · A3 IsoFLOP fit | scaling exponents a, b | a ≈ b ≈ 0.5; a+b ∈ [0.95, 1.05] | **N_opt = 1.1634·C^0.4687 · D_opt = 0.1433·C^0.5313 · a+b = 1.0000 → gate PASS** | a+b = 1 holds exactly (1e-9): D is derived from the same (C, N) rows via C = 6ND, so the identity is structural under a linear log-log fit |
+| 2026-07-03 | W5 · A3 IsoFLOP predictions | N_opt, D_opt @ 1e23 / 1e24 FLOPs | — (extrapolation output) | **N_opt ≈ 7.01e10 @1e23 · 2.06e11 @1e24; D_opt ≈ 2.38e11 @1e23 · 8.09e11 @1e24** | extrapolation factor **×333** past the largest fitted budget (3e21) — stated on the plot's shaded region |
+
+**The two one-sentence answers (script output, `[FACT]` as fits of the course data):**
+(a) The compute-optimal model size is **N_opt ≈ 7.01e10 params (~70B)** at 1e23 FLOPs and
+**≈ 2.06e11 (~206B)** at 1e24 (shape via `propose_shape`: n_layer=71/d_model=9068 and
+n_layer=102/d_model=12977 at aspect ratio 128).
+(b) The compute-optimal data budget is **D_opt = C/(6·N_opt) ≈ 2.38e11 tokens (~238B)** at 1e23 FLOPs
+and **≈ 8.09e11 (~809B)** at 1e24.
+
+**Honesty note `[INFERENCE]`:** both 1e23/1e24 predictions extrapolate **×33–×333** beyond the largest
+fitted budget (3e21) — the fit is exact on the data, but the answers inherit the power-law-holds
+assumption. Artifacts: `bench/a3_isoflop.png` (data + both fit lines + shaded extrapolation region with
+the factor) · `scripts/a3_isoflop.py` (deterministic reproduction) · `src/scratch_llm/scaling/isoflop.py`.
