@@ -18,6 +18,16 @@
   thuật ngữ kỹ thuật (tensor, mask, slot, cache, kernel…) giữ tiếng Anh khi tự nhiên hơn.
 - Mỗi bất biến nêu ra phải chỉ được **test nào găm nó** trong `tests/`.
 
+## 🗺️ Lộ trình mastery Performance Engineering (A1→A6 + ISA) — [`roadmap/README.md`](roadmap/README.md)
+
+> **Bản đồ học TOÀN BỘ phần perf đã build**, từ first principles xuống tận từng file·hàm·dòng (pin
+> commit `9e61d7a`), 6 série theo thứ tự [S1 serving substrate → S2 engines → S3 CUDA-core kernels →
+> S4 tensor cores+flash → S5 quantization → S6 distributed+ISA]. Định luật xuyên suốt: *decode là
+> memory-bound; B=1 đi 16%→53%→77% của bức tường bộ nhớ*. Mỗi Bài: câu hỏi first-principles → Feynman
+> → cơ chế derive → **trace code thật** → cổng teach-back → frontier. Đây là hàng đợi học của chế độ
+> delegate ([ADR-0013](../adr/ADR-0013-execution-mode-full-delegation.md)) — code ship trước, học sau.
+> Study-queue bên dưới map 1-1 vào các série này.
+
 ## Series 0 — Meta (cách hệ thống vận hành)
 
 | # | Bài | Nội dung | Trạng thái |
