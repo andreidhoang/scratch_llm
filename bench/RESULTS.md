@@ -454,3 +454,26 @@ attend, so an engine caches the low-rank latent `c_KV`+`k_R` instead of per-head
 change** — a 3.6× (vs GQA-8) / ~55× (vs MHA-128) per-layer cache reduction. The decoupled-RoPE
 pathway is load-bearing: it keeps the content-K position-independent so W_UK is a *static* fold.
 Bridges to A5 (FP8 latent) + the Phase-4 serving day (P5 MLA-KV audit).
+
+---
+
+## Perf track (A1 R4.6 — prefill/decode disaggregation, demonstrate)
+
+### Measured — A1 R4.6 (2026-07-04, `bench/disagg.py`)
+
+Single-GPU demonstration (the two measurable halves; no two real workers). sm120 0.84B bf16,
+N_SLOTS=32. Spec/note: `performance/notes/A1_R46_disaggregation.md`.
+
+| date | rung | hardware | metric | predicted | measured | bound | root cause | next |
+|---|---|---|---|---|---|---|---|---|
+| 2026-07-04 | R4.6 · KV-transfer tax | sm120 | D2D copy of 16.8 MB KV (512-tok) | ~bytes/HBM_BW | **0.180 ms (187 GB/s; analytic 0.061)** one-time | overhead | 32 small per-layer copies ⇒ launch-bound below HBM peak | fused copy / NVLink-RDMA at node (P6) |
+| 2026-07-04 | R4.6 · ITL p99 disagg vs co-located | sm120 | decode-worker ITL p99 | disagg ≥2× better | **20.2 vs 61.5 ms = 3.0× better** | scheduling | co-located prefill bursts steal decode cycles; disagg keeps the stream clean | — |
+| 2026-07-04 | R4.6 · goodput @ ITL SLO p99≤30ms | sm120 | meets SLO? | disagg wins | **disagg MEETS (20.2), co-located VIOLATES (61.5); agg 1707 vs 1038 tok/s** | scheduling | the spike violates the SLO for a burst of decodes | — |
+
+**Verdict (A1 R4.6 — SHIPPED, demonstrated; A1 serving rungs R0–R4.6 COMPLETE).** Disaggregation
+trades a recurring ITL p99 spike (3×: 61.5→20.2 ms) for a negligible one-time KV transfer
+(0.18 ms ≪ ~40 ms spike removed), and the decode worker runs at higher throughput (1707 vs 1038
+tok/s). Goodput under an ITL SLO strictly favours disagg. `[FACT]` Honest scope: single-GPU
+simulation — the disagg arm is a clean decode-only stream; a real 2-GPU disagg pays the cross-device
+KV-transfer bandwidth (D2D here as the proxy; NVLink/RDMA at node scale = Phase-4 P6). **A1 closed** →
+A1 design note next, then A2 (CUDA-core kernel ladder).

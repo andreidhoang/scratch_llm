@@ -12,10 +12,21 @@
 ## Current Node
 
 ```
-Phase: 1a — A1 R0–R3 + R4.1 DONE; R4.2 mechanism shipped (spike-reduction falsified, R4.2b deferred);
-  R4.3 speculative decoding SHIPPED (lossless); R4.4 CUDA-graph decode SHIPPED (−74% step, 77% of
-  wall) → R4.5 (MLA toy) NEXT.  [delegate mode, ADR-0013]
+Phase: 1a — **A1 COMPLETE (R0–R4.6 + design note, 2026-07-04)** → **A2 R0 (profiler+roofline harness)
+  NEXT**. R4.2 mechanism-only (spike falsified, R4.2b deferred); R4.3 lossless spec decode; R4.4
+  CUDA-graph −74% step / 77% of wall; R4.5 MLA identity to eps; R4.6 disagg ITL p99 3× + KV transfer
+  characterized.  [delegate mode, ADR-0013]
 Hardware: Standing GPU (sm_120)
+Done (2026-07-04, R4.5+R4.6, A1 CLOSED): MLA toy (mla.py, weight-absorption identity 1.4e-15, KV
+  3.56× < GQA-8, 5 tests) + PD-disagg demo (bench/disagg.py: decode-worker ITL p99 3× better 20.2 vs
+  61.5 ms for a 0.18 ms one-time 16.8 MB KV transfer; goodput@SLO wins). A1 design note written
+  (performance/notes/A1_design_note.md): the 16%→53%→77%-of-wall arc, every rung's before/after, the
+  honest ~1.3× (latency) / ~1.5–2× (throughput) gap to vLLM = chunked-prefill piggyback + prefix cache.
+Next action (A2 R0 — profiler + roofline harness): ncu automation is BLOCKED on this box
+  (ERR_NVGPUCTRPERM, unprivileged) → re-base on nsys traces + CUDA-event timing + analytic
+  bytes/FLOPs vs measured peaks (0.55 TB/s, 72 TF/s); reproduce the bench/RESULTS.md R0 baseline; a
+  per-kernel "ncu debt" list feeds the H100 rental runbook. Then A2 R1 GEMV ladder (naive→coalesced→
+  vectorized float4, target >80% of 0.55 TB/s) → R2 softmax → R3 RMSNorm → R4 TopK → R5/R6 GEMM.
 Done (2026-07-04, R4.4): CUDA-graph decode over the fixed-address paged pool — serving/cudagraph.py
   CudaGraphDecoder (manual torch.cuda.CUDAGraph capture; the paged kernel's fixed (B,H) grid +
   device-side length loop is the only capturable substrate — dense view_len shape grows, cat-cache
@@ -141,8 +152,8 @@ Total est. (inference track, ADR-0012): ~$25–45 (P2) + ~$25–45 (P3) + ~$150�
 | 4.3: speculative decoding (lossless) | ✅ | lossless token-exact (27 tests); ×1.2–1.4 wall / 1.3–1.5 tok/forward (n-gram); acceptance tracks model output-entropy not prompt | sm_120 |
 | 4.4: CUDA graphs decode | ✅ | token-exact (gpu 4/4); **B=1 −74.3% step, 253 tok/s = 77% of wall** (eager 20%→compiled 53%→graph 77%, R1 gap closed); nsys 54–68→1 launch/step; manual capture over paged pool | sm_120 |
 | 4.5: MLA latent cache (toy scale) | ✅ | weight-absorption identity to machine eps (1.4e-15, 5 tests); MLA KV 3.56× < GQA-8 / 1.8% of MHA per layer | sm_120 |
-| 4.6: prefill/decode disaggregation | ⬜ **next** | goodput vs co-located baseline | sm_120 |
-| Design note | ⬜ | 2–3 pages, peer-review quality | — |
+| 4.6: prefill/decode disaggregation | ✅ | demonstrated: decode-worker ITL p99 3× better (20.2 vs 61.5 ms) for a 0.18 ms one-time KV transfer; goodput@SLO wins | sm_120 |
+| Design note | ✅ | `performance/notes/A1_design_note.md` — the roofline spine + every rung's before/after + honest vLLM gap | — |
 
 **How to start rung 0:**
 ```
@@ -467,7 +478,7 @@ Every session working a rung:
 
 | Assignment | File | Status |
 |---|---|---|
-| A1 design note | `performance/notes/A1_design_note.md` | ⬜ |
+| A1 design note | `performance/notes/A1_design_note.md` | ✅ (2026-07-04) |
 | A2 design note | `performance/notes/A2_design_note.md` | ⬜ |
 | A3 design note | `performance/notes/A3_design_note.md` | ⬜ |
 | A4 design note | `performance/notes/A4_design_note.md` | ⬜ |
