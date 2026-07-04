@@ -18,11 +18,20 @@
   thuật ngữ kỹ thuật (tensor, mask, slot, cache, kernel…) giữ tiếng Anh khi tự nhiên hơn.
 - Mỗi bất biến nêu ra phải chỉ được **test nào găm nó** trong `tests/`.
 
+## 🎓 BẮT ĐẦU Ở ĐÂY — Master Curriculum (thứ tự học đúng) → [`CURRICULUM.md`](CURRICULUM.md)
+
+> **Một con đường DUY NHẤT, xếp đúng thứ tự**, hợp nhất cả hai lộ trình (model + performance) thành 8
+> chặng · 16 série · **89 Bài**, theo trình tự senior AI research engineer dựng kiến thức: *make it work
+> → make it fast → scale → feed → align → frontier → serve → prove.* Đan hai nửa tại các mối nối tự
+> nhiên (kernels ngay sau model forward; serving ngay sau MoE/MLA/MTP; ablation là capstone). **Nếu chỉ
+> đọc một file, đọc file này** — nó trỏ vào 16 série bên dưới theo đúng thứ tự.
+
 ## 🗺️ Hai lộ trình mastery — bản đồ học TOÀN BỘ repo, từ first principles
 
 Repo có **hai nửa**, mỗi nửa một lộ trình song sinh (mỗi Bài: câu hỏi first-principles → Feynman → dẫn
-xuất → **trace code thật** file·hàm·dòng → cổng teach-back → frontier). Đây là hàng đợi học của chế độ
-delegate ([ADR-0013](../adr/ADR-0013-execution-mode-full-delegation.md)) — code ship trước, học sau.
+xuất → **trace code thật** file·hàm·dòng → cổng teach-back → frontier). [`CURRICULUM.md`](CURRICULUM.md)
+xếp thứ tự học; hai lộ trình dưới đây là nội dung. Đây là hàng đợi học của chế độ delegate
+([ADR-0013](../adr/ADR-0013-execution-mode-full-delegation.md)) — code ship trước, học sau.
 
 ### 🧠 Lộ trình MODEL — LLM from scratch (CS336 + nanochat + frontier) — [`roadmap_model/README.md`](roadmap_model/README.md)
 > **Nửa MÔ HÌNH**: model HỌC thế nào. 10 série (pin `4ad0ac5`): M1 tokenizer → M2 transformer → M3
