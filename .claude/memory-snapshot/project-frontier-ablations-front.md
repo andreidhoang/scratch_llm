@@ -39,9 +39,21 @@ GLM-5.2 = the user's "GLM5-2", real as of 2026-06-16).
   8.3 s: val_bpb 0.02 + a **coherent talking sample** — the first model this repo can sample from.
   `--nano` = the CPU pre-flight before the $100 d20 rental.
 
-**NEXT (pending the run/rental):** the **F1 iso-FLOP Muon-vs-AdamW** loss-per-FLOP measurement on the
-real loop (the headline claim, still PENDING) → **F2 MTP draft head** → F3 de-confound serving →
-F5 MLA-real → F6 MoE balancing → F7 GRPO "aha"; then the $100 d20 rental for the public artifact.
+**Buildable next-phase DAG (23 rungs, code-grounded by workflow w77bbp4pb):**
+`docs/FRONTIER_2026_TASKSPEC.md` — Track A (loop→chat: A1 real shards · A0 decontam · A2 ckpt-chain ·
+A3 chat template · A4 midtrain · A5 SFT · A6 chat REPL · A7 distributed d20 · A8 rental runbook+guardrails ·
+A9 model card) + Track B (F1-run iso-FLOP headline · F2a/b MTP · F3 de-confound · F5 MLA-real · F6 MoE ·
+F7a/b/c GRPO aha · F9 MuonClip · F8 DSA). Each rung has exact interfaces + tests + falsifier + kill + zone.
+
+**▶ NEXT NODE = A1** (real-corpus FineWeb shards, `data/shards.py`) → **A2** (ckpt chaining) →
+**F1-run** (the still-PENDING iso-FLOP Muon-vs-AdamW headline). Tracked as tasks; each rung:
+pre-register falsifier in RESULTS.md → test-first → green-CI → commit → push.
+
+**Fresh-session pickup is WIRED (commit 49bd982):** the SessionStart hook (`.claude/hooks/session-start.sh`)
+greps a `Next-node:` marker from `FRONTIER_2026_TASKSPEC.md` and injects `frontier node → A1…` into every
+new session; TASKSPEC has a START-HERE block; STATUS.md + CLAUDE.md point at it. **On shipping a rung,
+advance the `Next-node:` HTML-comment marker at the top of FRONTIER_2026_TASKSPEC.md** so the next session
+picks up the right rung. Zone: NEVER edit perf-owned mla.py/serving/kernels/quant — satisfy their Protocols.
 
 **Concurrency `[FACT]` (learned 2026-07-04):** three fronts share ONE checkout and commit to `main`
 rapidly. A concurrent front's broad `git add` swept my uncommitted `tests/test_optim.py` into ITS
@@ -60,3 +72,11 @@ MTP · M10 close-the-loop + F1–F9 as derivation. Honesty: every Neo typed (mea
 RESULTS.md number / labeled PREDICTION — never fabricated; most training runs rental-gated). Built by a
 10-agent Workflow. INDEX.md leads with both roadmaps (model first); CLAUDE.md "Where things live" updated.
 This is the study map for the F1–F9 ablations + the whole CS336 model stack.
+
+**MASTER CURRICULUM merging BOTH roadmaps SHIPPED (2026-07-04, commit 0742686):** `docs/learning/CURRICULUM.md`
+— one ordered mastery path unifying MODEL (M1–M10) + PERF (S1–S6) = 8 stages / 16 série / **89 Bài** in
+dependency order for a senior AI RE: make-it-work (M1–M4) → make-it-fast/kernels (S3–S4) → scale (M5+S6) →
+science+data (M6–M7) → align (M8) → frontier arch (M9) → serve (S1–S2,S5) → prove/ablations (M10 capstone).
+Interleaves at the joints (kernels after the forward pass; serving after MoE/MLA/MTP; roofline enters twice
+— S3.0 kernel-level, S1.0 decode-level). `docs/learning/INDEX.md` + CLAUDE.md "Where things live" now LEAD
+with CURRICULUM.md as the single entry point. Read order for the whole repo's mastery track starts here.
