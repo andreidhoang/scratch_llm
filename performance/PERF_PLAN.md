@@ -197,9 +197,9 @@ Total est. (inference track, ADR-0012): ~$25–45 (P2) + ~$25–45 (P3) + ~$150�
 
 | Rung | Status | DoD gate | Hardware |
 |---|---|---|---|
-| 0: naive SMEM GEMM baseline (re-anchor from A2) | ⬜ | ~43 TF/s class result; book's regime | sm_120 |
-| 1: WMMA GEMM + cp.async double-buffer | ⬜ | ≥40% of sm_120 peak; FP32 accum justified | sm_120 |
-| 2: mma.sync + ldmatrix + XOR-swizzled SMEM | ⬜ | bank-conflict count ≈0; ≥60% of peak | sm_120 |
+| 0: naive SMEM GEMM baseline (re-anchor from A2) | ✅ | 3.5 TF/s = 4.1% cuBLAS (CUDA-core floor, no tensor cores) | sm_120 |
+| 1: WMMA GEMM + cp.async double-buffer | ✅ | WMMA 28.3 TF/s = 38.9% cuBLAS (~8× over floor); FP16-accum fails @K=4096 (FP32 justified); cp.async deferred | sm_120 |
+| 2: mma.sync + ldmatrix + XOR-swizzled SMEM | ✅ | mma.sync 59.0 TF/s = 81.9% cuBLAS (>60% DoD); rel err 6.6e-6; bank-conflict≈0 = ncu-debt | sm_120 |
 | PTX artifact (hand-decode wgmma, hand-encode descriptor) | ⬜ | every qualifier annotated | paper / any GPU |
 | 3: WGMMA+TMA 3-stage (4 sub-rungs) | ⬜ | → Phase 2 (H100 required) | H100 |
 | 4: WGMMA FP8 + wait_group overlap | ⬜ | → Phase 2 | H100 |
@@ -480,7 +480,7 @@ Every session working a rung:
 |---|---|---|
 | A1 design note | `performance/notes/A1_design_note.md` | ✅ (2026-07-04) |
 | A2 design note | `performance/notes/A2_design_note.md` | ✅ (2026-07-04) |
-| A3 design note | `performance/notes/A3_design_note.md` | ⬜ |
+| A3 design note | `performance/notes/A3_design_note.md` | ✅ (2026-07-04) |
 | A4 design note | `performance/notes/A4_design_note.md` | ✅ (2026-07-04) |
 | A5 design note | `performance/notes/A5_design_note.md` | ✅ (2026-07-04) |
 | A6 design note | `performance/notes/A6_design_note.md` | ⬜ |

@@ -651,3 +651,30 @@ prior 53%-on-4090 number, now pinned on this card) with constant SMEM — **44×
 8K and no OOM** — and its recomputation backward passes a gradcheck vs SDPA autograd. GQA shrinks the KV
 8× (32→4 MB). Honest gap to the ceiling: the ~50%-of-SDPA is the FA2-on-consumer-Blackwell number; the
 FA3-class Hopper kernel (warp-spec + TMA + FP8, ~75% util / ~740 TF/s) is the H100 day (§4, R4).
+
+---
+
+## Perf track (A3 — tensor cores, sm120)
+
+### Measured — A3 R0–R2 (2026-07-04, CUDA C++ via torch cpp_extension, -arch=sm_120, workflow-built + gpu-tested)
+
+The tensor-core ladder that Triton's tl.dot abstracts — built explicitly in CUDA to show the fragment
+machinery. sm120, 4096³ f16→fp32, cuBLAS = torch.matmul proxy (~72–84 TF/s). 34 gpu tests, element-exact
+vs torch.matmul at fp32-accum tolerance. Bank-conflict counts are ncu-debt (blocked). R0 verifier-confirmed.
+
+| date | rung | metric | predicted | measured | note |
+|---|---|---|---|---|---|
+| 2026-07-04 | A3 R0 naive SMEM GEMM (CUDA cores) | the floor WMMA climbs from | ~4–5% dense | **3.5 TF/s = 4.1% of cuBLAS** (no tensor cores) | 32×32 SMEM tile, fp32 accumulate; element-exact |
+| 2026-07-04 | A3 R1 WMMA GEMM (nvcuda::wmma) | ≥40% of peak | 40–60% tuned band | **28.3 TF/s = 38.9% of cuBLAS** (39.4% peak) — **~8× over the CUDA-core floor** | 128×128 block, 8 warps × 4×2 16×16×16 frags; FP16-accum error grows with K (FP32-accum justified); sync (no cp.async yet) |
+| 2026-07-04 | A3 R2 mma.sync + ldmatrix + XOR-swizzle | ≥60% of peak; conflicts≈0 | ≥60% | **59.0 TF/s = 81.9% of cuBLAS** (82.0% peak); rel err 6.6e-6 | mma.sync.aligned.m16n8k16 + ldmatrix + padded/swizzled SMEM; bank-conflict≈0 is ncu-debt |
+
+**Verdict (A3 R0–R2 — SHIPPED).** The tensor-core ladder is built explicitly in CUDA (where Triton's
+`tl.dot` hides the fragment machinery — the A3 lesson) and climbs correctly: **CUDA-core floor 4.1% →
+WMMA 38.9% → mma.sync+swizzle 81.9% of cuBLAS**, all element-exact vs `torch.matmul` (6.6e-6) on sm120,
+34 gpu tests. WMMA's ~8× jump over the scalar SMEM baseline IS the tensor-core win; the FP16-accumulate
+variant's error growing with K justifies FP32 accumulation (tested). mma.sync + `ldmatrix` +
+XOR-swizzled SMEM reaches **82% of the cuBLAS proxy** — exceeding the ≥60% DoD — with the warp-collective
+fragment load and a conflict-free SMEM layout (the bank-conflict=0 gate is ncu-debt, blocked here,
+H100-day). Honest gap: the next rung is `cp.async` double-buffering (hide the SMEM load behind the MMA,
+the book's climb into the higher band) and then WGMMA/TMA — **H100-gated** (`H100_day_runbook.md` §3),
+where the PTX artifact (`performance/artifacts/wgmma_descriptor_manual.md`) is the decode reference.
