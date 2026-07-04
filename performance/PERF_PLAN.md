@@ -178,8 +178,8 @@ Total est. (inference track, ADR-0012): ~$25–45 (P2) + ~$25–45 (P3) + ~$150�
 
 | Rung | Status | DoD gate | Hardware |
 |---|---|---|---|
-| 0: profiler + roofline harness (ncu automation, CSV, matplotlib) | ⬜ | reproduces bench/RESULTS.md baseline | sm_120 |
-| 1: GEMV ladder (naive→coalesced→two-stage→vectorized float4) | ⬜ | >80% of 0.55 TB/s; Nsight SoL Memory%≈100% | sm_120 |
+| 0: profiler + roofline harness (ncu automation, CSV, matplotlib) | ✅ | `bench/kernel_roofline.py`: peaks reproduce baseline (0.551 TB/s · 72.1 TF/s · ridge 131); copy 100.1% mem / gemm 100.0% cmp; ncu BLOCKED → re-based on %-of-peak + nsys, 5 metrics as H100 debt | sm_120 |
+| 1: GEMV ladder (naive→coalesced→two-stage→vectorized float4) | ⬜ **next** | >80% of 0.55 TB/s; sectors/request→4 (ncu debt); vs torch.mv | sm_120 |
 | 2: softmax (online→warp-shuffle→fused) | ⬜ | adversarial tests pass; traffic win measured | sm_120 |
 | 3: RMSNorm + LayerNorm (Welford) | ⬜ | RMSNorm speedup vs LN quantified | sm_120 |
 | 4: Top-K ladder (naive→min-heap→parallel); fused softmax+TopK | ⬜ | honest failure mode documented | sm_120 |

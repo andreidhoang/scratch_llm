@@ -477,3 +477,25 @@ tok/s). Goodput under an ITL SLO strictly favours disagg. `[FACT]` Honest scope:
 simulation — the disagg arm is a clean decode-only stream; a real 2-GPU disagg pays the cross-device
 KV-transfer bandwidth (D2D here as the proxy; NVLink/RDMA at node scale = Phase-4 P6). **A1 closed** →
 A1 design note next, then A2 (CUDA-core kernel ladder).
+
+---
+
+## Perf track (A2 — CUDA-core kernel ladder)
+
+### Measured — A2 R0 profiler + roofline harness (2026-07-04, `bench/kernel_roofline.py`)
+
+The reusable A2 measurement spine. Gate = reproduce the R0 baseline. ncu BLOCKED
+(ERR_NVGPUCTRPERM) → re-based on achieved-vs-peak % + nsys; 5 ncu metrics registered as debt for the
+H100 day. Spec/note: `performance/notes/A2_R0_roofline_harness.md`.
+
+| date | rung | hardware | metric | predicted | measured | bound | root cause | next |
+|---|---|---|---|---|---|---|---|---|
+| 2026-07-04 | A2 R0 · peaks reproduction | sm120 | HBM BW / bf16 TF/s / ridge | ~0.55 TB/s / ~72 TF/s / ~130 | **0.551 TB/s · 72.1 TF/s · ridge 131** — gate PASS | — | reproduces 2026-06-29 baseline within noise | R1 GEMV ladder |
+| 2026-07-04 | A2 R0 · harness anchors | sm120 | %roof of copy / gemm | 100% each | **copy 551 GB/s = 100.1% mem · gemm 72.1 TF/s = 100.0% cmp** (spread <1.2%) | mem / cmp | validates the profiler places kernels correctly on both roofs | R1 |
+
+**Verdict (A2 R0 — SHIPPED).** The profiler+roofline harness reproduces the baseline `[FACT]` and
+places kernels on the roofline (%-of-binding-roof + mem/cmp) with CSV + plot; ncu counters (blocked
+on this unprivileged box) are re-based on achieved-vs-peak % + nsys, with 5 metrics registered as
+"ncu debt" for the H100 rental day. Next: A2 R1 GEMV ladder (naive→coalesced→two-stage→float4, target
+>80% of 0.55 TB/s) → R2 softmax → R3 RMSNorm → R4 TopK → R5/R6 GEMM (sm120); §4.1–4.6 WGMMA/TMA/FP8
+are H100-code-only.
