@@ -33,8 +33,10 @@ STEPS = 3
 class _TinyMLP(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        # Last bias has numel 5 (odd) so the pad-to-world_size path is exercised at W=2.
-        self.net = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 5))
+        # Replicate-small-params policy: 2-D weights are sharded, 1-D biases replicated. The
+        # second Linear's weight has numel 5*15 = 75 (odd) so the pad-to-world_size *shard* path
+        # is exercised at W=2 (the 1-D biases no longer are — they are kept full and all-reduced).
+        self.net = nn.Sequential(nn.Linear(8, 15), nn.ReLU(), nn.Linear(15, 5))
 
     def forward(self, x: Tensor) -> Tensor:
         return self.net(x)
@@ -171,29 +173,36 @@ def _memory_worker(rank: int) -> None:
         seed_everything(11)
         ref = TransformerLM(_tiny_cfg())
         full_numel = sum(p.numel() for p in ref.parameters())
-        n_tensors = sum(1 for _ in ref.parameters())
+        # Replicate-small-params policy: matrices (ndim>=2) sharded, 1-D norms/biases replicated.
+        sharded = [p for p in ref.parameters() if p.ndim >= 2]
+        sharded_full = sum(p.numel() for p in sharded)
+        replicated_full = sum(p.numel() for p in ref.parameters() if p.ndim < 2)
+        shard_only = sum(-(-p.numel() // WORLD_SIZE) for p in sharded)  # ceil per sharded tensor
+        # Between steps: sharded matrices reduced to ≈ 1/W, small 1-D params kept full.
+        expected_resident = shard_only + replicated_full
 
         fsdp = FSDP(copy.deepcopy(ref))
-        shard_numel = fsdp.resident_param_numel()
-        # Between steps: only the shards are resident — < full, and ≈ full/W up to padding
-        # (< 1 element of pad per tensor at W=2).
-        assert shard_numel < full_numel
-        assert shard_numel <= full_numel // WORLD_SIZE + n_tensors
-        assert fsdp.resident_param_bytes() == shard_numel * 4  # fp32 masters
+        resident = fsdp.resident_param_numel()
+        assert resident == expected_resident
+        assert resident < full_numel
+        # The sharded matrices dominate memory and are genuinely ≈ 1/W (< 1 pad elem / tensor).
+        assert shard_only <= sharded_full // WORLD_SIZE + len(sharded)
+        assert fsdp.resident_param_bytes() == resident * 4  # fp32 masters + replicas
 
         opt = AdamW(fsdp.parameters(), lr=1e-3)
         x, y = _batch_and_loss("transformer")
         local = slice(rank * 2, (rank + 1) * 2)
 
         loss = _loss("transformer", fsdp, x[local], y[local])
-        # During fwd/bwd the full compute copies coexist with the masters.
-        assert fsdp.resident_param_numel() == full_numel + shard_numel
+        # During fwd/bwd the full compute copies of the *sharded* params coexist with the masters;
+        # replicated params are already full (no extra copy) ⇒ full model + sharded shards.
+        assert fsdp.resident_param_numel() == full_numel + shard_only
         loss.backward()
         fsdp.finish_gradient_synchronization()
-        # Full copies are freed at sync: back to shards only, and it stays there after step.
-        assert fsdp.resident_param_numel() == shard_numel
+        # Full copies are freed at sync: back to the between-steps footprint, and it stays there.
+        assert fsdp.resident_param_numel() == expected_resident
         opt.step()
-        assert fsdp.resident_param_numel() == shard_numel
+        assert fsdp.resident_param_numel() == expected_resident
     finally:
         dist.destroy_process_group()
 
