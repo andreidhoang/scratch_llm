@@ -32,9 +32,14 @@
 > end-to-end; mastery is post-hoc via the study queue / mastery-debt ledger. Two agent fronts run
 > concurrently on this checkout ([ADR-0014](docs/adr/ADR-0014-cs336-main-track-delivery-sprint.md)):
 >
-> - **Perf front** — the `performance/` curriculum (node pointer `performance/PERF_PLAN.md`).
->   Zone: `performance/`, `src/scratch_llm/serving/`, `kernels/paged_decode_triton.py`, perf
->   sections of `bench/RESULTS.md`.
+> - **Perf front** — the `performance/` curriculum. **✅ ALL sm120-runnable rungs A1–A6 COMPLETE
+>   (2026-07-04):** A1 R0–R4.6 serving · A2 R0–R6 kernels · A3 R0–R2 tensor cores (CUDA) · A4 R0–R3+bwd
+>   flash attn · A5 R0–R4+§4.3 quant · A6 TP/1F1B/EP-MoE/MFU (gloo). Design notes A1–A7, H100/B200/8×H200
+>   runbooks + compile-verified ISA kernels (`performance/rental/kernels/`) + WGMMA PTX artifact done.
+>   Mastery roadmap: [`docs/learning/roadmap/`](docs/learning/roadmap/README.md). Only the 3 rental DAYS
+>   remain (hardware-gated). Node pointer `performance/PERF_PLAN.md`. Zone: `performance/`,
+>   `src/scratch_llm/{serving,kernels,quant}/`, `mla.py`, `utils/{tp_mlp,pipeline_schedule,ep_moe,mfu}.py`,
+>   perf sections of `bench/RESULTS.md`, `docs/learning/roadmap/`.
 > - **Main-track front** — the CS336 A2→A5 finish, plan =
 >   [`docs/EXECUTION_SPEC_CS336_FINISH.md`](docs/EXECUTION_SPEC_CS336_FINISH.md) (task DAG W1–W11,
 >   per-node DoD, rental runbooks for >24 GB work). Zone: `utils/` (distributed), `scaling/`,
@@ -144,11 +149,14 @@ Module layout: `src/scratch_llm/{algos,rewards,envs,rollout,scaling,data,utils,k
 flat A1 substrate (`tokenizer.py`, `model.py`, `moe.py`, `optim.py`, `train.py`, `sampling.py`).
 
 **Build status (2026-07-03):** ⚡ two-front Delivery sprint (ADR-0013/0014): **CS336 main track A2→A5 COMPLETE 2026-07-04**
-(code + tests + official-scaffold acceptance 50P/0F; graded GPU runs rental-gated per `deploy/runbooks/`) — see `docs/EXECUTION_SPEC_CS336_FINISH.md` · A1 substrate ✅ · **perf-curriculum A1 serving R0–R4.1 ✅ measured**
-(continuous batching **2.30× wall / 2.93× by steps** vs static-wave; PagedAttention + fused Triton
-paged decode **5.90 ms/step = ×3.52 vs wave, +55% vs dense**; frag 5.0%, capacity ×9.3) — **current
-node: A1 R4.2 chunked prefill**, pointer in `performance/PERF_PLAN.md` · CS336-A2 distributed half ✅ shipped 2026-07-03 (ZeRO-1 · FSDP · one-pager · comms algebra, W1–W4) + A3 ✅ (W5–W6) · A3/A4/A5 stubs.
-230 CPU tests green, ruff/pyright clean. Rentals: 3 capability-tier sessions
+(code + tests + official-scaffold acceptance 50P/0F; graded GPU runs rental-gated per `deploy/runbooks/`) — see `docs/EXECUTION_SPEC_CS336_FINISH.md` · A1 substrate ✅ · **perf-curriculum A1–A6 ALL sm120-runnable
+rungs ✅ COMPLETE 2026-07-04** (A1 serving R0–R4.6 = CUDA-graph decode 77% of the memory wall + 4 more;
+A2 R0–R6 kernels 96–100% HBM / GEMM 134% cuBLAS-proxy; A3 R0–R2 tensor cores in CUDA 4.1%→38.9%→81.9%
+cuBLAS; A4 R0–R3+bwd flash attn ~50% SDPA; A5 R0–R4+§4.3 quant NVFP4 1.48%<MXFP4 / AWQ 1.71×; A6 TP/1F1B/
+EP-MoE/MFU gloo-verified) + design notes A1–A7 + H100/B200/8×H200 runbooks + compile-verified ISA kernels
++ **mastery roadmap** `docs/learning/roadmap/`. **Remaining = only the 3 rental DAYS** (hardware-gated). ·
+CS336-A2 distributed half ✅ shipped 2026-07-03 (ZeRO-1 · FSDP · one-pager · comms algebra, W1–W4) + A3 ✅ (W5–W6).
+Repo green (ruff/pyright 0 · CPU + GPU suites). Rentals: 3 capability-tier sessions
 ([ADR-0012](docs/adr/ADR-0012-inference-rental-tiers.md) — H100 · 8×H200 serving day · B200).
 The A5 RL "aha" + **Capstone DELTA** stay gated behind the perf curriculum (ordering mandate
 2026-06-30). See [`docs/STATUS.md`](docs/STATUS.md) and `../STRATEGY.md` §8.
@@ -215,6 +223,7 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
 | **Measurement ledger** — durable predicted-vs-measured record (what git can't track; the "DoD is a profile" gate) | `bench/RESULTS.md` |
 | **Vision & plan (Vietnamese)** — tổng hợp tầm nhìn + specs + kế hoạch (synthesis, not source-of-truth) | `docs/VISION_VI.md` |
 | **Learning track (Vietnamese)** — chuỗi bài mastery Feynman/teach-back, trace code + số đo thật từng component (viết từng bài khi dạy, theo giao thức "one concept at a time") | `docs/learning/` (start at `INDEX.md`) |
+| **Perf mastery ROADMAP (Vietnamese)** — first-principles walkthrough of the WHOLE perf build: 41 Bài / 6 series (S1 serving substrate → S6 distributed+ISA), each tracing a core file to `file·func·line` (pinned commit) with the measured "aha", teach-back gate, frontier link. The map for going through every implementation cold | `docs/learning/roadmap/` (start at `README.md`) |
 | **Fresh-pod continuity** — rebuild everything on a newly rented Vast.ai GPU (Claude Code install · torch cu130/sm120 · hook re-link · **auto-memory restore**); the one-command `scripts/bootstrap-pod.sh` + what survives destroy vs what you rebuild | `docs/VASTAI_BOOTSTRAP.md` · `.claude/memory-snapshot/` |
 | **Per-assignment build guides** — every deliverable tagged + mapped to `src/scratch_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |

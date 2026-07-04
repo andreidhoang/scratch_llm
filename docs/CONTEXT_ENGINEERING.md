@@ -220,6 +220,13 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
   never ahead of the build (FOP-1) — so the doc always describes code that exists and numbers that were
   measured. Lever 2 to the letter: `CLAUDE.md` carries only the one pointer row; a future session re-runs
   the gate from the doc instead of re-deriving the lesson.
+- **[`learning/roadmap/`](learning/roadmap/README.md)** — the perf mastery ROADMAP (2026-07-04): the index
+  BETWEEN the study-queue and the full lessons. When a whole track shipped at once under `delegate` mode
+  (the A1–A6 perf sprint), writing 41 full lessons up front would violate FOP-1 (doc-ahead-of-teach) — so
+  the roadmap instead breaks every core file into a *lesson stub* (first-principles question + the measured
+  aha + a code trace to `file·func·line` + the teach-back gate), ordered in a first-principles progression.
+  It's the map for the deep dive; the full prose lessons in `learning/<series>/` are still written one-per-
+  teach-back. This is the delegate-mode answer to "ship first, master after seeing the code" (ADR-0013).
 - **Why Lever 2, not Lever 1:** plan + guides are thousands of lines. Inlining them into `CLAUDE.md`
   would pay for *all* of it on *every* turn (§0.1) and trigger context rot (§0.2) — to surface a single
   per-assignment brief the model needs only while working that layer. Progressive disclosure (§1) is exactly
@@ -270,6 +277,20 @@ When a task means "search many files / read long logs / explore an unknown area,
 the conclusion. Your main context never sees the 10k lines it sifted. Rule of thumb: **if the raw
 material won't be referenced again after the question is answered, isolate it.** This is lever 3, and
 it is the single biggest defense against context rot on a long project.
+
+**Delegate-mode BUILD fan-out (proven on the A1–A6 perf sprint, 2026-07-04).** Subagents aren't only for
+reads — under `delegate` mode (ADR-0013) a `Workflow` fans out one agent per kernel/rung to *implement*
+in parallel, and the correctness bar is enforced by a **three-gate pipeline**, not trust: (1) the build
+agent must make its own **oracle test** pass on the GPU before reporting done; (2) an **independent
+adversarial verifier** re-runs the oracle, adds its own adversarial inputs, and mutation-tests that the
+test has teeth (weaken-tolerance / gamed-baseline checks); (3) the **main thread re-runs every gpu test
+itself** before committing. This caught real issues (an allocator-dependent "400×" claim reworded to a
+robust ratio; confirming the NVFP4 win used the *stronger* MXFP4 baseline). Rule: **fan out the build,
+but never let a rung be "done" on the builder's own say-so** — the verifier and the main-thread re-test
+are the gate. The main thread stays the sole committer (git + zone discipline + the honest ledger row).
+The build agents write only their kernel/test/bench trio; shared files (`CLAUDE.md`, `STATUS.md`,
+`RESULTS.md`, `pyproject.toml`) are main-thread-only, pull-rebase + additive. This is how ~40 rungs
+shipped green without the main context ever holding the kernel bodies.
 
 ### 3.4 Use plan mode for anything non-trivial
 Plan mode (read-only until you approve) forces exploration and a written plan *before* edits. It is
