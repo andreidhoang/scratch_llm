@@ -526,3 +526,30 @@ heuristic at 4096³, honestly disclosed). Honesty (ADR-0011 Triton-primary): flo
 coalescing, and bank-conflict avoidance are Triton-compiler-managed — the raw-CUDA ladder step is noted
 per kernel as what a hand kernel would add, not fabricated. ncu counters blocked → each kernel names its
 ncu-debt metric for the H100 day. Node → A2 §4 (H100 code-only) + A3.
+
+---
+
+## Perf track (A5 — quantization numerics ladder)
+
+### Measured — A5 R0–R4 (2026-07-04, CPU numerics, workflow-built + adversarially verified, 43 CPU tests)
+
+Fake-quant numerics; oracle = SQNR/MSE/bit-exact (NOT allclose for FP4/FP8). Each rung independently
+adversarially verified (re-ran oracle, recomputed the headline from scratch, checked no scale/clamp/
+rounding was target-fitted). Runs in the `not gpu` CI gate. Module: `src/scratch_llm/quant/`.
+
+| date | rung | metric | predicted | measured | note |
+|---|---|---|---|---|---|
+| 2026-07-04 | A5 R0 INT8 sym per-tensor | round-trip SQNR | ~44 dB floor | **40.50 dB** Gaussian; book example [1.2,−0.8,2.5,−1.7]→codes [61,−41,127,−86] reproduced; law verified (2× scale → −6 dB) | 6.75 dB/bit measured (ideal 6.02) |
+| 2026-07-04 | A5 R1 INT8 asym + per-channel | asym>sym, per-ch>per-tensor | asym > sym; per-ch > per-tensor | **asym 43.50 > sym 37.44 (+6.07 dB)** on skewed data; **per-ch 42.34 > per-tensor 33.25 (+9.09)**; W8A8 int-GEMM rel 1e-2 | scale hoisted out of the GEMM (dequant accumulator once) |
+| 2026-07-04 | A5 R2 group INT4 (g=128) | bit-exact pack/unpack | bit-exact | **pack/unpack bit-exact** (500-case fuzz + 0x78/0xFF adversarial); **SQNR 18.64 vs analytic 18.60 floor**; group 18.69 > per-tensor 17.12 | 2 nibbles/byte, sign-extend unpack |
+| 2026-07-04 | A5 R3 NVFP4 vs MXFP4 | NVFP4 MSE < MXFP4 | NVFP4 < MXFP4 | **NVFP4 MSE 9.05e-3 (20.43 dB) < MXFP4 1.34e-2 (18.74 dB) = 1.48×**; block-scaled GEMM 0.28% vs bf16-same-W; **verifier confirmed the MXFP4 baseline is the STRONGER ceil-E8M0 variant** (not rigged) | E4M3 non-pow2 block scale + k=16 vs k=32 |
+| 2026-07-04 | A5 R4 FP8-E4M3 KV | within noise of BF16 KV | FP8 near-lossless, INT4 degrades | **FP8 SQNR 31.81 dB, E2E 24.45 dB** vs BF16-KV; per-channel-K **2.49×** better than per-token (drops to 0.60× on outlier-free data — tracks structure); **INT4-KV visibly degrades (19.86 dB)**; bytes **0.552×** | real torch.float8_e4m3fn, clamp-before-cast (E4M3 NaN>448) |
+
+**Verdict (A5 R0–R4 — SHIPPED).** The quantization ladder is numerically sound and honest: INT8
+reproduces the ~44 dB-class floor (40.5 dB) and the 6 dB/bit law, asym beats sym / per-channel beats
+per-tensor on skewed data by the predicted margins; group-INT4 pack/unpack is bit-exact under a
+500-case fuzz and hits its analytic SQNR floor; **NVFP4 beats MXFP4 by MSE 1.48×** for the two named
+mechanisms (E4M3 non-power-of-two block scale + finer k=16 blocks) — and the adversarial verifier
+confirmed the MXFP4 baseline is the *stronger* variant, so the win is real not rigged; FP8 E4M3 KV is
+near-lossless (E2E 24.45 dB) at 0.552× bytes with per-channel-K 2.49× better than per-token, while
+INT4-KV visibly degrades (the stress test bites). §7 NVFP4-native-MMA throughput → B200 code-only.
