@@ -26,9 +26,12 @@ tok/forward via n-gram drafting)** → **R4.4 CUDA-graph decode (2026-07-04: SHI
 **ALL sm120-runnable rungs of A1–A5 COMPLETE 2026-07-04** — A1 R0–R4.6 (serving) · A2 R0–R6 (kernels:
 GEMV/softmax/norm 96–100% HBM, TopK 46.9% + 3.4× fusion, GEMM 134% cuBLAS-proxy) · A3 R0–R2 (tensor
 cores 4.1%→38.9%→81.9% cuBLAS, CUDA WMMA/mma.sync) · A4 R0–R3 (flash attn ~50% SDPA, 44× leaner) · A5
-R0–R4 + §4.3 (INT8/INT4/NVFP4 1.48×<MXFP4/FP8-KV/AWQ 1.71×). Design notes A1–A5 ✅; H100/B200/8×H200
-rental runbooks + WGMMA PTX artifact ✅. Only ISA-gated rungs remain (WGMMA/TMA/FP8 → H100; tcgen05/NVFP4
-→ B200), code-only + runbook'd. (`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
+R0–R4 + §4.3 (INT8/INT4/NVFP4 1.48×<MXFP4/FP8-KV/AWQ 1.71×) · **A6 code-only** (TP MLP/1F1B/EP-MoE/MFU
+gloo-verified, 112 tests) · **ISA kernels compile-verified** (WGMMA sm_90a, FA3 sm_90a, tcgen05 sm_100a
+— PTX-checked on-box, runtime deferred). **Design notes A1–A7 ✅**; H100/B200/8×H200 runbooks + WGMMA
+PTX artifact + `performance/rental/kernels/` compiled source ✅. **Every buildable-without-a-rental piece
+is DONE + green**; the only remainder is the three rental DAYS themselves (run the compiled ISA kernels
+on H100/B200 + the 8×H200 serving day — needs the hardware, not more code). (`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
 FSDP · 100B one-pager · comms algebra, W1–W4) **+ A3 scaling ✅** (fitter a=0.469/b=0.531 +
 query planner, W5–W6); **A4 data pipeline ✅ + A5 alignment stack ✅ code-complete 2026-07-04**
 (dedup/filters/quality/pipeline · SFT/EI/GRPO/Dr.GRPO/DPO + grader + envs, W7–W8; graded GPU runs
