@@ -481,8 +481,8 @@ Every session working a rung:
 | A1 design note | `performance/notes/A1_design_note.md` | ✅ (2026-07-04) |
 | A2 design note | `performance/notes/A2_design_note.md` | ✅ (2026-07-04) |
 | A3 design note | `performance/notes/A3_design_note.md` | ⬜ |
-| A4 design note | `performance/notes/A4_design_note.md` | ⬜ |
-| A5 design note | `performance/notes/A5_design_note.md` | ⬜ |
+| A4 design note | `performance/notes/A4_design_note.md` | ✅ (2026-07-04) |
+| A5 design note | `performance/notes/A5_design_note.md` | ✅ (2026-07-04) |
 | A6 design note | `performance/notes/A6_design_note.md` | ⬜ |
 | A7 capstone design doc | `performance/notes/A7_capstone_design.md` | ⬜ |
 
