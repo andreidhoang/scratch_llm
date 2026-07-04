@@ -492,6 +492,6 @@ Every session working a rung:
 | A4 design note | `performance/notes/A4_design_note.md` | ✅ (2026-07-04) |
 | A5 design note | `performance/notes/A5_design_note.md` | ✅ (2026-07-04) |
 | A6 design note | `performance/notes/A6_design_note.md` | ⬜ |
-| A7 capstone design doc | `performance/notes/A7_capstone_design.md` | ⬜ |
+| A7 capstone design doc | `performance/notes/A7_capstone_design.md` | ✅ (2026-07-04) |
 
 Notes live in `performance/notes/` (create the dir when writing the first note).

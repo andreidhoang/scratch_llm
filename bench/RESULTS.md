@@ -685,3 +685,29 @@ fragment load and a conflict-free SMEM layout (the bank-conflict=0 gate is ncu-d
 H100-day). Honest gap: the next rung is `cp.async` double-buffering (hide the SMEM load behind the MMA,
 the book's climb into the higher band) and then WGMMA/TMA — **H100-gated** (`H100_day_runbook.md` §3),
 where the PTX artifact (`performance/artifacts/wgmma_descriptor_manual.md`) is the decode reference.
+
+---
+
+## Perf track (ISA-gated kernels — compile-verified, runtime deferred to rental)
+
+### Compile-verified — A2§4.2 / A3 R3+§4.2 / A4 R4 (2026-07-04, `performance/rental/kernels/`)
+
+These target sm_90a (Hopper) / sm_100a (datacenter Blackwell) — they CANNOT run on the sm120 box, so
+**no runtime-correctness or measured-TF/s claim is made** (that is the rental day). The gate here is:
+compiles cleanly with the exact nvcc command + the target ISA is present in the emitted PTX + structural
+review vs CUTLASS/PTX-ISA/the WGMMA descriptor artifact. Workflow-built + adversarially verified +
+main-thread re-compiled.
+
+| date | kernel | arch | gate | verified |
+|---|---|---|---|---|
+| 2026-07-04 | WGMMA GEMM mainloop | sm_90a | nvcc -ptx exit 0; PTX has **4× wgmma.mma_async.m64n64k16.f32.f16.f16** + fence/commit/wait | descriptor encode matches CUTLASS GmmaDescriptor (start>>4, LBO 16, SBO 1024, 128B swizzle) — the PTX artifact |
+| 2026-07-04 | FA3-class attention fwd | sm_90a | nvcc -ptx AND **-cubin exit 0** (full ptxas); PTX has **8× wgmma + 3× cp.async.bulk.tensor (TMA) + 14 mbarrier + setmaxnreg** (warp-spec) | producer/consumer warpgroups + TMA + online-softmax tile loop; fragment map/causal mask flagged DEFER |
+| 2026-07-04 | tcgen05/UMMA GEMM (TMEM accum) | sm_100a | nvcc -ptx AND **-cubin exit 0**; PTX has **21× tcgen05 incl. tcgen05.mma.cta_group::1.kind::f16** + TMA; SASS (nvdisasm) = **UTCHMMA + LDTM.x4** | alloc→TMA+mbarrier→single-thread mma→commit→full-warpgroup 32-lane TMEM drain; idesc/descriptor consts flagged [INFERENCE] |
+
+**Verdict — COMPILE-VERIFIED (SHIPPED as rental-day source).** The three ISA-gated kernels the sm120 box
+cannot run now COMPILE for their target arches with the intended tensor-core ISA emitted in the PTX (2 of
+3 pass full `-cubin` ptxas; tcgen05 SASS-cross-checked). This upgrades the rental prep from runbook-only
+to compiled source — the H100/B200 days start from working-compiling kernels, not a blank editor. Honestly
+framed: runtime correctness + TF/s are DEFERRED to the hardware (labeled throughout), so nothing here is a
+`[FACT]` performance result — it is a `[compiles + structurally-correct]` artifact. Discharged on the
+rental days (`H100_day_runbook.md`, `B200_day_runbook.md`).
