@@ -598,3 +598,56 @@ calibration-overfit) and the α grid has a genuine interior optimum (protect-vs-
 reproducing naive bit-exactly. Honest scope: a layer-level MSE demonstration (a full-model perplexity
 run is the rental-gated SKIP). Completes the A5 numerics track; native NVFP4-MMA throughput (§7) →
 B200 (`B200_day_runbook.md`).
+
+---
+
+## Frontier ablations (close-the-loop front — ADR-0018, spec `docs/FRONTIER_2026_ABLATIONS.md`)
+
+The EV-ranked, pre-registered, iso-FLOP ablation study on a **real trained** nanochat-grade base.
+Predict-before-run (FOP-2/3): each rung's falsifiable number + kill criterion is registered here
+*before* the run; `[FACT]` only once the measured column is filled. Node pointer: **F1**.
+
+### Pre-registration — F1 MuonAdamW (2026-07-04, PENDING)
+
+**Hypothesis.** Orthogonalizing the 2D-matrix momentum update (5-step Newton–Schulz, coeffs
+3.4445/−4.7750/2.0315 in bf16) with Moonlight RMS-matching (`0.2·√max(A,B)`, WD 0.1) beats AdamW in
+loss-per-FLOP while reusing AdamW's LR band. Muon on 2D block matrices only; the **weight-tied
+embed/head tensor** (`model.py:917`) + all 1-D params stay on AdamW.
+
+| rung | metric | predicted (pre-reg) | KILL if | measured |
+|---|---|---|---|---|
+| F1 NS orthogonality | singular values of 256×256 update after 5 steps | all ∈ [0.7, 1.3] | any σ ∉ [0.5, 1.5] | — pending |
+| F1 hybrid wiring | overfit-one-batch (Muon-matrices + AdamW-rest) | loss < 1e-2 in AdamW's step budget | fails to overfit | — pending |
+| F1 param partition | tied embed/head + every 1-D param routed to AdamW; no overlap | exact partition, Σnumel matches | any 2-D tied tensor in Muon group | — pending |
+| F1 iso-FLOP (30–50M) | val loss vs AdamW at fixed C=6ND | Muon reaches AdamW loss with ≥15% fewer tokens (or ≥0.02 nats lower @ iso-FLOP) | token saving <5% or divergence at reused AdamW LR | — pending |
+| F1 NS overhead | wall-clock of Newton–Schulz vs step | <1% (analytic bound T·m/B) | >3% | — pending |
+
+Sources: Keller Jordan (Muon writeup); Moonlight `2502.16982` (Lemma 1 — RMS = 1/√max(A,B),
+corrected from the draft); Kimi-K2 `2507.20534` (MuonClip at trillion scale). Reuses
+`src/scratch_llm/scaling/isoflop.py` to hold compute constant.
+
+---
+
+## Perf track (A4 — flash attention)
+
+### Measured — A4 R0–R3 + backward + variant (2026-07-04, workflow-built + adversarially verified + gpu-tested)
+
+sm120. R0/R1 new pedagogical rungs; R2/R3 MEASURE the existing `flash_attention_triton_forward` +
+`FlashAttentionPyTorch` (built in the CS336 A2 work). Oracle = `F.scaled_dot_product_attention`.
+
+| date | rung | metric | predicted | measured | note |
+|---|---|---|---|---|---|
+| 2026-07-04 | A4 R0 naive 3-kernel attention | O(N²) memory blowup | matches SDPA <1e-3; blows up | **matches SDPA 6.4e-7**; score matrix 1.0 GiB @16K = **65536× on-chip blowup**; peak-mem GROWTH is clean N² (increments ×3.96/×3.98 per doubling) — the motivation for FA | growth-ratio is the robust claim (absolute-peak ratio is allocator-state-dependent) |
+| 2026-07-04 | A4 R1 single-row online softmax | match 3-pass, +50 outlier | <1e-6 | **0–7e-18 vs fp64 3-pass**; running-max = true row-max; +50-late-in-stream + ×1000-overflow-bait all match | the Milakov recurrence in isolation |
+| 2026-07-04 | A4 R2/R3 FA2-Triton on sm120 | ~50–73% peak; no OOM | ~50% of SDPA | **50.0% (causal 48.3%) of SDPA @ seq4096**; FA peak 40–96 MB vs naive 105–4256 MB = **44× leaner @8K, no OOM**; causal speedup 1.11→1.74× | constant SMEM (the FA win vs R0) |
+| 2026-07-04 | A4 backward + GQA variant | gradcheck; KV consequence | grads match | **backward gradcheck 5/5 vs SDPA autograd**; GQA KV 32→4 MB (n_kv 4 vs 32), runtime flat | the §4.3 variant + recomputation bwd |
+
+**Verdict (A4 R0–R3 — SHIPPED).** The flash-attention ladder is complete and honest: the naive 3-kernel
+baseline materializes the full N×N score matrix (1 GiB at 16K, 65536× the on-chip working set — the O(N²)
+memory wall that motivates FA, with clean N² peak-memory GROWTH the robust claim vs the allocator-state-
+dependent absolute ratio); the single-row online softmax matches a 3-pass reference to machine-fp64
+precision through late outliers; the fused FA2 Triton kernel runs at **~50% of SDPA** on sm120 (the repo's
+prior 53%-on-4090 number, now pinned on this card) with constant SMEM — **44× leaner memory than naive at
+8K and no OOM** — and its recomputation backward passes a gradcheck vs SDPA autograd. GQA shrinks the KV
+8× (32→4 MB). Honest gap to the ceiling: the ~50%-of-SDPA is the FA2-on-consumer-Blackwell number; the
+FA3-class Hopper kernel (warp-spec + TMA + FP8, ~75% util / ~740 TF/s) is the H100 day (§4, R4).

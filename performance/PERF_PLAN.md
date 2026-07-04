@@ -221,12 +221,12 @@ compare against in Phase 2. File: `performance/artifacts/wgmma_descriptor_manual
 
 | Rung | Status | DoD gate | Hardware |
 |---|---|---|---|
-| 0: naive 3-kernel attention oracle | ⬜ | matches PyTorch SDPA to <1e-3; OOM at ~16K seqlen | sm_120 |
-| 1: single-row online softmax (Numba/1-thread CUDA) | ⬜ | <1e-6 vs 3-pass; +50 outlier test | sm_120 |
-| 2: fused tiled FA1 (WMMA QKᵀ, online-softmax SRAM, deferred ÷d, causal) | ⬜ | <1e-3 vs R0; constant SMEM; no OOM at N=64K | sm_120 |
-| 3: FA2 work-partitioning (fewer non-matmul FLOPs, seq-dim parallel, split-Q) | ⬜ | ~50–73% of sm_120 peak; occupancy rose | sm_120 |
-| §4.3: one variant (GQA or paged or MLA) | ⬜ | oracle-verified; KV-memory consequence measured | sm_120 |
-| backward pass | ⬜ | gradient-check <1e-2 FP16 | sm_120 |
+| 0: naive 3-kernel attention oracle | ✅ | matches SDPA 6.4e-7; 65536× on-chip blowup @16K; clean N² growth | sm_120 |
+| 1: single-row online softmax (Numba/1-thread CUDA) | ✅ | 0–7e-18 vs fp64 3-pass; +50/×1000 outlier match | sm_120 |
+| 2: fused tiled FA1 (WMMA QKᵀ, online-softmax SRAM, deferred ÷d, causal) | ✅ | fused FA2-Triton constant SMEM, 44× leaner @8K, no OOM | sm_120 |
+| 3: FA2 work-partitioning (fewer non-matmul FLOPs, seq-dim parallel, split-Q) | ✅ | ~50% of SDPA @seq4096 (causal 48.3%); causal 1.11→1.74× | sm_120 |
+| §4.3: one variant (GQA or paged or MLA) | ✅ | GQA KV 32→4 MB (8×), runtime flat; also paged (R4.1) + MLA (R4.5) | sm_120 |
+| backward pass | ✅ | recomputation bwd gradcheck 5/5 vs SDPA autograd | sm_120 |
 | 4: FA3-class Hopper kernel | ⬜ | → Phase 2 (H100) | H100 |
 | Design note | ⬜ | 3–4 pages | — |
 
