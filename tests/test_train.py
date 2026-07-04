@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from scratch_llm.model import ModelConfig, TransformerLM
-from scratch_llm.optim import AdamW
+from scratch_llm.optim import AdamW, CombinedOptimizer, build_optimizer
 from scratch_llm.train import (
     TrainConfig,
     get_batch,
@@ -94,3 +94,78 @@ def test_training_is_reproducible_with_same_seed() -> None:
         return train(cfg, data, model)
 
     assert run() == run()
+
+
+# --------------------------------------------------------------------------------------------
+# F1/F4 — the MuonAdamW hybrid optimizer + bf16 autocast wired through train()
+# --------------------------------------------------------------------------------------------
+
+
+def test_build_optimizer_muon_adamw_returns_combined_split() -> None:
+    model = _tiny_model()
+    opt = build_optimizer(model, kind="muon_adamw", lr=3e-3)
+    assert isinstance(opt, CombinedOptimizer)
+    muon, adamw = opt.optimizers
+    # Muon carries only 2-D block matrices; the (untied) embed + head + norms are on AdamW.
+    muon_ids = {id(p) for g in muon.param_groups for p in g["params"]}
+    adamw_ids = {id(p) for g in adamw.param_groups for p in g["params"]}
+    assert muon_ids.isdisjoint(adamw_ids)
+    assert id(model.token_emb.weight) in adamw_ids and id(model.lm_head.weight) in adamw_ids
+    assert all(p.ndim == 2 for g in muon.param_groups for p in g["params"])
+
+
+def test_combined_optimizer_lr_schedule_reaches_both_subopts() -> None:
+    model = _tiny_model()
+    opt = build_optimizer(model, kind="muon_adamw", lr=1e-3)
+    assert isinstance(opt, CombinedOptimizer)
+    for group in opt.param_groups:  # what train()'s scheduler writes to
+        group["lr"] = 0.042
+    assert all(g["lr"] == 0.042 for sub in opt.optimizers for g in sub.param_groups)
+
+
+def test_train_muon_adamw_reduces_loss_on_structured_data() -> None:
+    data = _structured_corpus()
+    cfg = TrainConfig(
+        max_steps=300,
+        batch_size=16,
+        context_length=12,
+        max_lr=3e-3,
+        warmup_steps=20,
+        seed=0,
+        optimizer="muon_adamw",
+    )
+    model = TransformerLM(
+        ModelConfig(vocab_size=32, d_model=64, n_layers=2, n_heads=4, context_length=16)
+    )
+    history = train(cfg, data, model)
+    first_loss, last_loss = history[0][1], history[-1][1]
+    assert last_loss < 1.0, f"MuonAdamW did not learn: {last_loss:.3f} (started {first_loss:.3f})"
+
+
+def test_checkpoint_round_trip_muon_adamw(tmp_path: Path) -> None:
+    torch.manual_seed(0)
+    model = _tiny_model()
+    opt = build_optimizer(model, kind="muon_adamw", lr=1e-3)
+    ids = torch.randint(0, 32, (2, 8))
+    model(ids).sum().backward()
+    opt.step()  # non-trivial state in BOTH sub-optimizers
+
+    path = tmp_path / "ckpt.pt"
+    save_checkpoint(model, opt, step=7, out=path)
+
+    fresh = _tiny_model()
+    fresh_opt = build_optimizer(fresh, kind="muon_adamw", lr=1e-3)
+    assert load_checkpoint(path, fresh, fresh_opt) == 7
+    for (_, p1), (_, p2) in zip(model.named_parameters(), fresh.named_parameters(), strict=True):
+        torch.testing.assert_close(p1, p2)
+
+
+def test_train_bf16_autocast_cpu_runs() -> None:
+    """bf16 autocast (no GradScaler) composes with the loop and produces finite losses on CPU."""
+    data = _structured_corpus()
+    cfg = TrainConfig(max_steps=20, batch_size=8, context_length=12, max_lr=3e-3, amp_dtype="bf16")
+    model = TransformerLM(
+        ModelConfig(vocab_size=32, d_model=32, n_layers=2, n_heads=4, context_length=16)
+    )
+    history = train(cfg, data, model)
+    assert history and all(loss == loss and loss < 1e4 for _, loss in history)  # finite (no NaN)

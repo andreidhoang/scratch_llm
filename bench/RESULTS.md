@@ -633,6 +633,26 @@ Sources: Keller Jordan (Muon writeup); Moonlight `2502.16982` (Lemma 1 — RMS =
 corrected from the draft); Kimi-K2 `2507.20534` (MuonClip at trillion scale). Reuses
 `src/scratch_llm/scaling/isoflop.py` to hold compute constant.
 
+### Measured — F1/F4 train wiring (2026-07-04, `train.py` + 8 tests green, GPU-verified sm120)
+
+`build_optimizer` + `CombinedOptimizer` wire the MuonAdamW hybrid + bf16 autocast + `torch.compile`
+into `train()` (defaults = the A1 AdamW/fp32 path, unchanged). Verified END-TO-END on the standing
+**RTX PRO 4000 Blackwell (sm120)** — a structured-corpus run (d_model 128 · 4 layers · 60 steps):
+
+| path | result | note |
+|---|---|---|
+| muon_adamw · fp32 · eager | **loss 4.79 → 8.3e-4 (LEARNED)** | the hybrid learns; Muon verified correct on GPU |
+| muon_adamw · **bf16** · eager | **loss → 9e-4 (LEARNED)** | F4 bf16 autocast works (no GradScaler needed) |
+| muon_adamw · fp32 · **compile** | **loss → 8.3e-4 (LEARNED)** | `torch.compile` works alone |
+| any · **bf16 · compile** | **NaN@~step5–10 → guard RAISES** | **`[FACT]`** box-specific: bf16-autocast **+** `torch.compile` NaNs on **sm120 / torch-2.12 inductor** — **reproduces with plain AdamW** (not Muon, not our logic); `matmul_precision="high"` doesn't help. Each works ALONE. bf16+compile is the **H100-rental** path. |
+
+**F4 finding (honest, predict-vs-measure):** predicted bf16+compile = the cheap-MFU combo; measured
+= it diverges on *this* inductor. The two features are individually correct + valuable (bf16 ✓,
+compile ✓); their product is deferred to the H100 tier. A **loud NaN guard** (`train.py`, fires at
+log cadence — no extra host sync) now fails any divergent run with a clear message instead of burning
+compute on a silent NaN — the FRONTIER "silent-divergence triage" discipline, and a real hygiene win
+independent of this bug. The F1 iso-FLOP Muon-vs-AdamW loss-per-FLOP measurement is the next rung.
+
 ---
 
 ## Perf track (A4 — flash attention)

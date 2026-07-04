@@ -130,10 +130,14 @@ re-run `bench/speculative.py` unchanged. *Prediction:* open-text n-gram acceptan
 54–72% toward <10% while code/JSON stays ~40–60%. *DoD:* the falsified `P4.3.3` prompt-dependence
 restored + logged. *Files:* `train.py`, `bench/speculative.py`, `RESULTS.md`.
 
-**F4 · Cheap MFU.** `torch.autocast(bf16)` + `torch.compile` on the forward (train.py is fp32 at
-`:136`); then an FP8 GEMM ablation **gated by the existing train↔serve logit-KL check**.
-*Prediction:* +10–20% MFU from compile+bf16; FP8 ~1.3–1.5× while KL under tolerance (and slower
-than bf16 with compile OFF). *Files:* `train.py`, `quant/`, `bench/`.
+**F4 · Cheap MFU.** `torch.autocast(bf16)` + `torch.compile` on the forward (train.py was fp32);
+then an FP8 GEMM ablation **gated by the existing train↔serve logit-KL check**. *Prediction:*
++10–20% MFU from compile+bf16; FP8 ~1.3–1.5× while KL under tolerance (and slower than bf16 with
+compile OFF). *Files:* `train.py`, `quant/`, `bench/`. **Status (2026-07-04, wired + GPU-verified):**
+bf16-autocast ✓ and `torch.compile` ✓ each train to loss 8e-4 on sm120; their **combination NaNs on
+this box's torch-2.12 inductor** (reproduces with plain AdamW — a codegen bug, not our logic), caught
+now by a loud NaN guard in `train.py`. bf16+compile is the intended **H100-rental** path; the MFU
+delta is measured there. See `bench/RESULTS.md` §Frontier ablations F1/F4.
 
 **F5 · MLA for real.** Wire `mla.py` as `attn='gqa'|'mla'` into `ModelConfig`/`TransformerBlock` +
 KV cache; iso-param MLA-vs-GQA-8 at 0.2–0.5B. *Prediction:* +0.02 val loss, KV/token ~3.5× smaller

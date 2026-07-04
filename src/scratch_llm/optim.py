@@ -293,3 +293,69 @@ def split_muon_adamw_params(
         else:
             muon_params.append(p)
     return muon_params, adamw_params
+
+
+class CombinedOptimizer:
+    """Steps a list of optimizers as one — the F1/F4 hybrid (Muon on block matrices + AdamW on
+    embeddings/head/norms), presented through the single-optimizer interface ``train.py`` and
+    checkpointing already expect.
+
+    - ``param_groups`` returns the sub-optimizers' **live** group dicts concatenated, so an LR
+      schedule that writes ``group["lr"]`` mutates the real groups (no copy).
+    - ``state_dict`` / ``load_state_dict`` round-trip every sub-optimizer's state so a checkpoint
+      resumes exactly (the same contract as a single optimizer).
+    """
+
+    def __init__(self, optimizers: list[torch.optim.Optimizer]) -> None:
+        if not optimizers:
+            raise ValueError("CombinedOptimizer needs at least one optimizer")
+        self.optimizers = optimizers
+
+    @property
+    def param_groups(self) -> list[dict[str, object]]:
+        return [group for opt in self.optimizers for group in opt.param_groups]
+
+    def zero_grad(self, set_to_none: bool = True) -> None:
+        for opt in self.optimizers:
+            opt.zero_grad(set_to_none=set_to_none)
+
+    def step(self) -> None:
+        for opt in self.optimizers:
+            opt.step()
+
+    def state_dict(self) -> dict[str, object]:
+        return {"optimizers": [opt.state_dict() for opt in self.optimizers]}
+
+    def load_state_dict(self, state: dict[str, object]) -> None:
+        subs = state["optimizers"]
+        if not isinstance(subs, list):
+            raise ValueError("CombinedOptimizer state_dict must hold a list under 'optimizers'")
+        for opt, sub in zip(self.optimizers, subs, strict=True):
+            opt.load_state_dict(sub)
+
+
+def build_optimizer(
+    model: nn.Module,
+    *,
+    kind: str = "adamw",
+    lr: float = 3e-4,
+    betas: tuple[float, float] = (0.9, 0.95),
+    weight_decay: float = 0.1,
+    muon_momentum: float = 0.95,
+) -> torch.optim.Optimizer | CombinedOptimizer:
+    """Construct the training optimizer.
+
+    ``kind="adamw"`` — the A1 default (one AdamW over every parameter). ``kind="muon_adamw"`` — the
+    F1 hybrid: :class:`Muon` on the 2-D block matrices, :class:`AdamW` on the embed/head/1-D params,
+    stepped together by :class:`CombinedOptimizer`. Both optimizers share ``lr`` — the Moonlight
+    RMS-match makes Muon's effective update land in AdamW's band, so ONE LR schedule serves both
+    (per-group LR tuning à la nanochat's 0.02/0.2/0.004 split is a later refinement).
+    """
+    if kind == "adamw":
+        return AdamW(model.parameters(), lr=lr, betas=betas, weight_decay=weight_decay)
+    if kind == "muon_adamw":
+        muon_params, adamw_params = split_muon_adamw_params(model)
+        muon = Muon(muon_params, lr=lr, momentum=muon_momentum, weight_decay=weight_decay)
+        adamw = AdamW(adamw_params, lr=lr, betas=betas, weight_decay=weight_decay)
+        return CombinedOptimizer([muon, adamw])
+    raise ValueError(f"unknown optimizer kind {kind!r} (expected 'adamw' or 'muon_adamw')")
