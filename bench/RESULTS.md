@@ -731,3 +731,29 @@ to compiled source — the H100/B200 days start from working-compiling kernels, 
 framed: runtime correctness + TF/s are DEFERRED to the hardware (labeled throughout), so nothing here is a
 `[FACT]` performance result — it is a `[compiles + structurally-correct]` artifact. Discharged on the
 rental days (`H100_day_runbook.md`, `B200_day_runbook.md`).
+
+---
+
+## Perf track (A6 — distributed primitives, gloo/CPU code-only)
+
+### Verified — A6 code-only (2026-07-04, gloo/CPU, workflow-built + adversarially mutation-tested, 112 CPU tests)
+
+The "buildable NOW without the multi-GPU node" A6 primitives: CODE + gloo/CPU-testable CORRECTNESS.
+Measured busbw / MFU-at-scale / the NVLink cliff are RENTAL-GATED (8×H200 day, `serving_day_8xH200_runbook.md`).
+Reuses utils/comms_calc.py + memory_math.py (comms algebra + ZeRO calc, already shipped by the CS336 front).
+
+| date | primitive | oracle | verified |
+|---|---|---|---|
+| 2026-07-04 | Megatron TP MLP (`utils/tp_mlp.py`) | gloo TP output + all grads == single-process ReferenceMLP (rtol 1e-5); **exactly 1 all-reduce/fwd, 2 fwd+bwd** | mutation test: bias-double-count + missing-all-reduce both FAIL (oracle has teeth); world_size 2 + 4 |
+| 2026-07-04 | 1F1B / GPipe pipeline (`utils/pipeline_schedule.py`) | schedule makespan == independent Kahn longest-path DAG; **bubble == (p−1)/m** (p4m8→0.375, p8m16→0.4375); peak-act **1F1B min(p,m) vs GPipe m** | 77 tests; verifier's own event-sim reproduced all 9 (p,m); mutations (warmup off-by-one, dropped B-edge) caught |
+| 2026-07-04 | MoE expert-parallel all-to-all (`utils/ep_moe.py`) | gloo dispatch→expert→combine == single-process dense-gather reference (allclose); zero token-divergence | real cross-rank traffic (rank0 sends 3/12, 5/10 off-rank); mutation (remove inverse-permute) caught |
+| 2026-07-04 | MFU/HFU 6ND calculator (`utils/mfu.py`) | reproduces **PaLM 540B 46.2% MFU** (computed 45.70%, Δ0.005) / **57.8% HFU** (57.17%) from 6ND; six-killer decomposition sums to 1 | 29 tests; N·D invariance, HFU≥MFU monotone in recompute, 4/3 full-recompute ratio |
+
+**Verdict (A6 code-only — SHIPPED, gloo/CPU-verified).** The four A6 primitives the standing single GPU
+can build+test are correct: the Megatron TP MLP is numerically identical to single-GPU with exactly the 2
+all-reduces/layer the theory predicts; the 1F1B scheduler's bubble matches (p−1)/m and its peak-activation
+advantage (min(p,m) vs m) is pinned by an independent DAG simulator; the EP-MoE all-to-all matches a
+dense-gather reference with real cross-rank traffic; the MFU calculator reproduces PaLM's published
+46.2%/57.8% from C=6ND. **Measured numbers are rental-gated** (busbw at line rate, MFU at 16/32/64 GPUs,
+the ~18× NVLink→IB cliff — the 8×H200 serving day + optional Phase-5 multi-node). A6 R0/R1 (topology +
+TP micro) execute inside that day; these primitives + comms_calc/memory_math are the arrive-prepared code.
