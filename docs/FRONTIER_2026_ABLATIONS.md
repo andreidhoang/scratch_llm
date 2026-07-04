@@ -236,6 +236,9 @@ pull-rebase before commit, additive edits, precise `git add` (never `-A`).
 
 ## Source-of-truth pointers
 
+- **Buildable task breakdown (the next-phase DAG):** [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)
+  — 23 rungs (A-loop-to-chat + B-ablation), EV-ranked, each with exact interfaces / tests / falsifier /
+  kill / zone note; grounded per-rung in the real code by workflow `w77bbp4pb`.
 - Approved plan of record: `~/.claude/plans/misty-sniffing-cerf.md`.
 - Decision record: `docs/adr/ADR-0018-close-the-loop-nanochat-front.md`.
 - Measurement ledger (pre-register + measure every rung): `bench/RESULTS.md` (§Frontier ablations).
