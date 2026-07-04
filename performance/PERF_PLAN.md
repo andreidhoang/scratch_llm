@@ -244,7 +244,7 @@ compare against in Phase 2. File: `performance/artifacts/wgmma_descriptor_manual
 | R2: group-wise INT4 (g=128), packed | ✅ | pack/unpack bit-exact (500-case fuzz); SQNR 18.64 vs 18.60 floor; group > per-tensor | sm_120 / CPU |
 | R3: NVFP4 two-level + MXFP4 comparison + block-scaled GEMM | ✅ | NVFP4 MSE 1.48× < MXFP4 (stronger baseline confirmed); GEMM 0.28% vs bf16; histogram PNG | sm_120 / CPU |
 | R4: FP8 E4M3 KV cache wired into A1 decoder | ✅ | E2E 24.45 dB vs BF16-KV; per-ch-K 2.49×; INT4-KV degrades; bytes 0.552× | sm_120 |
-| §4.3: PTQ method (AWQ/GPTQ/QuaRot) on real linear layer | ⬜ | measured accuracy recovery on real model | sm_120 / CPU |
+| §4.3: PTQ method (AWQ/GPTQ/QuaRot) on real linear layer | ✅ | AWQ INT4 1.71× MSE recovery vs naive (held-out 1.69×); salient-col err ↓2.87× | sm_120 / CPU |
 | §7 (stretch): NVFP4 native MMA on B200 | ⬜ | → Phase 3 (B200) | B200 |
 | Design note | ⬜ | 2–3 pages | — |
 

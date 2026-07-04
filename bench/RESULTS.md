@@ -553,3 +553,48 @@ mechanisms (E4M3 non-power-of-two block scale + finer k=16 blocks) — and the a
 confirmed the MXFP4 baseline is the *stronger* variant, so the win is real not rigged; FP8 E4M3 KV is
 near-lossless (E2E 24.45 dB) at 0.552× bytes with per-channel-K 2.49× better than per-token, while
 INT4-KV visibly degrades (the stress test bites). §7 NVFP4-native-MMA throughput → B200 code-only.
+
+---
+
+## A4 flash-attention ladder (R0–R1 — the pedagogical baselines that motivate FA)
+
+### Measured — A4 R0 naive 3-kernel attention + R1 online softmax (2026-07-04, workflow-built, 43 tests)
+
+The *why* of flash attention, made falsifiable. R0 = naive attention as three separate ops
+(S=QKᵀ/√d, P=softmax(S) causal, O=P@V) that materializes the full N×N score matrix; R1 = the
+single-row online-softmax recurrence in isolation. Modules: `src/scratch_llm/kernels/attention_naive.py`,
+`online_softmax.py`. Oracle-first: R0 vs `F.scaled_dot_product_attention` <1e-3 fp32; R1 vs a literal
+3-pass reference softmax <1e-6 fp64. 42 CPU tests (`not gpu` gate) + 1 gpu-marked peak-memory test.
+
+| date | rung | hardware | metric | predicted | measured | bound | root cause |
+|---|---|---|---|---|---|---|---|
+| 2026-07-04 | A4 R0 naive attention · O(N²) blowup | RTX PRO 4000 Blackwell (sm120) | peak CUDA mem vs N (d=16, 1 head) | ∝N² (score matrix dominates) | naive **8.1→32.1→128.2 MB** at N=1024→2048→4096 (exactly **4× per doubling** = N²); fused oracle **0.1→0.3 MB** (flat) → **>400× smaller** at N=4096 | memory | naive writes/re-reads the N×N score+prob matrices to HBM; the fused kernel never materializes N×N (O(N·d) output + O(tile²) SRAM scratch) |
+| 2026-07-04 | A4 R0 · analytic 16K footprint | — (arithmetic) | score-matrix bytes vs on-chip scratch | 1 GiB, ≫ SRAM | N=16K fp32 1-head score matrix = **1.00 GiB**; = **65536×** the fused kernel's constant 16 KiB tile² on-chip scratch (247× its total working set incl. output) | memory | 1 GiB cannot live in the ~KBs of SRAM and never needs to — tiling holds one tile² block at a time |
+| 2026-07-04 | A4 R1 online softmax · late-outlier rescale | CPU (fp64) | online == 3-pass softmax | bit-exact <1e-6 | matches 3-pass ref <1e-6 for all tile sizes; **ADVERSARIAL +50 outlier in the last tile passes** (the exp(m_old−m_new) denominator rescale is what makes this correct) | — | the numerical core FA fuses into the tile loop: one streaming (m,d) pass replaces the 3-pass max+sum |
+
+**Verdict (A4 R0–R1 — SHIPPED).** The motivation is now falsifiable and measured: naive attention's
+peak memory tracks the N×N score matrix (clean 4×-per-doubling quadratic on this sm120 card) while the
+fused FA oracle stays flat (>400× smaller at N=4096); analytically a 16K score matrix is 1 GiB = 65536×
+the fused kernel's constant on-chip scratch, so it *cannot* live on-chip and never needs to. The online
+softmax recurrence reproduces a 3-pass reference to fp64 including the adversarial late-+50-outlier that
+exercises the running-max denominator rescale — the exact `corr = exp(m − m_new)` line FA2 fuses into
+its tile loop. ncu-debt: peak-memory via `torch.cuda.max_memory_allocated` (allocator-level, not ncu
+DRAM counters — ncu blocked on this box); the quadratic signature is read from the increment ratios
+(constant workspace offset cancels in Δ).
+
+### Measured — A5 §4.3 AWQ PTQ (2026-07-04, `src/scratch_llm/quant/awq.py`, 7 CPU tests)
+
+Real PTQ on an actual `Linear[256,512]` (weights ~N(0,0.02²), 8/512 activation-salient channels ×12),
+group_size=128, IDENTICAL INT4 grid for both arms — only the scale placement differs.
+
+| date | rung | metric | predicted | measured | note |
+|---|---|---|---|---|---|
+| 2026-07-04 | A5 §4.3 AWQ INT4 | AWQ output MSE < naive @ same 4-bit/g=128 | AWQ beats naive | **AWQ 5.47e-3 (20.90 dB) vs naive 9.03e-3 (18.72 dB) = 1.71× mean recovery** (min 1.65×, 5 seeds); **held-out 1.69×** (not calib-overfit); α=0≡naive bit-exact; interior optimum α≈0.25; salient-col err ↓2.87× | activation-aware per-channel scale `s=act_scale^α` grid-searched to min calib MSE; salient-by-activation weight cols scaled up before INT4 round, 1/s folded to activations |
+
+**Verdict (A5 §4.3 — SHIPPED).** AWQ recovers **1.71×** the output MSE of naive round-to-nearest at the
+same bit-width by protecting the ~1.5% of weight channels that carry the largest activations (scale them
+up before rounding, fold 1/s into the activations) — the recovery holds on held-out tokens (1.69×, not
+calibration-overfit) and the α grid has a genuine interior optimum (protect-vs-inflate tradeoff), α=0
+reproducing naive bit-exactly. Honest scope: a layer-level MSE demonstration (a full-model perplexity
+run is the rental-gated SKIP). Completes the A5 numerics track; native NVFP4-MMA throughput (§7) →
+B200 (`B200_day_runbook.md`).
