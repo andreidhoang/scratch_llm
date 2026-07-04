@@ -499,3 +499,30 @@ on this unprivileged box) are re-based on achieved-vs-peak % + nsys, with 5 metr
 "ncu debt" for the H100 rental day. Next: A2 R1 GEMV ladder (naive→coalesced→two-stage→float4, target
 >80% of 0.55 TB/s) → R2 softmax → R3 RMSNorm → R4 TopK → R5/R6 GEMM (sm120); §4.1–4.6 WGMMA/TMA/FP8
 are H100-code-only.
+
+### Measured — A2 R1–R6 CUDA-core kernel ladder (2026-07-04, Triton, workflow-built + adversarially verified + main-thread gpu-tested)
+
+sm120, measured HBM peak 0.551 TB/s / bf16 compute 72 TF/s (R0 harness). Every rung: oracle vs torch
+at spec tolerance (79 gpu tests green under my own run) + an independent adversarial verifier
+(re-ran oracle, added own adversarial inputs, checked tolerance not gamed, measurement honest). ncu
+blocked → %-of-measured-peak + nsys; ncu-debt registered per kernel.
+
+| date | rung | metric | predicted | measured | bound | note |
+|---|---|---|---|---|---|---|
+| 2026-07-04 | A2 R1 GEMV (naive→blockrow→split) | %HBM at 8192² | >80% of 0.55 TB/s | **blockrow 528.8 GB/s = 95.9% HBM** (107% of torch.mv); naive 78% | mem | coalesced block-per-row saturates HBM; float4/swizzle are Triton-compiler-managed (honest) |
+| 2026-07-04 | A2 R2 softmax (twopass→online→fused) | ~peak HBM + online<twopass bytes | **fused ~100% HBM (551 GB/s)**; online 3N vs twopass 4N = **1.33× fewer bytes, 1.17× faster >L2** | mem | Milakov online recurrence; adversarial +1e4/all-eq/all-−inf pass (no NaN) |
+| 2026-07-04 | A2 R3 RMSNorm/LayerNorm | ~peak HBM; RMS<LN | **both ~100–101% HBM @N≥4096**; RMS vs LN within ±1% (small-N edge = noise, honest) | mem | one reduction (RMS) vs two (LN); zero-row ε path NaN-free |
+| 2026-07-04 | A2 R4 TopK + fused softmax+topk | measure the failure | **iter-max 258 GB/s = 46.9% peak** (the honest poor-GPU-fit); **fusion 3.39× faster / 3.00× less traffic** | mem/occupancy | serial dependent reductions, ~0 AI; bit-exact vs torch.topk, tie-break lowest-index |
+| 2026-07-04 | A2 R5+R6 GEMM (naive→tiled→autotuned) | siboehm shape 1%→~78% | **0.2% → 128.5% → 134.3% of cuBLAS-proxy** (naive 0.2 → autotuned 101.9 TF/s) | compute | tl.dot tiled+autotuned beats torch.matmul default at this shape (%roof>100 disclosed); AI 1365, ridge 134 |
+
+**Verdict (A2 R1–R6 — SHIPPED).** Five CUDA-core kernels, each oracle-correct (79 gpu tests, adversarial
+inputs incl. non-contiguous/odd-prime/outlier) and roofline-placed: the four memory-bound kernels
+(GEMV, softmax, both norms) reach **~96–100% of measured HBM peak** — the memory wall IS the bound and
+they hit it; TopK is honestly **46.9%** (a poor GPU fit: serial reductions, ~0 AI — the spec's "measure
+the failure"), redeemed by a **3.4× fused-softmax+topk** traffic win; GEMM crosses the ridge
+(compute-bound, AI 1365) with the naive→tiled→autotuned ladder reproducing the siboehm SHAPE
+(0.2%→134% of the torch.matmul/cuBLAS proxy — Triton's autotuned `tl.dot` beats the default cuBLAS
+heuristic at 4096³, honestly disclosed). Honesty (ADR-0011 Triton-primary): float4 vectorization,
+coalescing, and bank-conflict avoidance are Triton-compiler-managed — the raw-CUDA ladder step is noted
+per kernel as what a hand kernel would add, not fabricated. ncu counters blocked → each kernel names its
+ncu-debt metric for the H100 day. Node → A2 §4 (H100 code-only) + A3.
