@@ -97,7 +97,7 @@ persistent volume (`workspace_is_volume: true`).
   scaffold client path, how to wire the planner) — **BLOCKED-EXTERNAL** (Stanford network), code
   complete.
 
-### W7a · A4 — dedup machinery (the core) `[ ]`
+### W7a · A4 — dedup machinery (the core) `[x] shipped 2026-07-04 (74736d6)`
 - **Files:** `src/scratch_llm/data/dedup.py` — `exact_line_dedup(paths, out_dir)` (two-pass
   hash-count → rewrite corpus-unique lines); `minhash_dedup(paths, num_hashes, num_bands, ngrams,
   jaccard_threshold, out_dir)` — normalization (NFD, lowercase, strip punct, collapse ws), word
@@ -110,7 +110,7 @@ persistent volume (`workspace_is_volume: true`).
 - **DoD:** green; ADR-0015 (dedup params: chosen `(num_hashes, bands, ngrams, threshold)` +
   target-recall S-curve justification).
 
-### W7b · A4 — filter family + quality classifier + pipeline `[ ]`
+### W7b · A4 — filter family + quality classifier + pipeline `[x] shipped 2026-07-04 (129abb2)`
 - **Files:** `src/scratch_llm/data/filters.py` — `extract_text` (resiliparse + encoding detect),
   `identify_language` (fastText lid.176), `mask_emails/phones/ips` (regex, `(new, n)` returns),
   `classify_nsfw` / `classify_toxic` (Dolma-Jigsaw fastText), `gopher_quality_filter` (bool,
@@ -126,7 +126,7 @@ persistent volume (`workspace_is_volume: true`).
 - **DoD:** green; pipeline slice-run on synthetic docs logs a discard table; ADR-0016 (quality
   signal design); official A4 suite pass where models present. Full 5000-WET run = **SKIP** (guide).
 
-### W8a · A5 — SFT + masking primitives `[ ]`
+### W8a · A5 — SFT + masking primitives `[x] shipped 2026-07-04 (a64e227)`
 - **Files:** `src/scratch_llm/algos/sft.py` — `tokenize_prompt_and_output` (+`response_mask`),
   `compute_entropy` (logsumexp-stable), `get_response_log_probs`, `masked_normalize`,
   `masked_mean`, `sft_microbatch_train_step` (grad-accum scaling, `(loss, metadata)`).
@@ -136,7 +136,7 @@ persistent volume (`workspace_is_volume: true`).
   invariance.
 - **DoD:** green; primitives shaped to the official adapter signatures.
 
-### W8b · A5 — Expert Iteration + verifiable grader + envs `[ ]`
+### W8b · A5 — Expert Iteration + verifiable grader + envs `[x] shipped 2026-07-04 (9c50f9e)`
 - **Files:** `src/scratch_llm/rewards/r1_zero.py` — format reward (`<think>…</think>
   <answer>…</answer>` shape), answer reward (normalized exact-match), composed `RewardDict`
   conforming to `envs/protocol.py`. `src/scratch_llm/envs/countdown.py` — Countdown task pool
@@ -148,7 +148,7 @@ persistent volume (`workspace_is_volume: true`).
   a toy env with the tiny A1 model: filtered-correct fraction rises over steps (seeded).
 - **DoD:** green; the EI-plateaus-because-no-credit-assignment note in the module docstring.
 
-### W8c · A5 — GRPO / Dr.GRPO engine `[ ]`
+### W8c · A5 — GRPO / Dr.GRPO engine `[x] shipped 2026-07-04 (82fa5c2)`
 - **Files:** `src/scratch_llm/algos/grpo.py` — `compute_group_normalized_rewards`
   (`normalize_by_std` toggle = Eq. 28 ↔ Eq. 31), `compute_naive_policy_gradient_loss` (Eq. 32),
   `compute_grpo_clip_loss` (Eq. 33, `was_clipped` metadata), `compute_policy_gradient_loss`
@@ -164,7 +164,7 @@ persistent volume (`workspace_is_volume: true`).
   LocalBackend — mean reward strictly rises over N steps (seeded, CPU, <60 s).
 - **DoD:** green; ADR-0017 (Dr.GRPO default + aggregation choice, per guide §7 triggers).
 
-### W8d · A5 — DPO loss (supplement core) `[ ]`
+### W8d · A5 — DPO loss (supplement core) `[x] shipped 2026-07-04 (31c3c64)`
 - **Files:** `src/scratch_llm/algos/dpo.py` — per-instance DPO loss (Eq. 3), `π_θ` vs frozen
   `π_ref`, β exposed; Bradley-Terry RM loss beside it for the whiteboard pairing.
 - **Tests:** `tests/test_dpo.py` — hand-computed tiny-case; loss at `π_θ=π_ref` = −log σ(0) =

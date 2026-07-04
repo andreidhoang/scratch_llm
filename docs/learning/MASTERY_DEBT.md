@@ -14,4 +14,11 @@
 | 5 | IsoFLOP / Chinchilla fit (log-log, C=6ND, a+b≈1) | `scaling/isoflop.py` · `bench/a3_isoflop.png` | Derive and defend a scaling law — and when does it break? | — | ☐ |
 | 6 | Budget-constrained query planning (reserve/refund semantics) | `scaling/planner.py` | Spend a fixed compute budget to fit a loss surface | — | ☐ |
 
+| 7 | Exact + MinHash/LSH dedup (P[match]=Jaccard, LSH S-curve, cluster-and-drop) | `data/dedup.py` · `tests/test_data_dedup.py` | Explain MinHash+LSH and how you'd set the band count | — | ☐ |
+| 8 | Data filter family + quality-classifier signal design | `data/filters.py` · `data/quality.py` · `data/pipeline.py` | How does data quality change a scaling outcome? Pipeline order? | — | ☐ |
+| 9 | SFT masked cross-entropy + response-mask primitives | `algos/sft.py` · `tests/test_sft_algos.py` | Why does correct response-masking gate every downstream RL number? | — | ☐ |
+| 10 | Expert Iteration (STaR) + verifiable-reward grader | `algos/expert_iteration.py` · `rewards/r1_zero.py` · `envs/countdown.py` | Why does filter-then-SFT already improve reasoning, and where does it plateau? | — | ☐ |
+| 11 | GRPO / Dr.GRPO (group advantage, clip trust region, length-norm de-bias) | `algos/grpo.py` · `tests/test_grpo_algos.py` · `docs/adr/ADR-0017` | Derive GRPO's group-relative advantage; what bias does Dr.GRPO remove? | — | ☐ |
+| 12 | DPO loss + Bradley-Terry reward modeling | `algos/dpo.py` · `tests/test_dpo_algos.py` | RLHF (PPO+RM) vs DPO — what's the closed-form reduction? | — | ☐ |
+
 *(rows appended as modules ship — see `docs/EXECUTION_SPEC_CS336_FINISH.md` for the build DAG)*

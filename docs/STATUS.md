@@ -11,7 +11,9 @@ wave, +55% vs dense-continuous)** → **R4.2 chunked prefill (2026-07-04: mechan
 44 tests; spike-reduction FALSIFIED — sequential-interleave regresses, R4.2b piggyback deferred)**.
 Current perf node: **A1 R4.3 speculative decoding** (`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
 FSDP · 100B one-pager · comms algebra, W1–W4) **+ A3 scaling ✅** (fitter a=0.469/b=0.531 +
-query planner, W5–W6) under the Delivery-Mode sprint (ADR-0014); A4/A5 next. **230 CPU + 14
+query planner, W5–W6); **A4 data pipeline ✅ + A5 alignment stack ✅ code-complete 2026-07-04**
+(dedup/filters/quality/pipeline · SFT/EI/GRPO/Dr.GRPO/DPO + grader + envs, W7–W8; graded GPU runs
+rental-gated per `deploy/runbooks/`) under the Delivery-Mode sprint (ADR-0014). **456 CPU + 14
 GPU-marked tests green, ruff clean, pyright 0 errors.** Rentals decided: ADR-0012 (3
 capability-tier sessions: H100 · 8×H200 serving day · B200). Mastery lessons (VI):
 [`docs/learning/`](learning/INDEX.md).
@@ -61,11 +63,11 @@ BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ 
  A1 Basics      ████████████ 100%  ✅  BPE · Transformer · AdamW · train · sample
  A2 Systems     ███████████░  ~95% 🟢  distributed half ✅ 2026-07-03 (W1–W4); only rental-tier serving left
  A3 Scaling     ██████████░░  ~85% 🟢  fitter + planner ✅ (W5–W6); Stanford-API leaderboard BLOCKED-EXTERNAL
- A4 Data        ░░░░░░░░░░░░    0%  ⬜  extract → filter → classify → MinHash dedup (clean stub)
- A5 Alignment   ░░░░░░░░░░░░    0%  ⬜  SFT → Expert-Iter → GRPO/Dr.GRPO  ◄ first SHIP after perf track
+ A4 Data        ███████████░  ~90% 🟢  extract→filter→quality→MinHash dedup ✅ (W7); full 5000-WET run = SKIP
+ A5 Alignment   ███████████░  ~90% 🟢  SFT·EI·GRPO/Dr.GRPO·DPO + grader + envs ✅ (W8); graded runs rental-gated
  DELTA capstone  design ✅      0%  ⬜  GDN-2 decode kernel — base-first, gated on A5 ship + Step-0
 
- ►► TWO ACTIVE FRONTS: perf curriculum (node R4.2) · main-track Delivery sprint (W1–W6 ✅ → A4/A5).
+ ►► TWO ACTIVE FRONTS: perf curriculum (node R4.2) · main-track sprint (W1–W8 ✅ → W9 acceptance/W10 runbooks/W11).
 ```
 
 **A2 breakdown — CS336 systems (single-GPU half ✅; distributed half ✅ shipped 2026-07-03):**
