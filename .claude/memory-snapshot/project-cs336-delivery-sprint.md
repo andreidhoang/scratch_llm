@@ -1,10 +1,21 @@
 ---
 name: project-cs336-delivery-sprint
-description: 2026-07-03 mandate — agents autonomously finish CS336 main track A2→A5; delegate mode on; two-front zone split with perf agents
+description: CS336 main track A2→A5 SHIPPED 2026-07-04 (delegate mode, autonomous); graded GPU runs rental-gated; two-front zone split with perf agents
 metadata: 
   node_type: memory
   type: project
   originSessionId: 11074331-4b6f-4b06-9b7b-20bc6c37a2a3
+---
+
+**STATUS 2026-07-04: SPRINT COMPLETE.** All exec-spec nodes W1–W11 shipped. A2 (ZeRO-1/FSDP/100B
+one-pager/comms-algebra) · A3 (IsoFLOP fitter + query planner) · A4 (dedup/filters/quality/pipeline)
+· A5 (SFT/EI/GRPO/Dr.GRPO/DPO + grader + envs) are code-complete, green (461 CPU tests), and
+official-scaffold-accepted (50 pass / 0 fail / 11 explained-blocked — `deploy/runbooks/OFFICIAL_SUITES.md`).
+What remains is **rental execution** (graded Qwen2.5-Math-1.5B RL runs, R1-Zero "aha", multi-GPU NCCL
+benchmarks) — code + runbooks in `deploy/runbooks/`, run when a box is rented — and **post-hoc
+mastery** (`docs/learning/MASTERY_DEBT.md`, 12 rows). Next real build frontier: DELTA capstone (still
+gated) and the A5 distillation lab (`algos/distill.py`, open).
+
 ---
 
 On 2026-07-03 the user switched the repo `/workspace/scratch_llm` to **delegate execution mode**

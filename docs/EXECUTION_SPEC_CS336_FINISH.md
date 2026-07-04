@@ -25,6 +25,11 @@ persistent volume (`workspace_is_volume: true`).
 
 ---
 
+> ✅ **SPRINT COMPLETE 2026-07-04.** All nodes W1–W11 shipped. CS336 main track A2→A5 code-complete,
+> green (461 CPU tests), and official-scaffold-accepted (50 pass / 0 fail / 11 explained-blocked —
+> `deploy/runbooks/OFFICIAL_SUITES.md`). Remaining work is *rental execution* (graded GPU runs) via
+> `deploy/runbooks/`, plus post-hoc mastery (`docs/learning/MASTERY_DEBT.md`).
+
 ## Node checklist (the DAG — tick as shipped)
 
 ### W1 · A2-D2 — ZeRO-1 optimizer-state sharding `[x] shipped 2026-07-03 (d8142ef)`
@@ -193,7 +198,7 @@ persistent volume (`workspace_is_volume: true`).
   CPU, can run on this box; the 5000-WET leaderboard stays SKIP.
 - **DoD:** each runbook self-contained (a fresh agent on a fresh pod can execute it top to bottom).
 
-### W11 · Closeout `[ ]`
+### W11 · Closeout `[x] shipped 2026-07-04`
 - `docs/STATUS.md` full rewrite of the main-track sections (A2 100%, A3/A4/A5 code-complete with
   the run-tier ledger), CLAUDE.md build-status line, `bench/RESULTS.md` main-track entries,
   MASTERY_DEBT rows complete, memory snapshot refresh, final green-CI + push.

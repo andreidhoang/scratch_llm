@@ -137,8 +137,8 @@ GPU steps are **developed on the standing GPU** (rented out only for what this c
 Module layout: `src/scratch_llm/{algos,rewards,envs,rollout,scaling,data,utils,kernels}/` plus the
 flat A1 substrate (`tokenizer.py`, `model.py`, `moe.py`, `optim.py`, `train.py`, `sampling.py`).
 
-**Build status (2026-07-03):** ⚡ two-front Delivery sprint active (ADR-0013/0014): main track
-A2→A5 finishing autonomously per `docs/EXECUTION_SPEC_CS336_FINISH.md` · A1 substrate ✅ · **perf-curriculum A1 serving R0–R4.1 ✅ measured**
+**Build status (2026-07-03):** ⚡ two-front Delivery sprint (ADR-0013/0014): **CS336 main track A2→A5 COMPLETE 2026-07-04**
+(code + tests + official-scaffold acceptance 50P/0F; graded GPU runs rental-gated per `deploy/runbooks/`) — see `docs/EXECUTION_SPEC_CS336_FINISH.md` · A1 substrate ✅ · **perf-curriculum A1 serving R0–R4.1 ✅ measured**
 (continuous batching **2.30× wall / 2.93× by steps** vs static-wave; PagedAttention + fused Triton
 paged decode **5.90 ms/step = ×3.52 vs wave, +55% vs dense**; frag 5.0%, capacity ×9.3) — **current
 node: A1 R4.2 chunked prefill**, pointer in `performance/PERF_PLAN.md` · CS336-A2 distributed half ✅ shipped 2026-07-03 (ZeRO-1 · FSDP · one-pager · comms algebra, W1–W4) + A3 ✅ (W5–W6) · A3/A4/A5 stubs.

@@ -102,8 +102,9 @@ A bigger / multi-GPU box is rented (`vastai` skill) only for what this card can'
 throughput vs H100/B200, real multi-GPU NCCL ([ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md) is
 an open re-check on sm120). The `pytest -m "not gpu"` gate stays as the HW-agnostic commit/CI floor.
 
-**Next ship after the perf curriculum — EV-ranked, not numeric (per [`../STRATEGY.md`](../STRATEGY.md) §8,
-gated by the 2026-06-30 ordering mandate): the A5 RL "aha".**
+**Main-track sprint COMPLETE (2026-07-04, ADR-0014).** The A5 `algos/` stack is built, green, and
+official-suite-accepted; the RL "aha" is now a *rental-execution* step, not a build step — code +
+runbook ready (`deploy/runbooks/A5_countdown_aha.md`). Historical framing below (pre-sprint):
 `algos/` SFT masked-CE → GRPO/Dr.GRPO wired to `utils/monitors.py` → reproduce the R1-Zero "aha" on
 Countdown (Qwen2.5-1.5B; CPU-scaffolded + one ~$30–100 burst). The A2 distributed finish + OSS Rung-1
 run in parallel; **DELTA is base-first** — its kernel is gated behind the A5 ship + the Step-0 gate.
@@ -183,7 +184,7 @@ estimator · RLOO · off-policy epochs>1. *Adoption is tracked as green commits 
 | `utils/seeding.py` | `seed_everything` (py/numpy/torch) | — |
 | `tests/test_integration_l1.py` | end-to-end: BPE → tokenize → train → sample | composes |
 
-## A2 — Systems — partial
+## A2 — Systems — ✅ complete (single-GPU + distributed halves; real-serving rental-gated)
 
 | Module | Status | Notes |
 |---|---|---|
@@ -196,15 +197,17 @@ estimator · RLOO · off-policy epochs>1. *Adoption is tracked as green commits 
 | `rollout/` client seam + `LocalBackend` | ✅ | `Rollout`/`RolloutClient` contract + CPU `LocalBackend`; per-token log-probs feed `monitors`. Spec: [`design/L2_rollout_seam_SPEC.md`](design/L2_rollout_seam_SPEC.md) |
 | DDP (naive → flat-bucket → overlap) | ✅ | `utils/ddp.py` — naive/flat/overlap containers + 2-rank gloo equivalence (665b6e6) |
 | ZeRO-1 optimizer-state sharding | ✅ | `utils/zero1.py` — owner-broadcast sharded optimizer; 2-rank gloo equivalence ×3 seeds (W1, d8142ef) |
-| FSDP | ✅ | `utils/fsdp.py` — per-param ZeRO-3: gather-fwd, reduce-scatter grads, fp32 master shards; gloo trajectory equivalence (W3, 4c806bb) |
-| 100B memory-math one-pager | ✅ | `docs/design/A2_100B_MEMORY_ONEPAGER.md`, every number from tested `utils/memory_math.py` (W2, 7cfb114) |
-| real serving (SGLang, fp8/INT4-KV) | ⬜ Hopper box | `rollout/sglang_client.py` ready; SGLang needs sm90+ ([ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md)) |
+| FSDP | ✅ | `utils/fsdp.py` — per-param ZeRO-3: ≥2-D matrices sharded (reduce-scatter), ≤1-D norm/bias replicated (all-reduced) per the official gradient-sync contract; gloo trajectory equivalence (W3 4c806bb, policy 47f49a1). **Official `test_fsdp` 4/4 PASS.** |
+| ZeRO-1 accounting / comms algebra | ✅ | `utils/memory_math.py` + `docs/design/A2_100B_MEMORY_ONEPAGER.md` (W2 7cfb114); `utils/comms_calc.py` + `docs/design/A2_COMMS_ALGEBRA.md` — ring/DP/FSDP/TP byte model, verified vs the official PDF §8 (W4 06127b5) |
+| real serving (SGLang, fp8/INT4-KV) | ⬜ Hopper box | `rollout/sglang_client.py` ready; SGLang needs sm90+ ([ADR-0008](adr/ADR-0008-sglang-hopper-only-on-ada.md)). Multi-GPU NCCL benchmarks: runbook `deploy/runbooks/A2_multigpu_nccl_bench.md` |
 
-## A3 Scaling · A4 Data · A5 Alignment — to build (clean stubs)
+**Official acceptance (W9):** A2 **10 PASS / 0 FAIL** (+4 Triton GPU-blocked) — `deploy/runbooks/OFFICIAL_SUITES.md`.
 
-- **A3** — ✅ shipped 2026-07-03: `scaling/isoflop.py` (a=0.469 · b=0.531 · a+b gate PASS · N_opt ≈70B @1e23 / ≈206B @1e24 · `bench/a3_isoflop.png`) + `scaling/planner.py` (budget reserve/refund semantics). Stanford-API leaderboard BLOCKED-EXTERNAL — runbook `deploy/runbooks/A3_stanford_api_leaderboard.md`.
-- **A4** — `data/`: extract → filter → quality-classify → exact + MinHash/LSH dedup; pipeline order + discard accounting.
-- **A5** — `algos/`, `rewards/`, `envs/`: SFT → Expert Iteration → GRPO/Dr.GRPO + DPO; the env/grader protocol (`envs/protocol.py`) is already in place. Frontier lab (GDM-aligned): `algos/distill.py` — knowledge distillation (logit / on-policy reverse-KL / sequence-level), the serve-cheap student track (see `FRONTIER_PRACTICE_2026.md` A5 🔵).
+## A3 Scaling — ✅ complete · A4 Data — ✅ complete · A5 Alignment — ✅ complete (graded runs rental-gated)
+
+- **A3** — ✅ 2026-07-03: `scaling/isoflop.py` (a=0.469 · b=0.531 · a+b gate PASS · N_opt ≈70B @1e23 / ≈206B @1e24 · `bench/a3_isoflop.png`) + `scaling/planner.py` (budget reserve/refund semantics). Stanford-API leaderboard BLOCKED-EXTERNAL — runbook `deploy/runbooks/A3_stanford_api_leaderboard.md`.
+- **A4** — ✅ 2026-07-04 (W7): `data/dedup.py` (exact + MinHash/LSH, P[match]=Jaccard, cluster-and-drop), `data/filters.py` (extract·langid·PII·NSFW/toxic·Gopher, one (label,score) interface), `data/quality.py` (trained-fastText signal design, ADR-0016), `data/pipeline.py` (canonical order + discard accounting). **Official acceptance 20 PASS / 0 FAIL** (+1 quality-model-artifact blocked). Full 5000-WET run = SKIP; slice runbook `deploy/runbooks/A4_full_slice.md`.
+- **A5** — ✅ 2026-07-04 (W8): `algos/sft.py` (masking primitives + SFT step), `algos/expert_iteration.py` (STaR), `algos/grpo.py` (GRPO/Dr.GRPO + clip + dispatcher + train loop, ADR-0017), `algos/dpo.py` (+ Bradley-Terry), `rewards/r1_zero.py` (verifiable grader), `envs/{countdown,gsm_math}.py`. RL logging wired through `utils/monitors.py`; toy GRPO end-to-end on Countdown (reward-rises, CPU). **Official acceptance 20 PASS / 0 FAIL** (+6 out-of-scope blocked). Graded Qwen2.5-Math-1.5B runs + the R1-Zero "aha" repro are rental-gated — runbooks `deploy/runbooks/A5_qwen_math_rl.md` · `A5_countdown_aha.md`. Frontier lab (GDM-aligned): `algos/distill.py` — knowledge distillation, the serve-cheap student track (see `FRONTIER_PRACTICE_2026.md` A5 🔵), still open.
 
 ## Capstone — DELTA (GDN-2 decode kernel · the barbell *spike*) — designed, build pending
 
