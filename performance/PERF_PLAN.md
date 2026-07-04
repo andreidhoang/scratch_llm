@@ -12,10 +12,18 @@
 ## Current Node
 
 ```
-Phase: 1a — **A1 COMPLETE (R0–R4.6 + design note, 2026-07-04)** → **A2 R0 (profiler+roofline harness)
-  NEXT**. R4.2 mechanism-only (spike falsified, R4.2b deferred); R4.3 lossless spec decode; R4.4
-  CUDA-graph −74% step / 77% of wall; R4.5 MLA identity to eps; R4.6 disagg ITL p99 3× + KV transfer
-  characterized.  [delegate mode, ADR-0013]
+Phase: 1a–1e — **ALL sm120-runnable rungs of A1–A5 COMPLETE (2026-07-04, delegate mode ADR-0013).**
+  Next: the three ISA-gated RENTAL DAYS (H100 / 8×H200 / B200 — runbooks written, arrive-prepared).
+  A1 R0–R4.6 (serving) · A2 R0–R6 (kernels) · A3 R0–R2 (tensor cores) · A4 R0–R3+bwd (flash attn) ·
+  A5 R0–R4+§4.3 (quant) all measured + ledgered; design notes A1–A5 written; H100/B200/8×H200 runbooks
+  + WGMMA PTX artifact prepared. Headlines: A1 CUDA-graph decode 77% of wall (R1 gap closed); A2
+  kernels 96–100% HBM (GEMM 134% cuBLAS-proxy); A3 tensor cores 4.1%→38.9%→81.9% cuBLAS; A4 FA2 ~50%
+  SDPA / 44× leaner; A5 NVFP4 1.48×<MXFP4, FP8-KV E2E 24.45 dB, AWQ 1.71× recovery. One honest negative
+  (R4.2 chunked-prefill sequential-interleave regresses → R4.2b piggyback deferred). Repo fully green
+  (ruff + pyright 0 + CPU suite; per-kernel gpu tests pass).
+Remaining (rental-gated, code-only + runbook'd): A2 §4.1–4.6 WGMMA/TMA/FP8 (H100) · A3 R3-4+§4.1
+  (H100) + §4.2-4.3 tcgen05/NVFP4 (B200) · A4 R4 FA3 (H100) · A5 §7 NVFP4-MMA (B200) · A6 Phase-4
+  8×H200 serving day · A7 capstone. All prereqs ledgered ⇒ rental discipline satisfied.
 Hardware: Standing GPU (sm_120)
 Done (2026-07-04, R4.5+R4.6, A1 CLOSED): MLA toy (mla.py, weight-absorption identity 1.4e-15, KV
   3.56× < GQA-8, 5 tests) + PD-disagg demo (bench/disagg.py: decode-worker ITL p99 3× better 20.2 vs

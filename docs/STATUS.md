@@ -3,6 +3,17 @@
 Single source of truth for what is built, tested, and green. Updated as modules land.
 Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m "not gpu"`.
 
+> 🆕 **Third front opened (2026-07-04 · [ADR-0018](adr/ADR-0018-close-the-loop-nanochat-front.md)).**
+> **Close the loop:** adopt nanochat's end-to-end `speedrun.sh` spine + a report card to train an
+> actual *talking* model from our own code (the loop has never closed — everything real is
+> rental-gated; serving numbers were measured on random-weight toys, `bench/RESULTS.md:383`), then
+> run an EV-ranked, pre-registered, iso-FLOP **frontier ablation study** (F1 MuonAdamW · F2 MTP
+> draft head · F3 de-confound serving · F4 bf16+compile · F5 MLA-real · F6 MoE-balancing · F7 GRPO
+> "aha" · F8 DSA · F9 logit-guard). Runs **in parallel** with perf + DELTA. Spec + DAG:
+> [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md); node pointer **F1**; ledger
+> `bench/RESULTS.md` §Frontier ablations. Headline artifact = **nanochat d20** (~561M, ~$100,
+> 8×H100), target CORE ≈ GPT-2.
+
 **As of 2026-07-03: A1 substrate complete; perf-curriculum A1 serving rungs R0–R4.1 SHIPPED &
 MEASURED on the standing sm120 GPU** — metrics harness → decode roofline (15%→53% HBM) → GQA/MQA
 (MQA 1.92× @16K) → **continuous batching (2.30× wall / 2.93× by steps vs static-wave)** →
@@ -11,10 +22,13 @@ wave, +55% vs dense-continuous)** → **R4.2 chunked prefill (2026-07-04: mechan
 44 tests; spike-reduction FALSIFIED — sequential-interleave regresses, R4.2b piggyback deferred)** →
 **R4.3 speculative decoding (2026-07-04: SHIPPED lossless, 27 tests; ×1.2–1.4 wall / 1.3–1.5
 tok/forward via n-gram drafting)** → **R4.4 CUDA-graph decode (2026-07-04: SHIPPED, B=1 −74% step /
-253 tok/s = 77% of the memory wall; eager 20%→compiled 53%→graph 77%, R1 gap closed)**. Current perf
-node: **A2 R0 CUDA-core kernel ladder** — **A1 serving track COMPLETE 2026-07-04** (R0–R4.6 + design
-note: R4.4 CUDA-graph decode = 77% of the memory wall; R4.5 MLA identity to eps; R4.6 disagg ITL p99
-3×, KV 3.56× < GQA-8) (`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
+253 tok/s = 77% of the memory wall; eager 20%→compiled 53%→graph 77%, R1 gap closed)**. Perf curriculum:
+**ALL sm120-runnable rungs of A1–A5 COMPLETE 2026-07-04** — A1 R0–R4.6 (serving) · A2 R0–R6 (kernels:
+GEMV/softmax/norm 96–100% HBM, TopK 46.9% + 3.4× fusion, GEMM 134% cuBLAS-proxy) · A3 R0–R2 (tensor
+cores 4.1%→38.9%→81.9% cuBLAS, CUDA WMMA/mma.sync) · A4 R0–R3 (flash attn ~50% SDPA, 44× leaner) · A5
+R0–R4 + §4.3 (INT8/INT4/NVFP4 1.48×<MXFP4/FP8-KV/AWQ 1.71×). Design notes A1–A5 ✅; H100/B200/8×H200
+rental runbooks + WGMMA PTX artifact ✅. Only ISA-gated rungs remain (WGMMA/TMA/FP8 → H100; tcgen05/NVFP4
+→ B200), code-only + runbook'd. (`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
 FSDP · 100B one-pager · comms algebra, W1–W4) **+ A3 scaling ✅** (fitter a=0.469/b=0.531 +
 query planner, W5–W6); **A4 data pipeline ✅ + A5 alignment stack ✅ code-complete 2026-07-04**
 (dedup/filters/quality/pipeline · SFT/EI/GRPO/Dr.GRPO/DPO + grader + envs, W7–W8; graded GPU runs
