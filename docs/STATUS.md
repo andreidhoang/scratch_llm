@@ -8,8 +8,10 @@ MEASURED on the standing sm120 GPU** — metrics harness → decode roofline (15
 (MQA 1.92× @16K) → **continuous batching (2.30× wall / 2.93× by steps vs static-wave)** →
 **PagedAttention (frag 5.0%, capacity ×9.3, fused Triton decode kernel 5.90 ms/step = ×3.52 vs
 wave, +55% vs dense-continuous)** → **R4.2 chunked prefill (2026-07-04: mechanism ✓ token-exact,
-44 tests; spike-reduction FALSIFIED — sequential-interleave regresses, R4.2b piggyback deferred)**.
-Current perf node: **A1 R4.3 speculative decoding** (`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
+44 tests; spike-reduction FALSIFIED — sequential-interleave regresses, R4.2b piggyback deferred)** →
+**R4.3 speculative decoding (2026-07-04: SHIPPED lossless, 27 tests; ×1.2–1.4 wall / 1.3–1.5
+tok/forward via n-gram drafting)**. Current perf node: **A1 R4.4 CUDA-graph decode**
+(`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
 FSDP · 100B one-pager · comms algebra, W1–W4) **+ A3 scaling ✅** (fitter a=0.469/b=0.531 +
 query planner, W5–W6); **A4 data pipeline ✅ + A5 alignment stack ✅ code-complete 2026-07-04**
 (dedup/filters/quality/pipeline · SFT/EI/GRPO/Dr.GRPO/DPO + grader + envs, W7–W8; graded GPU runs

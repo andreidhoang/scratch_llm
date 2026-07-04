@@ -12,9 +12,23 @@
 ## Current Node
 
 ```
-Phase: 1a — A1 R0–R3 + R4.1 DONE; R4.2 mechanism shipped + measured (spike-reduction falsified,
-  R4.2b piggyback deferred) → R4.3 (speculative decoding) NEXT.  [delegate mode, ADR-0013]
+Phase: 1a — A1 R0–R3 + R4.1 DONE; R4.2 mechanism shipped (spike-reduction falsified, R4.2b deferred);
+  R4.3 speculative decoding SHIPPED (lossless, ×1.2–1.4 wall) → R4.4 (CUDA-graph decode) NEXT.  [delegate mode, ADR-0013]
 Hardware: Standing GPU (sm_120)
+Done (2026-07-04, R4.3): lossless speculative decoding — serving/speculative.py (Drafter protocol +
+  NGramDrafter prompt-lookup + ModelDrafter; speculative_generate with the pending-token invariant) +
+  KVCache.truncate rollback primitive. 27 tests (float64 token-exact all drafters/K; wrong-drafter
+  still exact ⇒ clean rollback; float32 ≥99%). MEASURED (RESULTS.md 2026-07-04): token-exact
+  losslessness ✓ (P4.3.1); ×1.2–1.4 wall / 1.3–1.5 tok/target-forward via zero-cost n-gram drafting;
+  P4.3.3/P4.3.5 FALSIFIED — the untrained model's degenerate-repetitive greedy makes n-gram acceptance
+  54–72% even on RANDOM prompts (acceptance tracks model output entropy, not the prompt). Mechanism
+  writeup (Medusa/EAGLE/MTP) in the note.
+Next action (R4.4 — CUDA-graph decode): capture the decode step as a CUDA graph, replay per step to
+  eliminate the ~955 per-token launches (R1: eager 51 → compiled 173 tok/s; graph should climb toward
+  the ~275–327 memory ceiling). Substrate = the R4.1 paged Triton kernel: fixed (B,H) grid + fixed
+  block-pool addresses + device-side length loop ⇒ CUDA-graph-capturable (the dense path's view_len
+  shape grows; R1's cat-cache broke capture — both avoided). DoD = outputs identical (oracle R4.1),
+  step-time reduction on nsys (CPU-gap before/after). Then R4.5 (MLA toy) → R4.6 (PD-disagg).
 Done (2026-07-04, R4.2): chunked-prefill MECHANISM shipped & token-exact — model.py ChunkPrefillView
   (single-slot chunk at a running offset; RoPE absolute-pos ⇒ KV bit-identical to one-shot) + storage
   hooks _write_prefill_kv_at/slot_kv_view + serving/continuous.py prefill_chunk_size (dense+continuous).

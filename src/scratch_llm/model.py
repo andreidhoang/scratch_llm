@@ -236,6 +236,20 @@ class KVCache:
     def advance(self, n: int) -> None:
         self._length += n
 
+    def truncate(self, length: int) -> None:
+        """Drop cached positions past ``length`` — the KV-rollback primitive for speculative
+        decoding (A1 R4.3). After a verification forward appends K+1 draft positions, the rejected
+        suffix's K/V is discarded so it is never attended again; the retained prefix is bit-identical
+        to plain decode. ``length`` must not exceed the current length (rollback only, never grow)."""
+        if not 0 <= length <= self._length:
+            raise ValueError(f"truncate length {length} outside [0, {self._length}]")
+        for layer in range(len(self._k)):
+            k, v = self._k[layer], self._v[layer]
+            if k is not None and v is not None:
+                self._k[layer] = k[:, :, :length].contiguous()
+                self._v[layer] = v[:, :, :length].contiguous()
+        self._length = length
+
 
 class SlotKVCache:
     """Slot machinery shared by every ragged-batch KV store (A1 R3b/R4.1) — storage-agnostic.

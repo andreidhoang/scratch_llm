@@ -347,3 +347,59 @@ rows with query-len C alongside query-len 1) + batched (not serialized) chunk ad
 Poisson/shallow-arrival trace to isolate the spike from queue saturation. R4.2b is NOT a prerequisite
 for R4.3–R4.6 (spec decode, CUDA graphs, MLA, disagg are independent), so the node advances to R4.3;
 R4.2b returns with the paged-kernel work.
+
+---
+
+## Perf track (A1 R4.3 — speculative decoding, lossless)
+
+### Pre-registration — A1 R4.3 (predict-before-run, D5)
+
+Spec: `performance/notes/A1_R43_speculative_decoding.md`. Standing GPU sm_120, `RUNG1_CONFIG`
+(~1B bf16), single-stream, drafter = prompt-lookup (n-gram, training-free), K=4. Oracle =
+`sampling.generate` greedy (temperature 0).
+
+| # | experiment | predicted | measured | bound | note |
+|---|---|---|---|---|---|
+| P4.3.1 | greedy losslessness | spec == generate, token-exact, every prompt | — (pending) | — | correctness gate; kill: any mismatch = rejection/rollback bug |
+| P4.3.2 | acceptance, repetitive prompt | 40–75% mean accept fraction | — (pending) | — | n-gram hits on structured/repeated text |
+| P4.3.3 | acceptance, random prompt | near 0 | — (pending) | — | no n-gram structure ⇒ drafts miss |
+| P4.3.4 | speedup, repetitive prompt | 1.3–2.0× tok/s vs greedy (or killed) | — (pending) | latency | E[accept+1]/(1+K·c_draft/c_target); n-gram draft ~free |
+| P4.3.5 | speedup, random prompt | <1× net LOSS | — (pending) | overhead | zero acceptance + K+1-wide verify > 1-wide decode |
+
+**Kill line(s):** losslessness fails once ⇒ fix rejection/rollback before any speedup number ·
+acceptance >0 but speedup <1 on repetitive ⇒ verify forward not amortizing (profile) · prompt-lookup
+acceptance ~0 on hand-crafted repetition ⇒ n-gram match/propose bug.
+
+### Measured — A1 R4.3 speculative decoding (2026-07-04, `bench/speculative.py` + `tests/test_speculative.py` 27/27 green)
+
+Standing GPU sm120, `RUNG1_CONFIG` 0.84B bf16, eager target (apples-to-apples: the ratio isolates
+speculation, not compilation), drafter = n-gram(n=3), max_new=128, median of 7 (clocks unlocked —
+eager wall is noisy; median + the exact count-based tok/target-forward are the robust metrics).
+
+| date | rung | hardware | metric | predicted | measured | bound | root cause (1 line) | next |
+|---|---|---|---|---|---|---|---|---|
+| 2026-07-04 | R4.3 · losslessness (P4.3.1) | sm120 | greedy divergence | token-exact | **token-exact** (27 tests: float64 exact all drafters/K; wrong-drafter still exact ⇒ KV rollback clean; float32 ≥99% agree) | — | pending-token invariant + KVCache.truncate roll back rejected drafts | ✓ correctness gate MET |
+| 2026-07-04 | R4.3 · acceptance repetitive (P4.3.2) | sm120 | mean accept frac | 40–75% | **43–63%** (K=2/4/8: 62.7/57.8/43.0%) | — | n-gram hits on the (degenerate) greedy tail | ✓ MET |
+| 2026-07-04 | R4.3 · acceptance random (P4.3.3) | sm120 | mean accept frac | near 0 | **54–72%** (K=2/4/8: 72.1/58.9/54.2%) — **FALSIFIED** | — | acceptance tracks the MODEL's low output entropy (untrained ⇒ degenerate-repetitive greedy), not the prompt | note: trained model would show the predicted prompt/domain dependence |
+| 2026-07-04 | R4.3 · speedup repetitive (P4.3.4) | sm120 | tok/s vs greedy | 1.3–2.0× | **×1.21–1.29 wall** (61.6→77.4/79.4/74.4); **1.33–1.39 tok/target-forward** | latency | zero-cost n-gram draft ⇒ speedup ≈ E[accept+1]; K+1-wide verify ~1-wide cost | lower band met |
+| 2026-07-04 | R4.3 · speedup random (P4.3.5) | sm120 | tok/s vs greedy | <1× LOSS | **×1.35–1.39 WIN** (57.2→77.0/77.9/79.4); 1.32–1.54 tok/fwd — **FALSIFIED** | latency | same degenerate-model cause: high acceptance ⇒ net win, not the predicted loss | — |
+
+**Verdict (A1 R4.3 — SHIPPED, lossless, modest real speedup; two predictions falsified for one honest
+reason).** Speculative decoding is **provably lossless** on this substrate `[FACT]` P4.3.1: with a
+greedy target the output is token-identical to `sampling.generate` (float64-exact across every drafter
+and K; a *deliberately-wrong* drafter still yields the exact greedy sequence, proving the rejection +
+`KVCache.truncate` rollback discard rejected drafts cleanly; float32 ≥99% agreement, the residual
+being batched-vs-sequential argmax tie-flips). The engine is drafter-agnostic (`Drafter` protocol:
+n-gram prompt-lookup measured, model-drafter tested).
+
+Measured speedup `[FACT]`: **~1.2–1.4× wall / 1.3–1.5 tokens per target forward** via *zero-cost*
+n-gram drafting — a real but modest win (each K+1-wide verify forward commits 1.3–1.5 tokens instead
+of 1). **Two predictions FALSIFIED, both from one cause:** the untrained 0.84B model's greedy output
+is **degenerate-repetitive (low entropy)**, so the n-gram drafter hits ~54–72% even on a RANDOM
+prompt — acceptance here reflects the MODEL's output structure, not the prompt's (P4.3.3), and the
+predicted random-prompt *loss* (P4.3.5) is instead a ×1.35–1.39 *win*. On a trained model the
+acceptance would be prompt/domain-dependent as originally predicted (structured text > open-ended),
+and the drafter-family research (Medusa / EAGLE-2/3 feature-level trees / MTP ~85–90% 2nd-token) is
+entirely about raising E[accept] — the term that dominates the speedup formula (note §mechanism
+literacy). Node advances to **R4.4 CUDA-graph decode** (the paged Triton kernel's fixed `(B,H)` grid +
+fixed-address pool is the capturable substrate; closes the R1 eager→wall launch-overhead gap).
