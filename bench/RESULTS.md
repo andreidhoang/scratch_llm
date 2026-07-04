@@ -433,3 +433,24 @@ closed three ways: eager 20% → compiled 53% → **cudagraph 77%**. `torch.comp
 REFUSES this path (the in-place `lengths += active` is a "mutated input"); manual capture owns the
 mutation. Clocks unlocked but the ~4× ratio dwarfs ±15% drift. Node advances to **R4.5 (MLA toy)** →
 R4.6 (PD-disagg). Deferred extension: continuous-batching + cudagraph (graph pool per batch size).
+
+---
+
+## Perf track (A1 R4.5 — MLA latent cache, toy)
+
+### Measured — A1 R4.5 (2026-07-04, `tests/test_mla.py` 5/5, `src/scratch_llm/mla.py`)
+
+Toy MLA (no training); oracle = full K/V reconstruction. Gate = weight-absorption identity + KV
+reduction. Spec/note: `performance/notes/A1_R45_mla_latent_cache.md`.
+
+| date | rung | hardware | metric | predicted | measured | bound | root cause | next |
+|---|---|---|---|---|---|---|---|---|
+| 2026-07-04 | R4.5 · absorption identity | CPU/sm120 | max\|naive−absorbed\| | numerically identical | **1.4e-15** (float64 = eps; float32 <1e-4) | — | (W_UK^T q_c)·c_KV == q_c·(W_UK c_KV) is pure algebra; decoupled RoPE keeps content-K position-free | ✓ gate MET |
+| 2026-07-04 | R4.5 · KV/token (R1-like) | — | MLA vs MHA/GQA bytes | MLA ≈ 4–14% of MHA | **MLA 1152 B = 1.8% of MHA (65536 B); 3.56× < GQA-8 (4096 B)** | — | caches (d_latent+d_rope) not 2·n_heads·d_head | ✓ (cross-model 4.7× vs Llama-70B = differing L/dims) |
+
+**Verdict (A1 R4.5 — SHIPPED).** MLA's weight-absorption identity holds to machine precision `[FACT]`:
+attending in latent space (W_UK folded into the query, W_UV into the output) equals reconstruct-then-
+attend, so an engine caches the low-rank latent `c_KV`+`k_R` instead of per-head K,V at **zero quality
+change** — a 3.6× (vs GQA-8) / ~55× (vs MHA-128) per-layer cache reduction. The decoupled-RoPE
+pathway is load-bearing: it keeps the content-K position-independent so W_UK is a *static* fold.
+Bridges to A5 (FP8 latent) + the Phase-4 serving day (P5 MLA-KV audit).

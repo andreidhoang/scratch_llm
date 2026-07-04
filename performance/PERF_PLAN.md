@@ -140,8 +140,8 @@ Total est. (inference track, ADR-0012): ~$25–45 (P2) + ~$25–45 (P3) + ~$150�
 | 4.2: chunked prefill | 🟡 mechanism ✓ (token-exact, 44 tests) + measured; **spike-reduction FALSIFIED** (sequential-interleave regresses: ITL p50 ×6.6–14.4, agg 547→145 tok/s) → **R4.2b piggyback deferred** (fused prefill+decode kernel) | sm_120 |
 | 4.3: speculative decoding (lossless) | ✅ | lossless token-exact (27 tests); ×1.2–1.4 wall / 1.3–1.5 tok/forward (n-gram); acceptance tracks model output-entropy not prompt | sm_120 |
 | 4.4: CUDA graphs decode | ✅ | token-exact (gpu 4/4); **B=1 −74.3% step, 253 tok/s = 77% of wall** (eager 20%→compiled 53%→graph 77%, R1 gap closed); nsys 54–68→1 launch/step; manual capture over paged pool | sm_120 |
-| 4.5: MLA latent cache (toy scale) | ⬜ **next** | weight-absorption identity verified | sm_120 |
-| 4.6: prefill/decode disaggregation | ⬜ | goodput vs co-located baseline | sm_120 |
+| 4.5: MLA latent cache (toy scale) | ✅ | weight-absorption identity to machine eps (1.4e-15, 5 tests); MLA KV 3.56× < GQA-8 / 1.8% of MHA per layer | sm_120 |
+| 4.6: prefill/decode disaggregation | ⬜ **next** | goodput vs co-located baseline | sm_120 |
 | Design note | ⬜ | 2–3 pages, peer-review quality | — |
 
 **How to start rung 0:**
