@@ -10,9 +10,15 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > run an EV-ranked, pre-registered, iso-FLOP **frontier ablation study** (F1 MuonAdamW · F2 MTP
 > draft head · F3 de-confound serving · F4 bf16+compile · F5 MLA-real · F6 MoE-balancing · F7 GRPO
 > "aha" · F8 DSA · F9 logit-guard). Runs **in parallel** with perf + DELTA. Spec + DAG:
-> [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md); node pointer **F1**; ledger
-> `bench/RESULTS.md` §Frontier ablations. Headline artifact = **nanochat d20** (~561M, ~$100,
-> 8×H100), target CORE ≈ GPT-2.
+> [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md); ledger `bench/RESULTS.md` §Frontier
+> ablations. Headline artifact = **nanochat d20** (~561M, ~$100, 8×H100), target CORE ≈ GPT-2.
+>
+> **✅ THE LOOP CLOSES (2026-07-04):** F1 Muon · train-wiring/F4 (bf16/compile + NaN guard) · eval
+> report card (`val_bpb`/MC/generative/CORE-style) · `speedrun.py` + `scripts/speedrun.sh` spine all
+> SHIPPED + pushed — GPU-verified end-to-end talking sample (`RESULTS.md` §Phase 0). **▶ NEXT NODE →
+> A1** (real-corpus shards) → A2 → F1-run. **The buildable next-phase DAG (23 rungs, code-grounded,
+> EV-ranked, with a START-HERE block) is [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)** — a
+> fresh session reads that + the SessionStart `frontier node →` line and builds immediately.
 
 **As of 2026-07-03: A1 substrate complete; perf-curriculum A1 serving rungs R0–R4.1 SHIPPED &
 MEASURED on the standing sm120 GPU** — metrics harness → decode roofline (15%→53% HBM) → GQA/MQA

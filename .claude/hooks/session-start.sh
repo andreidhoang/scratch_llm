@@ -22,5 +22,8 @@ if [ -n "$recent" ]; then
   echo "$recent" | sed 's/^/  /'
 fi
 node="$(grep -m1 '^Phase:' performance/PERF_PLAN.md 2>/dev/null || true)"
-[ -n "$node" ] && echo "current node → ${node#Phase: } (source: performance/PERF_PLAN.md)"
+[ -n "$node" ] && echo "perf node → ${node#Phase: } (source: performance/PERF_PLAN.md)"
+# Close-the-loop / frontier-ablation front (ADR-0018): the buildable next rung for a fresh session.
+fnode="$(grep -m1 'Next-node:' docs/FRONTIER_2026_TASKSPEC.md 2>/dev/null | sed -E 's/.*Next-node: *//; s/ *-->.*//' || true)"
+[ -n "$fnode" ] && echo "frontier node → ${fnode} (source: docs/FRONTIER_2026_TASKSPEC.md — START HERE block + §0)"
 exit 0

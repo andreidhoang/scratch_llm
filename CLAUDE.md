@@ -46,11 +46,14 @@
 >   `data/`, `algos/`, `rewards/`, `envs/` + main-track docs/tests. The 2026-06-30 "perf first"
 >   ordering mandate is dissolved — the main track no longer queues behind perf.
 > - **Close-the-loop / frontier-ablation front** (2026-07-04, [ADR-0018](docs/adr/ADR-0018-close-the-loop-nanochat-front.md)) —
->   adopt nanochat's `speedrun.sh` spine + report card to train a real *talking* model, then run the
->   EV-ranked iso-FLOP ablation study (F1 MuonAdamW → F9). Spec + DAG:
->   [`docs/FRONTIER_2026_ABLATIONS.md`](docs/FRONTIER_2026_ABLATIONS.md); node pointer **F1**. Zone:
->   `src/scratch_llm/{eval,}`, `scripts/`, `optim.py`, `train.py`, additive `model.py`/`mla.py`/`moe.py`,
->   the F-rung sections of `bench/RESULTS.md`.
+>   **✅ LOOP CLOSES:** speedrun spine (tokenizer→pretrain(MuonAdamW)→eval report card→sample) +
+>   F1 Muon + train-wiring/F4 + `eval/` shipped, GPU-verified talking sample. **▶ Current node → A1**
+>   (real-corpus shards) → A2 → F1-run. **Buildable next-phase DAG (23 rungs, START-HERE block):**
+>   [`docs/FRONTIER_2026_TASKSPEC.md`](docs/FRONTIER_2026_TASKSPEC.md) (strategy:
+>   [`docs/FRONTIER_2026_ABLATIONS.md`](docs/FRONTIER_2026_ABLATIONS.md)). Zone:
+>   `src/scratch_llm/{eval,data,algos}/` (additive), `scripts/`, `optim.py`, `train.py`, `speedrun.py`,
+>   `chat*.py`, `mtp.py`, `dsa.py`, additive `model.py`/`moe.py`, the F-rung sections of `bench/RESULTS.md`.
+>   **NEVER** edit perf-owned `mla.py`/`serving/`/`kernels/`/`quant/` — satisfy their Protocols instead.
 >
 > Shared files (`CLAUDE.md`, `docs/STATUS.md`, `pyproject.toml`, `bench/RESULTS.md`): pull-rebase
 > before every commit, additive edits only, never `git add -A`.
@@ -228,6 +231,8 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
 | **Fresh-pod continuity** — rebuild everything on a newly rented Vast.ai GPU (Claude Code install · torch cu130/sm120 · hook re-link · **auto-memory restore**); the one-command `scripts/bootstrap-pod.sh` + what survives destroy vs what you rebuild | `docs/VASTAI_BOOTSTRAP.md` · `.claude/memory-snapshot/` |
 | **Per-assignment build guides** — every deliverable tagged + mapped to `src/scratch_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |
+| **Close-the-loop front — strategy + DAG** (thesis, model tiers, F1–F9 falsifiers, verification, honesty ledger) | `docs/FRONTIER_2026_ABLATIONS.md` |
+| **Close-the-loop front — buildable task spec** (23 rungs A/F, exact interfaces + tests + falsifier + kill + zone; START-HERE current node) | `docs/FRONTIER_2026_TASKSPEC.md` |
 | Design specs — KV-cache · rollout seam · FA2 roofline · MoE walkthrough | `docs/design/` |
 | **Frontier practice (2026)** — per-pillar modern-default upgrades · build labs · know-it items (fact-checked; + tagged GDM-aligned additions) | `docs/FRONTIER_PRACTICE_2026.md` |
 | Architecture decisions | `docs/adr/` |

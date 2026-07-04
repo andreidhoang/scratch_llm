@@ -16,6 +16,23 @@
 > **Reference oracle available:** the venv vendors `transformers/models/{deepseek_v2,deepseek_v3,
 > deepseek_v32,glm4_moe,nanochat,qwen3}` — read these as implementation oracles (re-own, don't copy).
 
+<!-- Next-node: A1 real-corpus shards (data/shards.py) → A2 checkpoint chaining → F1-run iso-FLOP · UPDATE this line when a rung ships -->
+
+> ▶ **START HERE (fresh session).** The loop is **CLOSED** (F1 Muon · train-wiring/F4 · eval report
+> card · speedrun spine shipped, GPU-verified talking sample). **Next node → A1** (real-corpus shards,
+> `data/shards.py`), then **A2** (checkpoint chaining) → **F1-run** (the *pending* iso-FLOP
+> Muon-vs-AdamW headline). Full order + deps in §0; each rung's interfaces/tests/falsifier/kill in
+> §A/§B; near-term picks in §E.
+>
+> **Build protocol — every rung, no exceptions:** ① pre-register the rung's falsifier in
+> `bench/RESULTS.md` §Frontier ablations *before* running (predict-before-run) → ② build **test-first**
+> → ③ green-CI (`ruff check` + `ruff format --check` + `pyright` + `pytest -m "not gpu"`) → ④ commit
+> (`<area>: <imperative>`) → ⑤ **push origin main** (standing policy; `gh` is authed). **Zone:** never
+> edit perf-owned files (`mla.py`, `serving/`, `kernels/`, `quant/`, `utils/{tp_mlp,pipeline_schedule,
+> ep_moe,mfu}.py`) — satisfy their Protocols (`Drafter`/`RewardFn`/`VerifiableEnv`) from F-front code;
+> pull-rebase + precise `git add` (never `-A`) on shared files (three fronts share this checkout).
+> **On ship, advance the `Next-node:` marker above.**
+
 ## §0 — EV-ranked critical path (build in this order)
 
 Two tracks interleave: **A** = complete the loop into a *chat* model (the d20 artifact); **B** =
