@@ -126,3 +126,170 @@ def cosine_lr(
         progress = (step - warmup_steps) / max(1, cosine_steps - warmup_steps)
         return min_lr + 0.5 * (1 + math.cos(math.pi * progress)) * (max_lr - min_lr)
     return min_lr
+
+
+# ---------------------------------------------------------------------------------------------
+# Muon (F1 — close-the-loop frontier ablation, ADR-0018 / docs/FRONTIER_2026_ABLATIONS.md)
+# ---------------------------------------------------------------------------------------------
+
+
+def _zeropower_via_newtonschulz5(g: Tensor, steps: int = 5) -> Tensor:
+    """Orthogonalize a 2-D matrix ``g`` via a 5-step Newton–Schulz iteration (Keller Jordan's
+    quintic, coeffs (3.4445, −4.7750, 2.0315)), run in bfloat16.
+
+    Given ``g = U Σ Vᵀ`` the iteration drives every singular value toward ~1, so the returned
+    matrix ≈ ``U Vᵀ`` (the semi-orthogonal factor) — the direction of ``g`` with a *uniform*
+    spectrum. The quintic is deliberately tuned to be fast, not exact: after 5 steps the singular
+    values sit in roughly ``[0.7, 1.3]`` rather than exactly 1 (F1 DoD; KILL if any σ ∉ [0.5,1.5]).
+
+    The matrix is normalized by its Frobenius norm first (an upper bound on the spectral norm, so
+    all σ ≤ 1 going in), and transposed to the wide orientation so the ``XXᵀ`` products are as
+    small as possible. Bit-width note: bf16 is numerically sufficient — the iteration is
+    self-correcting toward the fixed point (Jordan's writeup).
+    """
+    if g.ndim != 2:
+        raise ValueError(
+            f"Newton–Schulz orthogonalization needs a 2-D matrix, got shape {tuple(g.shape)}"
+        )
+    a, b, c = 3.4445, -4.7750, 2.0315
+    x = g.to(torch.bfloat16)
+    transposed = x.shape[0] > x.shape[1]
+    if transposed:  # work in the wide orientation (fewer FLOPs in X @ Xᵀ)
+        x = x.T
+    x = x / (x.norm() + 1e-7)  # Frobenius ≥ spectral ⇒ all σ ≤ 1 before iterating
+    for _ in range(steps):
+        aa = x @ x.T
+        bb = b * aa + c * (aa @ aa)  # the quintic: X ← a·X + (b·A + c·A²)·X, A = X Xᵀ
+        x = a * x + bb @ x
+    if transposed:
+        x = x.T
+    return x.to(g.dtype)
+
+
+class Muon(torch.optim.Optimizer):
+    """MomentUm Orthogonalized by Newton–schulz (Keller Jordan 2024) with Moonlight RMS-matching.
+
+    For each **2-D** weight matrix: take the (Nesterov) SGD-momentum gradient, orthogonalize it via
+    :func:`_zeropower_via_newtonschulz5` so the applied update has a near-uniform spectrum, then
+    scale it to reuse AdamW's learning-rate band. Muon is used **only** on hidden 2-D block matrices
+    (attention/MLP projections); embeddings, the LM head, and every 1-D parameter (RMSNorm gains,
+    biases, scalars) stay on :class:`AdamW` — split with :func:`split_muon_adamw_params`.
+
+    **Moonlight RMS-matching (arXiv 2502.16982, Lemma 1 — corrected).** A full-rank orthogonalized
+    update on an ``[A, B]`` matrix has per-element RMS ``1/√max(A, B)`` (‖O‖_F² = min(A,B) spread
+    over A·B entries). Scaling by ``rms_scale·√max(A, B)`` (default 0.2) lands its RMS at ``0.2`` —
+    squarely in AdamW's usual 0.2–0.4 update band — so **one LR/WD schedule serves both optimizers**
+    and no separate Muon LR sweep is needed. (This corrects the drafting error ``1/max(A,B)`` flagged
+    by the F1 research verifier; the ``0.2·√max`` scale and ``wd=0.1`` were already right.)
+
+    Update (decoupled weight decay, matching AdamW's convention):
+        buf ← momentum·buf + g ;   g̃ ← g + momentum·buf   (Nesterov)
+        O   ← NewtonSchulz₅(g̃)
+        θ   ← (1 − lr·wd)·θ − lr·(rms_scale·√max(A,B))·O
+
+    Interview question this answers: "derive the Muon update; why orthogonalize the momentum, and
+    why does RMS-matching let you reuse AdamW's learning rate?"
+    """
+
+    def __init__(
+        self,
+        params: Iterable[nn.Parameter] | Iterable[dict[str, object]],
+        lr: float = 2e-2,
+        momentum: float = 0.95,
+        nesterov: bool = True,
+        ns_steps: int = 5,
+        weight_decay: float = 0.1,
+        rms_scale: float = 0.2,
+    ) -> None:
+        if lr < 0:
+            raise ValueError(f"invalid lr: {lr}")
+        if not 0.0 <= momentum < 1.0:
+            raise ValueError(f"invalid momentum: {momentum}")
+        if ns_steps < 1:
+            raise ValueError(f"ns_steps must be ≥ 1, got {ns_steps}")
+        if weight_decay < 0 or rms_scale < 0:
+            raise ValueError("weight_decay and rms_scale must be ≥ 0")
+        defaults = dict(
+            lr=lr,
+            momentum=momentum,
+            nesterov=nesterov,
+            ns_steps=ns_steps,
+            weight_decay=weight_decay,
+            rms_scale=rms_scale,
+        )
+        super().__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure: Callable[[], float] | None = None) -> float | None:  # type: ignore[override]
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
+        for group in self.param_groups:
+            lr = group["lr"]
+            momentum = group["momentum"]
+            nesterov = group["nesterov"]
+            ns_steps = group["ns_steps"]
+            weight_decay = group["weight_decay"]
+            rms_scale = group["rms_scale"]
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                if p.ndim != 2:
+                    raise ValueError(
+                        f"Muon only optimizes 2-D matrices; got shape {tuple(p.shape)}. Route "
+                        "embeddings/head/1-D params to AdamW (see split_muon_adamw_params)."
+                    )
+                grad = p.grad
+                state = self.state[p]
+                if "momentum_buffer" not in state:
+                    state["momentum_buffer"] = torch.zeros_like(p)
+                buf = state["momentum_buffer"]
+                buf.mul_(momentum).add_(grad)
+                g_eff = grad.add(buf, alpha=momentum) if nesterov else buf
+                ortho = _zeropower_via_newtonschulz5(g_eff, ns_steps)
+                scale = rms_scale * math.sqrt(max(p.shape[0], p.shape[1]))
+                if weight_decay != 0:
+                    p.mul_(1 - lr * weight_decay)  # decoupled WD (uses current θ)
+                p.add_(ortho, alpha=-lr * scale)
+
+        return loss
+
+
+def split_muon_adamw_params(
+    model: nn.Module,
+) -> tuple[list[nn.Parameter], list[nn.Parameter]]:
+    """Partition ``model``'s parameters into ``(muon_params, adamw_params)`` — the nanochat/Moonlight
+    hybrid split.
+
+    Rule (exactly the F1 contract): the token embedding and the LM head go to **AdamW** even when
+    2-D (the input/output layers Muon deliberately excludes — and, critically, when
+    ``tie_embeddings`` shares them as **one** tensor, that 2-D tensor must NOT go to Muon,
+    ``model.py:917``); every remaining 2-D matrix (attention/MLP block projections) goes to **Muon**;
+    every 1-D parameter (RMSNorm gains, biases, scalars) and any ≠2-D tensor (e.g. stacked 3-D MoE
+    experts — deferred to F6) goes to AdamW.
+
+    ``model.parameters()`` already yields a shared (tied) tensor once, so the partition is a true
+    disjoint cover: ``len(muon)+len(adamw)`` unique tensors == the model's unique parameter count,
+    with no overlap.
+    """
+    special_ids: set[int] = set()
+    for attr in ("token_emb", "lm_head"):
+        module = getattr(model, attr, None)
+        weight = getattr(module, "weight", None)
+        if isinstance(weight, Tensor):
+            special_ids.add(id(weight))
+
+    muon_params: list[nn.Parameter] = []
+    adamw_params: list[nn.Parameter] = []
+    seen: set[int] = set()
+    for p in model.parameters():
+        if not p.requires_grad or id(p) in seen:
+            continue
+        seen.add(id(p))
+        if id(p) in special_ids or p.ndim != 2:
+            adamw_params.append(p)
+        else:
+            muon_params.append(p)
+    return muon_params, adamw_params

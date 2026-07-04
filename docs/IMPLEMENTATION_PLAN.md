@@ -215,3 +215,19 @@ map: [`../README.md`](../README.md).
 > active set is ADR-0001–0004 · 0006–0008 (0005/0009/0010 were retired — ADRs are immutable records, so
 > the freed numbers stay as gaps rather than being renumbered). Promote this §7 to the next ADR number
 > when it stabilizes.
+
+---
+
+## 8. Beyond CS336 — the close-the-loop / frontier-ablation front (ADR-0018)
+
+CS336 A1→A5 gave us every *layer*; it never ran the *loop*. The next build spine adopts Karpathy's
+**nanochat** integration harness (`speedrun.sh` + report card) over the components we already own to
+train an actual **talking model** (headline: nanochat **d20**, ~561M, ~$100 on 8×H100, target CORE ≈
+GPT-2), then runs an EV-ranked, pre-registered, **iso-FLOP frontier ablation study** — F1 MuonAdamW,
+F2 MTP draft head, F3 de-confound serving, F4 bf16+compile, F5 MLA-for-real, F6 MoE balancing,
+F7 GRPO "aha", F8 DSA, F9 logit-guard — each with a falsifiable prediction + kill criterion. This
+runs as a **third front** in parallel with the perf curriculum and DELTA; the trained model becomes
+what those fronts finally measure against. **The full engineering spec + execution DAG is the
+source of truth:** [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md) (decision:
+[`adr/ADR-0018`](adr/ADR-0018-close-the-loop-nanochat-front.md); ledger `bench/RESULTS.md`
+§Frontier ablations; plan of record `~/.claude/plans/misty-sniffing-cerf.md`).

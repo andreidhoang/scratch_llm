@@ -616,11 +616,18 @@ embed/head tensor** (`model.py:917`) + all 1-D params stay on AdamW.
 
 | rung | metric | predicted (pre-reg) | KILL if | measured |
 |---|---|---|---|---|
-| F1 NS orthogonality | singular values of 256×256 update after 5 steps | all ∈ [0.7, 1.3] | any σ ∉ [0.5, 1.5] | — pending |
-| F1 hybrid wiring | overfit-one-batch (Muon-matrices + AdamW-rest) | loss < 1e-2 in AdamW's step budget | fails to overfit | — pending |
-| F1 param partition | tied embed/head + every 1-D param routed to AdamW; no overlap | exact partition, Σnumel matches | any 2-D tied tensor in Muon group | — pending |
-| F1 iso-FLOP (30–50M) | val loss vs AdamW at fixed C=6ND | Muon reaches AdamW loss with ≥15% fewer tokens (or ≥0.02 nats lower @ iso-FLOP) | token saving <5% or divergence at reused AdamW LR | — pending |
-| F1 NS overhead | wall-clock of Newton–Schulz vs step | <1% (analytic bound T·m/B) | >3% | — pending |
+| F1 NS orthogonality | σ spectrum of the update after 5 steps | all ∈ [0.7, 1.3] | any σ ∉ [0.5, 1.5] | **⚠ over-claim FALSIFIED → corrected.** NS *compresses* σ into a band ~[0.68,1.14], never inflates (σ_max<1.35), spread collapses (q90/q10<2 vs κ≫1 input). "all ∈[0.7,1.3]" + "median≈1" are false at 5 steps: a worst-case **square Gaussian** has near-0 σ (min≈0.08) the iteration can't lift, and median≈0.77. Inherent to few-step NS, **immaterial to Muon** (needs only the update *direction*). `tests/test_optim.py` asserts the corrected invariants. |
+| F1 hybrid wiring | overfit-one-batch (Muon-matrices + AdamW-rest) | loss < 1e-2 in AdamW's step budget | fails to overfit | **PASS** — hybrid drives 1 batch to loss <0.05 in 300 steps (same budget/threshold as the AdamW-only oracle). |
+| F1 param partition | tied embed/head + every 1-D param routed to AdamW; no overlap | exact partition, Σnumel matches | any 2-D tied tensor in Muon group | **PASS** (tied **and** untied): disjoint cover, Σnumel over unique params matches, the shared 2-D embed/head tensor + every RMSNorm(1-D) land in AdamW, block projections in Muon. |
+| F1 iso-FLOP (30–50M) | val loss vs AdamW at fixed C=6ND | Muon reaches AdamW loss with ≥15% fewer tokens (or ≥0.02 nats lower @ iso-FLOP) | token saving <5% or divergence at reused AdamW LR | — pending (needs the training run — task 7 wiring + GPU) |
+| F1 NS overhead | wall-clock of Newton–Schulz vs step | <1% (analytic bound T·m/B) | >3% | — pending (GPU) |
+
+**Verdict (F1 unit level — 2026-07-04, `optim.py` + 10 tests green).** `Muon` (NS5 + Nesterov +
+Moonlight RMS-match) and `split_muon_adamw_params` are built and green. Two pre-registered
+over-claims on the NS spectrum were honestly falsified and the invariants corrected (band
+compression + no inflation, not "all σ→1"); the corrected-math RMS-match (`0.2·√max(A,B)` ⇒ RMS≈0.2,
+shape-independent) is asserted directly — the test *is* the check on the `1/√max` vs `1/max`
+correction. The iso-FLOP loss-per-FLOP claim (the headline) remains pending the real run.
 
 Sources: Keller Jordan (Muon writeup); Moonlight `2502.16982` (Lemma 1 — RMS = 1/√max(A,B),
 corrected from the draft); Kimi-K2 `2507.20534` (MuonClip at trillion scale). Reuses

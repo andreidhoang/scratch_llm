@@ -25,7 +25,7 @@
 7. **Citation-tree mastery.** Traverse to the non-redundant gap; reuse before re-deriving; don't rebuild owned work.
 <!-- FOP:end -->
 
-## ⚡ Two active fronts (2026-07-03) — pick your lane before building
+## ⚡ Three active fronts (2026-07-04) — pick your lane before building
 
 > Execution mode is **`delegate`** (`.claude/execution-mode`,
 > [ADR-0013](docs/adr/ADR-0013-execution-mode-full-delegation.md)): agents implement everything
@@ -40,6 +40,12 @@
 >   per-node DoD, rental runbooks for >24 GB work). Zone: `utils/` (distributed), `scaling/`,
 >   `data/`, `algos/`, `rewards/`, `envs/` + main-track docs/tests. The 2026-06-30 "perf first"
 >   ordering mandate is dissolved — the main track no longer queues behind perf.
+> - **Close-the-loop / frontier-ablation front** (2026-07-04, [ADR-0018](docs/adr/ADR-0018-close-the-loop-nanochat-front.md)) —
+>   adopt nanochat's `speedrun.sh` spine + report card to train a real *talking* model, then run the
+>   EV-ranked iso-FLOP ablation study (F1 MuonAdamW → F9). Spec + DAG:
+>   [`docs/FRONTIER_2026_ABLATIONS.md`](docs/FRONTIER_2026_ABLATIONS.md); node pointer **F1**. Zone:
+>   `src/scratch_llm/{eval,}`, `scripts/`, `optim.py`, `train.py`, additive `model.py`/`mla.py`/`moe.py`,
+>   the F-rung sections of `bench/RESULTS.md`.
 >
 > Shared files (`CLAUDE.md`, `docs/STATUS.md`, `pyproject.toml`, `bench/RESULTS.md`): pull-rebase
 > before every commit, additive edits only, never `git add -A`.

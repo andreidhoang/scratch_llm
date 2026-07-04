@@ -34,6 +34,16 @@
 > for the perf spine. Honesty constants: dense H100 ridge ~295 (not sparse ~590) · FP4 = 2× FP8 ·
 > DeepSeek-V3 $5.576M = final-run rent, not total R&D.
 
+> **➕ Close-the-loop front (2026-07-04 · ADR-0018).** The per-pillar items below say *what to build
+> per assignment*; the new **[`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md)** spec says
+> *how to assemble them into a trained, talking model and measure the frontier deltas on it* —
+> nanochat's `speedrun.sh` spine + report card, then the EV-ranked iso-FLOP ablation study (F1
+> MuonAdamW · F2 MTP draft head · F3 de-confound serving · F4 bf16+compile · F5 MLA-real · F6
+> MoE-balancing · F7 GRPO "aha" · F8 DSA · F9 logit-guard). Verified by research pass `wjzztlnz7`
+> (54 CONFIRMED / 1 REFUTED / 4 UNCERTAIN vs primary sources). That doc is where several 🟢/🔵 items
+> below (Muon, MTP, MLA, MoE balancing, the RL "aha") graduate from "recommended" to
+> *measured-on-a-real-model*.
+
 ## How to use the three tiers
 
 - **🟢 Modern default** — a small, high-value upgrade a 2026 from-scratch build *should* adopt as its
