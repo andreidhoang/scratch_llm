@@ -465,6 +465,7 @@ def grpo_train_loop(
     ref_model.eval()
     for param in ref_model.parameters():
         param.requires_grad_(False)
+    device = next(policy.parameters()).device  # batch tensors follow the policy (CPU toy or GPU)
 
     history: list[GRPOStepMetrics] = []
     for step in range(n_grpo_steps):
@@ -488,9 +489,12 @@ def grpo_train_loop(
                 ground_truths.append(task.ground_truth)
                 graded.append(g)
 
-        raw_rewards = torch.tensor([g.reward for g in graded], dtype=torch.float32)
+        raw_rewards = torch.tensor([g.reward for g in graded], dtype=torch.float32, device=device)
         advantages = _group_normalize(raw_rewards, group_size, advantage_eps, normalize_by_std)
-        batch = _collate_rollouts(prompt_ids, response_ids, old_logprobs, pad_id)
+        batch = {
+            k: v.to(device)
+            for k, v in _collate_rollouts(prompt_ids, response_ids, old_logprobs, pad_id).items()
+        }
         n = raw_rewards.numel()
         mb = microbatch_size if microbatch_size is not None else n
         chunks = [slice(s, min(s + mb, n)) for s in range(0, n, mb)]
@@ -560,9 +564,13 @@ def _log_step(
     ref_rows, _, _ = _response_rows(ref_model, input_ids, labels, mask)
     old_rows, old_taken, _ = _response_rows(old_model, input_ids, labels, mask)
 
-    cur_np, ref_np, old_np = cur_rows.numpy(), ref_rows.numpy(), old_rows.numpy()
-    is_ratios = monitors.importance_ratios(cur_taken.numpy(), old_taken.numpy())
-    rewards_np = raw_rewards.numpy()
+    # monitors is numpy-native; bridge from torch on any device (CPU toy or GPU rollout).
+    def _np(t: Tensor) -> Any:
+        return t.detach().cpu().numpy()
+
+    cur_np, ref_np, old_np = _np(cur_rows), _np(ref_rows), _np(old_rows)
+    is_ratios = monitors.importance_ratios(_np(cur_taken), _np(old_taken))
+    rewards_np = _np(raw_rewards)
     lengths = [len(r) for r in response_ids]
     correct = [len for len, g in zip(lengths, graded, strict=True) if g.reward > 0]
     incorrect = [len for len, g in zip(lengths, graded, strict=True) if g.reward <= 0]
@@ -605,9 +613,10 @@ def expected_reward(
     model.eval()
     total = 0.0
     tasks = env.tasks()
+    device = next(model.parameters()).device
     with torch.no_grad():
         for task in tasks:
-            out: Any = model(torch.tensor([task.prompt_ids], dtype=torch.long))
+            out: Any = model(torch.tensor([task.prompt_ids], dtype=torch.long, device=device))
             logits: Tensor = out.logits if hasattr(out, "logits") else out
             probs = torch.softmax(logits[0, -1].float(), dim=-1)
             total += float(probs[answer_token_of(task)])
