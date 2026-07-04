@@ -29,6 +29,21 @@ All "Nsight SoL %" DoD gates re-based to CUDA-event timing + analytic bytes/FLOP
 peaks (0.55 TB/s, 72 TF/s); per-kernel "ncu debt" is listed in the rental runbooks (H100 day
 discharges it — rental checklist includes verifying counters are enabled).
 
+**DONE (2026-07-04, this session — ALL committed + pushed to origin main): the entire sm120-runnable
+A1–A5 curriculum is COMPLETE, measured, ledgered, tested, green.** Built A2/A3/A4/A5 kernel rungs via
+parallel Workflow orchestration (build → oracle-test gate → adversarial verifier → main-thread gpu
+re-test → commit). Headlines: A1 R0–R4.6 serving (CUDA-graph decode 77% of the memory wall = R1 gap
+closed; R4.2 chunked-prefill an honest NEGATIVE — sequential-interleave regresses, R4.2b piggyback
+deferred); A2 R0–R6 kernels (GEMV/softmax/norms 96–100% HBM, TopK 46.9% + 3.4× fusion, GEMM 134%
+cuBLAS-proxy); A3 R0–R2 tensor cores in CUDA (4.1%→38.9% WMMA→81.9% mma.sync of cuBLAS, element-exact);
+A4 R0–R3+bwd flash attn (FA2 ~50% SDPA, 44× leaner, gradcheck); A5 R0–R4+§4.3 quant (NVFP4 1.48×<MXFP4,
+FP8-KV E2E 24.45 dB, AWQ 1.71× recovery). Design notes A1–A5 written. Verification: ruff + pyright (0
+errors) + CPU suite + full gpu suite all green. **Remaining = ONLY the ISA-gated rental days**
+(WGMMA/TMA/FP8→H100; tcgen05/NVFP4→B200; 8×H200 serving day), code-only + runbook'd
+(`performance/rental/{H100,B200,serving_day_8xH200}_day_runbook.md`, WGMMA PTX artifact) — rental
+discipline satisfied (every sm120 prereq ledgered). Pyright note: new GPU-only kernels are in the
+pyproject.toml pyright exclude (Triton launch syntax + JIT CUDA can't be statically typed).
+
 **Zone discipline:** perf agents write only `performance/`, `src/scratch_llm/serving/`,
 `src/scratch_llm/kernels/`, `tests/` + `bench/` perf files; shared files (CLAUDE.md, STATUS.md,
 pyproject.toml, bench/RESULTS.md, docs/learning/INDEX.md) get pull-rebase + additive edits +
