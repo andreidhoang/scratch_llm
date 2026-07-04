@@ -12,6 +12,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from scratch_llm.eval.generative import GenResult, evaluate_generative
 from scratch_llm.eval.metrics import BpbResult, bits_per_byte
 from scratch_llm.eval.multiple_choice import MCResult, evaluate_multiple_choice
@@ -81,7 +83,7 @@ def build_report_card(
     model: TransformerLM,
     tokenizer: TextTokenizer,
     *,
-    val_tokens: Sequence[int] | None = None,
+    val_tokens: Sequence[int] | np.ndarray | None = None,
     val_num_bytes: int | None = None,
     mc_tasks: Sequence[MCTask] = (),
     gen_tasks: Sequence[GenTask] = (),

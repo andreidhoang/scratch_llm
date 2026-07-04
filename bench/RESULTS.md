@@ -653,6 +653,25 @@ log cadence — no extra host sync) now fails any divergent run with a clear mes
 compute on a silent NaN — the FRONTIER "silent-divergence triage" discipline, and a real hygiene win
 independent of this bug. The F1 iso-FLOP Muon-vs-AdamW loss-per-FLOP measurement is the next rung.
 
+### Measured — Phase 0: THE LOOP CLOSES (2026-07-04, `speedrun.py` + `eval/`, GPU-verified)
+
+The end-to-end spine (`scripts/speedrun.sh` → `scratch_llm.speedrun`) ran **tokenizer → pretrain →
+eval → sample** end-to-end and produced a model you can sample from — the artifact the whole front
+exists to build (ADR-0018 §5, Phase 0). Nano run on the sm120 Blackwell (depth 4, byte-BPE vocab
+384, ctx 64, 150 MuonAdamW steps, built-in corpus):
+
+| stage | result |
+|---|---|
+| params / tokens / wall | 3.41M · 1,682 tok · **8.3 s** |
+| eval report card | **val_bpb 0.0206** · 0.0655 nats/tok (in-sample repeated corpus — the metric computes) |
+| sample (prompt "the quick brown…") | **coherent continuation** — *"fox jumps over the lazy dog. a language model learns to predict the next token… attention is all you need; the transformer reads the whole context at once. we own every layer from the byte"* |
+
+**Verdict.** The component museum now runs the loop: BPE → MuonAdamW pretrain → `val_bpb` report card
+→ a talking sample, one `--depth` knob (depth 20 ⇒ d_model 1280 / 10 heads / ~561M = the nanochat
+d20 headline). The nano pre-flight (`--nano`, CPU, ~1 min) is the cheap gate before the $100 d20
+rental. Report-card harness (`eval/`): `val_bpb` + MC (ARC/MMLU) + generative (GSM8K/HumanEval) +
+CORE-style aggregate, 8 tests. Next: F1 iso-FLOP on the real loop, then F2 MTP.
+
 ---
 
 ## Perf track (A4 — flash attention)

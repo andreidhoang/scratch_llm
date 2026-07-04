@@ -174,9 +174,11 @@ perplexity vs full attention. *Prediction:* ≥95% mass recovered, +0.03 val los
 
 ## §5 — Execution DAG (phases, node pointer)
 
-- **Phase 0 — Pre-flight (local, ~$0).** Stand up `scripts/speedrun.sh` + `eval/` report card; run
-  the **nano** tier (depth ~4) end-to-end on the Blackwell in minutes. **Gate:** a (bad but real)
-  report card + the chat loop replies. *This protects the $100.*
+- **Phase 0 — Pre-flight (local, ~$0). ✅ DONE 2026-07-04.** `scripts/speedrun.sh` +
+  `scratch_llm.speedrun` + `eval/` report card run **tokenizer → pretrain (MuonAdamW) → eval →
+  sample** end-to-end; verified on the sm120 Blackwell (depth 4, 8.3 s) — `val_bpb 0.02` + a
+  coherent sample (`bench/RESULTS.md` §Phase 0). One `--depth` knob (20 ⇒ the d20 headline). *This
+  gate protects the $100.* Follow-ons (midtrain/SFT/RL) reuse `train`/`algos` (F2/F7).
 - **Phase 1 — Close the loop + Muon ($100 d20).** Land **F1 (MuonAdamW)** + **F4 (bf16/compile)**
   first (they change the run you pay for), untie embeddings, then launch the **d20 8×H100**
   speedrun. **Deliverable:** a talking model + a public report card (target CORE ≈ GPT-2). Highest-EV node.
