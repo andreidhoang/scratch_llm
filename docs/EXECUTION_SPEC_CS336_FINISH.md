@@ -179,7 +179,7 @@ persistent volume (`workspace_is_volume: true`).
   artifact); A1 was previously validated.
 - **DoD:** pass counts recorded; every failure either fixed or explained in STATUS with a reason.
 
-### W10 · Rental-deferred pack (write now, run when rented) `[ ]`
+### W10 · Rental-deferred pack (write now, run when rented) `[x] shipped 2026-07-04`
 - `deploy/runbooks/A2_multigpu_nccl_bench.md` — 2–8×GPU node: DDP naive/flat/overlap timing,
   ZeRO-1 + FSDP real memory/throughput, all-reduce 1 MB–1 GB gloo-vs-nccl; exact vastai search/
   create commands, bootstrap (`scripts/bootstrap-pod.sh`), launch lines, predicted numbers, ~$
