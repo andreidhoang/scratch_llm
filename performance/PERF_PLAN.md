@@ -13,8 +13,17 @@
 
 ```
 Phase: 1a — A1 R0–R3 + R4.1 DONE; R4.2 mechanism shipped (spike-reduction falsified, R4.2b deferred);
-  R4.3 speculative decoding SHIPPED (lossless, ×1.2–1.4 wall) → R4.4 (CUDA-graph decode) NEXT.  [delegate mode, ADR-0013]
+  R4.3 speculative decoding SHIPPED (lossless); R4.4 CUDA-graph decode SHIPPED (−74% step, 77% of
+  wall) → R4.5 (MLA toy) NEXT.  [delegate mode, ADR-0013]
 Hardware: Standing GPU (sm_120)
+Done (2026-07-04, R4.4): CUDA-graph decode over the fixed-address paged pool — serving/cudagraph.py
+  CudaGraphDecoder (manual torch.cuda.CUDAGraph capture; the paged kernel's fixed (B,H) grid +
+  device-side length loop is the only capturable substrate — dense view_len shape grows, cat-cache
+  addresses grow, torch.compile reduce-overhead refuses the in-place advance). gpu test 4/4 token-exact.
+  MEASURED (RESULTS.md 2026-07-04): B=1 −74.3% step-time (15.38→3.96 ms), 65→253 tok/s = 77% of the
+  327 tok/s memory wall (eager 20% → compiled 53% → cudagraph 77% — R1 gap CLOSED); nsys 54–68
+  cudaLaunchKernel/step → 1 cudaGraphLaunch/step. Pred −20–28% FALSIFIED good (our eager is far more
+  launch-bound than vLLM's H100 path).
 Done (2026-07-04, R4.3): lossless speculative decoding — serving/speculative.py (Drafter protocol +
   NGramDrafter prompt-lookup + ModelDrafter; speculative_generate with the pending-token invariant) +
   KVCache.truncate rollback primitive. 27 tests (float64 token-exact all drafters/K; wrong-drafter
@@ -129,9 +138,9 @@ Total est. (inference track, ADR-0012): ~$25–45 (P2) + ~$25–45 (P3) + ~$150�
 | 3: continuous batching (Orca-style) | ✅ | R3a agg 66× B=1, flip @B≈128; R3b continuous 2.30× wall / 2.93× steps vs static-wave (R3.4 PASS), TTFT p95 4.9× (R3.6), oracle green — padding tax 1.27× measured → R4.1 | sm_120 |
 | 4.1: PagedAttention (16-tok blocks, Triton) | ✅ | frag 5.0%, capacity ×9.3; contiguous-match bit-exact (scattered/boundary/poison/CoW); **kernel 5.90 ms/step, ×3.52 vs wave, +55% vs dense-cont** — whole padding tax reclaimed | sm_120 |
 | 4.2: chunked prefill | 🟡 mechanism ✓ (token-exact, 44 tests) + measured; **spike-reduction FALSIFIED** (sequential-interleave regresses: ITL p50 ×6.6–14.4, agg 547→145 tok/s) → **R4.2b piggyback deferred** (fused prefill+decode kernel) | sm_120 |
-| 4.3: speculative decoding (lossless) | ⬜ **next** | greedy output token-exact; acceptance + speedup (prompt-lookup drafter) | sm_120 |
-| 4.4: CUDA graphs decode | ⬜ | step-time reduction on nsys; **needs static KV buffer** (cat-cache broke reduce-overhead capture 2026-07-01) — closes the R1 wall; shares the refactor with R4.1 | sm_120 |
-| 4.5: MLA latent cache (toy scale) | ⬜ | weight-absorption identity verified | sm_120 |
+| 4.3: speculative decoding (lossless) | ✅ | lossless token-exact (27 tests); ×1.2–1.4 wall / 1.3–1.5 tok/forward (n-gram); acceptance tracks model output-entropy not prompt | sm_120 |
+| 4.4: CUDA graphs decode | ✅ | token-exact (gpu 4/4); **B=1 −74.3% step, 253 tok/s = 77% of wall** (eager 20%→compiled 53%→graph 77%, R1 gap closed); nsys 54–68→1 launch/step; manual capture over paged pool | sm_120 |
+| 4.5: MLA latent cache (toy scale) | ⬜ **next** | weight-absorption identity verified | sm_120 |
 | 4.6: prefill/decode disaggregation | ⬜ | goodput vs co-located baseline | sm_120 |
 | Design note | ⬜ | 2–3 pages, peer-review quality | — |
 

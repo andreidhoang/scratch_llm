@@ -403,3 +403,33 @@ and the drafter-family research (Medusa / EAGLE-2/3 feature-level trees / MTP ~8
 entirely about raising E[accept] — the term that dominates the speedup formula (note §mechanism
 literacy). Node advances to **R4.4 CUDA-graph decode** (the paged Triton kernel's fixed `(B,H)` grid +
 fixed-address pool is the capturable substrate; closes the R1 eager→wall launch-overhead gap).
+
+---
+
+## Perf track (A1 R4.4 — CUDA-graph decode)
+
+### Measured — A1 R4.4 (2026-07-04, `bench/cudagraph_decode.py` + `tests/test_cudagraph_decode.py` gpu 4/4)
+
+Pre-registration (from the R1 close-out forward-pointer): B=1 step-time reduction **~20–28%** (vLLM-V1),
+bound = launch overhead; closes the R1 gap (eager 51 → compiled 173 tok/s = 53% of the 327 tok/s wall).
+Substrate = the R4.1 paged Triton kernel (fixed `(B,H)` grid + fixed-address pool). Both arms use the
+SAME paged kernel — the delta isolates the CUDA graph. sm120 0.84B bf16, prompt=32, decode=48, median.
+
+| date | rung | hardware | metric | predicted | measured | bound | root cause (1 line) | next |
+|---|---|---|---|---|---|---|---|---|
+| 2026-07-04 | R4.4 · B=1 step-time | sm120 | ms/step reduction | −20–28% | **−74.3%** (15.38→3.96 ms) — pred exceeded | overhead→memory | eager ≈54–68 host launches/step (nsys) → 1 cudaGraphLaunch | ✓ closes R1 gap |
+| 2026-07-04 | R4.4 · B=1 tok/s | sm120 | decode tok/s | climb toward 327 ceiling | **253 tok/s = 77% of wall** (eager 65 = 20%) | memory | launches removed ⇒ the memory wall is finally the bound (vs 53% compiled) | — |
+| 2026-07-04 | R4.4 · B=8 / B=32 | sm120 | ms/step reduction | — | **−71.3% / −68.4%** (agg 1749 / 6307 tok/s) | overhead→memory | graph win shrinks slightly as B raises compute:launch ratio | — |
+| 2026-07-04 | R4.4 · token-exactness | sm120 | graph vs eager | identical | **token-exact** (gpu test B∈{1,4,8}, across 16-block boundaries) | — | capture changes launch, not math | ✓ oracle MET |
+
+**Verdict (A1 R4.4 — SHIPPED; prediction FALSIFIED in the good direction, R1 wall gap CLOSED).** CUDA-graph
+decode over the fixed-address paged pool is token-exact `[FACT]` and cuts B=1 step time **−74.3%**
+(15.38→3.96 ms), far past the pre-registered −20–28% — because our eager baseline is far more
+launch-overhead-bound than vLLM-V1's optimized H100 path: nsys shows ~54–68 `cudaLaunchKernel`/step
+collapsing to **1 `cudaGraphLaunch`/step** `[FACT]`, and step time fell ~4× at B=1 where compute is
+negligible ⇒ the eager time was almost all CPU launch dispatch. **B=1 reaches 253 tok/s = 77% of the
+327 tok/s memory wall** — the R1 thesis (decode is memory-bound; launch overhead hides the wall) is now
+closed three ways: eager 20% → compiled 53% → **cudagraph 77%**. `torch.compile` reduce-overhead
+REFUSES this path (the in-place `lengths += active` is a "mutated input"); manual capture owns the
+mutation. Clocks unlocked but the ~4× ratio dwarfs ±15% drift. Node advances to **R4.5 (MLA toy)** →
+R4.6 (PD-disagg). Deferred extension: continuous-batching + cudagraph (graph pool per batch size).
