@@ -84,6 +84,16 @@ exclude = [
     "src/scratch_llm/kernels/flash_attention_triton.py",
     "src/scratch_llm/kernels/paged_decode_triton.py",
     "src/scratch_llm/kernels/gemv_triton.py",
+    # A2/A3 kernels (Triton launch syntax + JIT-loaded CUDA modules): static checkers can't model
+    # `kernel[grid](..., num_warps=...)` or a cpp_extension.load() return — type-checked on the GPU
+    # box by execution (their gpu-marked tests), like the rest of this list.
+    "src/scratch_llm/kernels/softmax_triton.py",
+    "src/scratch_llm/kernels/norm_triton.py",
+    "src/scratch_llm/kernels/topk_triton.py",
+    "src/scratch_llm/kernels/gemm_triton.py",
+    "src/scratch_llm/kernels/gemm_smem_cuda.py",
+    "src/scratch_llm/kernels/wmma_gemm.py",
+    "src/scratch_llm/kernels/gemm_mma_sync.py",
     "src/scratch_llm/kernels/matmul.py",
     "src/scratch_llm/kernels/bench.py",
     "src/scratch_llm/kernels/inference",

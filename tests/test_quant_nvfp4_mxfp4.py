@@ -83,8 +83,10 @@ def test_e4m3_self_map_and_saturation() -> None:
 
 def test_e8m0_rounds_to_power_of_two() -> None:
     # powers of two are exact; a general value snaps to the nearest octave (this is the coarseness)
-    assert torch.equal(quantize_e8m0(torch.tensor([0.25, 0.5, 1.0, 2.0, 4.0])),
-                       torch.tensor([0.25, 0.5, 1.0, 2.0, 4.0]))
+    assert torch.equal(
+        quantize_e8m0(torch.tensor([0.25, 0.5, 1.0, 2.0, 4.0])),
+        torch.tensor([0.25, 0.5, 1.0, 2.0, 4.0]),
+    )
     out = quantize_e8m0(torch.tensor([3.0, 5.0, 0.7]))
     frac = torch.log2(out)
     assert torch.equal(frac, torch.round(frac))  # every output is 2**int

@@ -6,7 +6,14 @@ import math
 import torch
 
 from scratch_llm.model import ModelConfig, TransformerLM, cross_entropy
-from scratch_llm.optim import AdamW, cosine_lr, gradient_clipping
+from scratch_llm.optim import (
+    AdamW,
+    Muon,
+    _zeropower_via_newtonschulz5,
+    cosine_lr,
+    gradient_clipping,
+    split_muon_adamw_params,
+)
 
 
 def test_adamw_minimizes_quadratic() -> None:
@@ -78,3 +85,120 @@ def test_overfit_one_batch() -> None:
         final = loss.item()
 
     assert final < 0.05, f"failed to overfit: final loss {final:.4f} (started {initial:.3f})"
+
+
+# --------------------------------------------------------------------------------------------
+# Muon (F1) — Newton–Schulz orthogonality, the corrected RMS-match, the param split, overfit
+# --------------------------------------------------------------------------------------------
+
+
+def test_newton_schulz_orthogonalizes_singular_values() -> None:
+    """F1 DoD (corrected by measurement — see bench/RESULTS.md §Frontier ablations).
+
+    5-step Newton–Schulz *compresses* the singular-value spectrum into a bounded band (~[0.68,
+    1.14]) — a BAND, not a delta at 1 (convergence to exactly 1 is asymptotic in the step count).
+    Two pre-registered over-claims were FALSIFIED and are recorded honestly: (i) "*all* σ ∈ [0.7,1.3]
+    for a 256×256 update" — a worst-case square Gaussian has near-zero σ (κ ~ n) that 5 steps cannot
+    lift (measured min σ ≈ 0.08); (ii) "median σ ≈ 1" — measured median ≈ 0.77 at 5 steps. Both are
+    inherent to few-step NS and immaterial to Muon: real momentum-gradients aren't worst-case, and
+    Muon needs only *approximate* orthogonality (the update *direction*, uniform spectrum). The
+    honest invariants below: never inflates; the bulk collapses into a tight band; the spread
+    collapses vs the raw (ill-conditioned) input — the whole point of orthogonalization.
+    """
+    torch.manual_seed(0)
+    for shape in [(128, 384), (256, 256), (384, 128)]:  # wide, square, tall (transpose path)
+        g = torch.randn(*shape)
+        s_in = torch.linalg.svdvals(
+            g / (g.norm() + 1e-7)
+        )  # normalized input spectrum (wide spread)
+        o = _zeropower_via_newtonschulz5(g, steps=5)
+        assert o.shape == shape
+        s = torch.linalg.svdvals(o.float())
+        # (1) never inflates past the quintic's fixed point.
+        assert s.max() < 1.35, f"{shape}: NS inflated σ_max to {s.max():.3f} (>1.35)"
+        # (2) the bulk (10th–90th pct) is compressed into a tight band ~[0.68,1.14]; the
+        # ill-conditioned tail is excluded by construction and is immaterial to the update direction.
+        q10 = torch.quantile(s, 0.10).item()
+        q90 = torch.quantile(s, 0.90).item()
+        assert q10 > 0.6 and q90 < 1.25, f"{shape}: bulk σ∈[{q10:.3f},{q90:.3f}] not compressed"
+        # (3) the spread collapses vs the raw input (κ≫1) — the reason to orthogonalize at all.
+        spread_in = torch.quantile(s_in, 0.90).item() / (torch.quantile(s_in, 0.10).item() + 1e-9)
+        assert q90 / q10 < 2.0 < spread_in, f"{shape}: spread {q90 / q10:.2f} not collapsed"
+
+
+def test_muon_update_rms_matches_adamw_band() -> None:
+    """The corrected Moonlight identity (F1 honesty-ledger, [REFUTED→fixed]): an orthogonalized
+    update on [A,B] has RMS 1/√max(A,B), so scaling by 0.2·√max(A,B) lands its RMS at ~0.2 —
+    AdamW's band — *independent of shape*. (If the draft's 1/max(A,B) were right, this would be
+    off by a √max factor.)"""
+    torch.manual_seed(0)
+    for shape in [(256, 256), (128, 512), (1024, 256)]:
+        g = torch.randn(*shape)
+        o = _zeropower_via_newtonschulz5(g, steps=5)
+        scale = 0.2 * math.sqrt(max(shape))
+        rms = (scale * o).pow(2).mean().sqrt().item()
+        assert 0.15 < rms < 0.28, f"{shape}: scaled update RMS {rms:.3f} not ≈0.2"
+
+
+def test_split_muon_adamw_params_routes_the_tied_tensor_to_adamw() -> None:
+    """The repo-specific trap: with tie_embeddings the shared 2-D embed/head tensor MUST go to
+    AdamW, not Muon. Also: disjoint cover, and RMSNorm(1-D)/head → AdamW, block matrices → Muon."""
+    torch.manual_seed(0)
+    cfg = ModelConfig(vocab_size=48, d_model=32, n_layers=2, n_heads=4, tie_embeddings=True)
+    model = TransformerLM(cfg)
+    muon, adamw = split_muon_adamw_params(model)
+
+    muon_ids, adamw_ids = {id(p) for p in muon}, {id(p) for p in adamw}
+    assert muon_ids.isdisjoint(adamw_ids)  # no overlap
+    # disjoint cover of every UNIQUE parameter (tied tensor counted once)
+    unique = {id(p): p for p in model.parameters()}
+    assert sum(p.numel() for p in muon) + sum(p.numel() for p in adamw) == sum(
+        p.numel() for p in unique.values()
+    )
+    # the tied embed/head tensor is one object, and it is in the AdamW group (not Muon)
+    assert model.token_emb.weight is model.lm_head.weight
+    assert id(model.token_emb.weight) in adamw_ids and id(model.token_emb.weight) not in muon_ids
+    # every Muon param is a 2-D block matrix; every 1-D param is on AdamW
+    assert all(p.ndim == 2 for p in muon)
+    assert id(model.final_norm.weight) in adamw_ids  # RMSNorm gain (1-D)
+    assert id(model.blocks[0].attn.q_proj.weight) in muon_ids  # type: ignore[attr-defined]  # a block projection (2-D); ModuleList[i] loses the type
+
+
+def test_split_muon_adamw_params_untied_keeps_both_embed_and_head_on_adamw() -> None:
+    torch.manual_seed(0)
+    cfg = ModelConfig(vocab_size=48, d_model=32, n_layers=1, n_heads=4, tie_embeddings=False)
+    model = TransformerLM(cfg)
+    muon, adamw = split_muon_adamw_params(model)
+    adamw_ids = {id(p) for p in adamw}
+    assert model.token_emb.weight is not model.lm_head.weight  # distinct tensors when untied
+    assert id(model.token_emb.weight) in adamw_ids
+    assert id(model.lm_head.weight) in adamw_ids  # head excluded from Muon even when 2-D & untied
+    assert all(p.ndim == 2 for p in muon)
+
+
+def test_overfit_one_batch_muon_hybrid() -> None:
+    """Wiring check for the hybrid: Muon on the block matrices + AdamW on embed/head/norms must
+    memorize a single batch, same discipline as the AdamW-only overfit test."""
+    torch.manual_seed(0)
+    cfg = ModelConfig(vocab_size=64, d_model=64, n_layers=2, n_heads=4, context_length=32)
+    model = TransformerLM(cfg)
+    muon_params, adamw_params = split_muon_adamw_params(model)
+    muon = Muon(muon_params, lr=2e-2, weight_decay=0.0)
+    adamw = AdamW(adamw_params, lr=3e-3, weight_decay=0.0)
+
+    ids = torch.randint(0, cfg.vocab_size, (4, 17))
+    inputs, targets = ids[:, :-1], ids[:, 1:]
+
+    initial = cross_entropy(model(inputs), targets).item()
+    final = initial
+    for _ in range(300):
+        muon.zero_grad()
+        adamw.zero_grad()
+        loss = cross_entropy(model(inputs), targets)
+        loss.backward()
+        gradient_clipping(model.parameters(), max_l2_norm=1.0)
+        muon.step()
+        adamw.step()
+        final = loss.item()
+
+    assert final < 0.05, f"hybrid failed to overfit: final {final:.4f} (started {initial:.3f})"

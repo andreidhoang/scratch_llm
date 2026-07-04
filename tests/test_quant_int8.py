@@ -94,7 +94,9 @@ def test_affine_represents_zero_exactly() -> None:
     x_hat = dequantize_affine(q, s, z)
     zeros = x == 0.0
     max_zero_err = (x_hat[zeros]).abs().max().item()
-    print(f"\n[R1 zero] z={z.item():.0f} max reconstruction error at true-zero = {max_zero_err:.2e}")
+    print(
+        f"\n[R1 zero] z={z.item():.0f} max reconstruction error at true-zero = {max_zero_err:.2e}"
+    )
     assert max_zero_err == 0.0
 
 

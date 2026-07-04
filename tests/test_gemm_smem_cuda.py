@@ -39,7 +39,9 @@ def _assert_matches(out: torch.Tensor, ref: torch.Tensor) -> None:
     assert out.dtype == ref.dtype, f"dtype {out.dtype} != {ref.dtype}"
     d = (out.float() - ref.float()).abs()
     rel = d.max().item() / (ref.float().abs().max().item() + 1e-30)
-    assert rel <= _RTOL, f"normalized rel err {rel:.3e} > rtol {_RTOL} (max |Δ|={d.max().item():.3e})"
+    assert rel <= _RTOL, (
+        f"normalized rel err {rel:.3e} > rtol {_RTOL} (max |Δ|={d.max().item():.3e})"
+    )
 
 
 @pytest.mark.parametrize("scale", [1e-2, 1.0, 1e2], ids=["s1e-2", "s1", "s1e2"])
