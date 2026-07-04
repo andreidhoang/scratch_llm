@@ -172,7 +172,7 @@ persistent volume (`workspace_is_volume: true`).
   transformers fixture available (conditional).
 - **DoD:** green; DPO stays a tested primitive, pipeline ADR-gated (guide §7).
 
-### W9 · Official-suite acceptance pass `[ ]`
+### W9 · Official-suite acceptance pass `[x] shipped 2026-07-04 (50P/0F/11blocked — deploy/runbooks/OFFICIAL_SUITES.md; FSDP gap fixed 47f49a1)`
 - Wire `lectures/assignment{2,4,5}-*/tests/adapters.py` to `scratch_llm` (thin imports in the
   scaffold checkouts, not committed upstream), run each scaffold's suite in its own uv env, record
   pass counts + any legitimate deltas in `docs/STATUS.md`. A3 has no adapter (script output is the
