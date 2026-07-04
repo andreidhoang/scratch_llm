@@ -44,6 +44,15 @@ errors) + CPU suite + full gpu suite all green. **Remaining = ONLY the ISA-gated
 discipline satisfied (every sm120 prereq ledgered). Pyright note: new GPU-only kernels are in the
 pyproject.toml pyright exclude (Triton launch syntax + JIT CUDA can't be statically typed).
 
+**Mastery roadmap + context updated (2026-07-04):** `docs/learning/roadmap/` — 41 Bài / 6 series (VI,
+first-principles, traced to file·func·line pinned to a commit) walking through every core perf file; the
+delegate-mode "ship first, master after" study map (INDEX.md leads with it). CLAUDE.md (two-fronts +
+build-status + "Where things live") + CONTEXT_ENGINEERING.md updated: perf front marked COMPLETE, roadmap
+in the Lever-2 knowledge base, and §3.3 documents the delegate-mode BUILD fan-out pattern (Workflow
+one-agent-per-rung + three-gate pipeline: oracle test → independent adversarial verifier → main-thread
+re-test → commit; main thread is the sole committer). A fresh session orients to "sm120 done, only rental
+days remain" from the SessionStart hook (PERF_PLAN Current Node) + STATUS + CLAUDE.md.
+
 **Zone discipline:** perf agents write only `performance/`, `src/scratch_llm/serving/`,
 `src/scratch_llm/kernels/`, `tests/` + `bench/` perf files; shared files (CLAUDE.md, STATUS.md,
 pyproject.toml, bench/RESULTS.md, docs/learning/INDEX.md) get pull-rebase + additive edits +
