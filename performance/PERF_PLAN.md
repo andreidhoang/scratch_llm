@@ -12,8 +12,25 @@
 ## Current Node
 
 ```
-Phase: 1a — A1 R0–R3 + R4.1 DONE → R4.2 (chunked prefill) next
+Phase: 1a — A1 R0–R3 + R4.1 DONE; R4.2 mechanism shipped + measured (spike-reduction falsified,
+  R4.2b piggyback deferred) → R4.3 (speculative decoding) NEXT.  [delegate mode, ADR-0013]
 Hardware: Standing GPU (sm_120)
+Done (2026-07-04, R4.2): chunked-prefill MECHANISM shipped & token-exact — model.py ChunkPrefillView
+  (single-slot chunk at a running offset; RoPE absolute-pos ⇒ KV bit-identical to one-shot) + storage
+  hooks _write_prefill_kv_at/slot_kv_view + serving/continuous.py prefill_chunk_size (dense+continuous).
+  44 tests (single-chunk torch.equal KV; float64 token-exact all sizes; float32 divergences = argmax
+  tie-flips). MEASURED (RESULTS.md 2026-07-04, bench/chunked_prefill.py): the sequential-interleave
+  design REGRESSES all serving metrics (ITL p50 ×6.6–14.4, p99 did NOT fall, agg 547→145 tok/s) —
+  pre-reg P4.2.2/3/5 FALSIFIED. Diagnosed: serialized 1-prefill/iteration admission (14 batched → 160–550
+  UNBATCHED prefills) starves decode; un-piggybacked chunk cost lands in every gap. R4.2b (deferred, NOT
+  an R4.3 prereq): fused mixed-query-len prefill+decode kernel (Sarathi piggyback; extend R4.1 paged
+  kernel) + batched admission + shallow trace. Lesson: chunked prefill's win is a kernel/batching
+  property, not scheduling-only.
+Next action (R4.3 — speculative decoding, lossless): prompt-lookup (n-gram) drafter → target verifies
+  K drafts in one forward → accept longest greedy-matching prefix → KV rollback (new KVCache.truncate).
+  DoD = greedy output token-exact to sampling.generate (oracle); measure acceptance + speedup on
+  repetitive vs random prompts. Spec: performance/notes/A1_R43_speculative_decoding.md. Then R4.4
+  (CUDA-graph decode over the fixed-address paged pool) → R4.5 (MLA toy) → R4.6 (PD-disagg).
 Done (2026-07-03, R4.1): PagedKVCache (16-tok block pool, block table, on-demand alloc, trash-block
   write safety, refcounted prefix sharing/CoW, committed-blocks admission guard) + fused Triton
   paged decode kernel, behind the new SlotKVCache base (dense + paged, one slot contract). Measured
@@ -97,8 +114,8 @@ Total est. (inference track, ADR-0012): ~$25–45 (P2) + ~$25–45 (P3) + ~$150�
 | 2: GQA/MQA | ✅ | KV/token 128/32/4 KB (32:8:1); compiled decode MQA 1.92× MHA @16K; eager control ~1× (da64bfb→R2) | sm_120 |
 | 3: continuous batching (Orca-style) | ✅ | R3a agg 66× B=1, flip @B≈128; R3b continuous 2.30× wall / 2.93× steps vs static-wave (R3.4 PASS), TTFT p95 4.9× (R3.6), oracle green — padding tax 1.27× measured → R4.1 | sm_120 |
 | 4.1: PagedAttention (16-tok blocks, Triton) | ✅ | frag 5.0%, capacity ×9.3; contiguous-match bit-exact (scattered/boundary/poison/CoW); **kernel 5.90 ms/step, ×3.52 vs wave, +55% vs dense-cont** — whole padding tax reclaimed | sm_120 |
-| 4.2: chunked prefill | ⬜ **next** | TTFT/ITL curve vs chunk size; kills the measured ITL p99 ~29 ms admission spikes | sm_120 |
-| 4.3: speculative decoding (lossless) | ⬜ | greedy output token-exact | sm_120 |
+| 4.2: chunked prefill | 🟡 mechanism ✓ (token-exact, 44 tests) + measured; **spike-reduction FALSIFIED** (sequential-interleave regresses: ITL p50 ×6.6–14.4, agg 547→145 tok/s) → **R4.2b piggyback deferred** (fused prefill+decode kernel) | sm_120 |
+| 4.3: speculative decoding (lossless) | ⬜ **next** | greedy output token-exact; acceptance + speedup (prompt-lookup drafter) | sm_120 |
 | 4.4: CUDA graphs decode | ⬜ | step-time reduction on nsys; **needs static KV buffer** (cat-cache broke reduce-overhead capture 2026-07-01) — closes the R1 wall; shares the refactor with R4.1 | sm_120 |
 | 4.5: MLA latent cache (toy scale) | ⬜ | weight-absorption identity verified | sm_120 |
 | 4.6: prefill/decode disaggregation | ⬜ | goodput vs co-located baseline | sm_120 |

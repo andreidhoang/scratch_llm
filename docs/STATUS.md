@@ -7,8 +7,9 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 MEASURED on the standing sm120 GPU** — metrics harness → decode roofline (15%→53% HBM) → GQA/MQA
 (MQA 1.92× @16K) → **continuous batching (2.30× wall / 2.93× by steps vs static-wave)** →
 **PagedAttention (frag 5.0%, capacity ×9.3, fused Triton decode kernel 5.90 ms/step = ×3.52 vs
-wave, +55% vs dense-continuous)**. Current node: **A1 R4.2 chunked prefill**
-(`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
+wave, +55% vs dense-continuous)** → **R4.2 chunked prefill (2026-07-04: mechanism ✓ token-exact,
+44 tests; spike-reduction FALSIFIED — sequential-interleave regresses, R4.2b piggyback deferred)**.
+Current perf node: **A1 R4.3 speculative decoding** (`performance/PERF_PLAN.md`). **CS336-A2 distributed half ✅ SHIPPED 2026-07-03** (ZeRO-1 ·
 FSDP · 100B one-pager · comms algebra, W1–W4) **+ A3 scaling ✅** (fitter a=0.469/b=0.531 +
 query planner, W5–W6) under the Delivery-Mode sprint (ADR-0014); A4/A5 next. **230 CPU + 14
 GPU-marked tests green, ruff clean, pyright 0 errors.** Rentals decided: ADR-0012 (3

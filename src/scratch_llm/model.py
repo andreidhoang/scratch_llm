@@ -301,6 +301,20 @@ class SlotKVCache:
     def _write_prefill_kv(self, layer: int, slots: Tensor, k_new: Tensor, v_new: Tensor) -> None:
         raise NotImplementedError
 
+    def _write_prefill_kv_at(
+        self, layer: int, slot: int, offset: int, k_new: Tensor, v_new: Tensor
+    ) -> None:
+        """Write ONE slot's chunk of prefill K,V at ``[offset, offset+s)`` — A1 R4.2 chunked
+        prefill. ``k_new``/``v_new``: ``(1, n_kv_heads, s, head_dim)``. Unlike
+        :meth:`_write_prefill_kv` (offset-0, batched over slots), this appends a chunk to a single
+        slot at a running offset so a long prompt is prefilled incrementally."""
+        raise NotImplementedError
+
+    def slot_kv_view(self, layer: int, slot: int, upto: int) -> tuple[Tensor, Tensor]:
+        """One slot's K,V over positions ``[0, upto)`` as ``(1, n_kv_heads, upto, head_dim)`` — the
+        full prefix a chunked-prefill chunk attends over (A1 R4.2)."""
+        raise NotImplementedError
+
     def _free_storage(self, slot: int) -> None:
         """Storage-specific eviction (e.g. return blocks to the pool). Default: nothing."""
 
@@ -414,6 +428,16 @@ class BatchedKVCache(SlotKVCache):
         s = k_new.shape[2]
         self._k[layer][slots, :, :s] = k_new
         self._v[layer][slots, :, :s] = v_new
+
+    def _write_prefill_kv_at(
+        self, layer: int, slot: int, offset: int, k_new: Tensor, v_new: Tensor
+    ) -> None:
+        s = k_new.shape[2]  # (1, H_kv, s, d) → the slot's [offset, offset+s) rows (R4.2)
+        self._k[layer][slot, :, offset : offset + s] = k_new[0]
+        self._v[layer][slot, :, offset : offset + s] = v_new[0]
+
+    def slot_kv_view(self, layer: int, slot: int, upto: int) -> tuple[Tensor, Tensor]:
+        return self._k[layer][slot : slot + 1, :, :upto], self._v[layer][slot : slot + 1, :, :upto]
 
 
 class PagedKVCache(SlotKVCache):
@@ -652,9 +676,64 @@ class PrefillView:
         parent.active[self._slots] = True
 
 
-AnyKVCache = KVCache | SlotKVCache | PrefillView
+class ChunkPrefillView:
+    """Routes ONE prefilling slot's chunk (s tokens at a running offset) through the single-request
+    KVCache attention branch — A1 R4.2 chunked prefill.
+
+    A long prompt is prefilled in ``⌈L/C⌉`` chunks interleaved with decode steps, so a big prefill
+    no longer head-of-line-blocks the decode stream (the measured R3b/R4.1 ITL p99 admission spike).
+    Duck-types the :class:`KVCache` interface the attention layer uses on the non-slot path
+    (``length``/``append``/``get``/``advance``): ``length`` is the already-written prefix — the
+    chunk's absolute RoPE offset, so a token at position t is rotated at t regardless of chunk
+    boundaries ⇒ the chunked KV is **bit-identical** to a one-shot prefill (the token-exactness
+    oracle). ``append`` writes the chunk into the slot's storage at ``[offset, offset+s)`` and
+    ``get`` returns the slot's full ``[0, offset+s)`` K,V so the chunk attends its whole prefix
+    under the ordinary ``past_len`` causal mask — no new attention math.
+
+    The parent slot is **reserved but inactive** while prefilling (masked out of the concurrent
+    decode batch by write-then-mask, exactly like any inactive slot); the scheduler flips it active
+    (``parent.active[slot]=True`` + ``parent.mirror_admit``) after the LAST chunk, whose final
+    position emits the request's first token (= TTFT). A fresh view is built per chunk with the
+    current ``offset``; ``advance(s)`` bumps only the device length (the scheduler owns the mirror).
+
+    Note (scope): implemented for :class:`BatchedKVCache` (dense). Chunked prefill over paged
+    storage combines R4.1 + R4.2 and is deferred — the TTFT/ITL-vs-chunk-size physics R4.2 measures
+    is fully delivered on the dense slot buffer.
+    """
+
+    def __init__(self, parent: SlotKVCache, slot: int, offset: int) -> None:
+        if not 0 <= slot < parent.n_slots:
+            raise ValueError(f"slot {slot} out of range [0, {parent.n_slots})")
+        if not 0 <= offset < parent.max_ctx:
+            raise ValueError(f"offset {offset} outside [0, max_ctx={parent.max_ctx})")
+        self._parent = parent
+        self._slot = slot
+        self._offset = offset
+        self._view: list[tuple[Tensor, Tensor] | None] = [None] * parent.n_layers
+
+    @property
+    def length(self) -> int:
+        return self._offset
+
+    def append(self, layer: int, k_new: Tensor, v_new: Tensor) -> None:
+        s = k_new.shape[2]
+        self._parent._write_prefill_kv_at(layer, self._slot, self._offset, k_new, v_new)
+        self._view[layer] = self._parent.slot_kv_view(layer, self._slot, self._offset + s)
+
+    def get(self, layer: int) -> tuple[Tensor, Tensor] | None:
+        return self._view[layer]
+
+    def advance(self, n: int) -> None:
+        """Bump the slot's device length by the chunk width — called once by the LM after all
+        layers. Activation is deferred to the scheduler after the final chunk (see class docstring).
+        """
+        self._parent.lengths[self._slot] = self._offset + n
+
+
+AnyKVCache = KVCache | SlotKVCache | PrefillView | ChunkPrefillView
 """Cache forms accepted by the model forward: single-request (:class:`KVCache`), ragged slot
-decode (:class:`SlotKVCache`: dense or paged), or slot-routed prefill (:class:`PrefillView`)."""
+decode (:class:`SlotKVCache`: dense or paged), slot-routed one-shot prefill (:class:`PrefillView`),
+or one slot's chunked prefill (:class:`ChunkPrefillView`, A1 R4.2)."""
 
 
 class MultiHeadSelfAttention(nn.Module):

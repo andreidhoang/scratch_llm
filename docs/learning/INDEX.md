@@ -55,4 +55,4 @@ quantization A5 — theo `performance/PERF_PLAN.md`.
 
 | Rung | Commit | File chính | Con số headline | Đã học |
 |---|---|---|---|---|
-| _(append khi rung đầu tiên của run 2026-07-03 ship)_ | | | | |
+| A1 R4.2 chunked prefill (mechanism + measured negative) | _(2026-07-04)_ | `model.py` ChunkPrefillView · `serving/continuous.py` prefill_chunk_size · `bench/chunked_prefill.py` | token-exact ✓; sequential-interleave REGRESSES (ITL p50 ×6.6–14.4, agg 547→145 tok/s) → cần Sarathi piggyback (R4.2b). Bài học: win của chunked prefill là kernel/batching property, không phải scheduling-only | ⬜ |

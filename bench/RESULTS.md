@@ -254,3 +254,96 @@ and **≈ 8.09e11 (~809B)** at 1e24.
 fitted budget (3e21) — the fit is exact on the data, but the answers inherit the power-law-holds
 assumption. Artifacts: `bench/a3_isoflop.png` (data + both fit lines + shaded extrapolation region with
 the factor) · `scripts/a3_isoflop.py` (deterministic reproduction) · `src/scratch_llm/scaling/isoflop.py`.
+
+### W8c · A5 — GRPO / Dr.GRPO engine, toy end-to-end validation (2026-07-04, `tests/test_grpo_algos.py`)
+
+Engine-validation run (guide §5 framing): `grpo_train_loop` with the Dr.GRPO defaults
+(`normalize_by_std=False`, `length_normalization="constant"`) on a learnable single-token
+Countdown-style env (`_N_TASKS=3`, answer = one token) + a tiny A1 `TransformerLM`
+(`d_model=32, n_layers=2, vocab=11`) and a temperature=1.2 sampler, 30 CPU steps, `group_size=12`,
+AdamW lr=0.05, seed 0. Deterministic (identical on re-run). Proves the loop composes
+(rollout → grade → group-normalize advantage → microbatch update → mandatory logging) and *learns* —
+nothing about a real model (the real-Countdown "aha" is the GPU capstone, `A5_countdown_aha.md`).
+
+| date | node / artifact | metric | predicted (pre-registered) | measured | note |
+|---|---|---|---|---|---|
+| 2026-07-04 | W8c · GRPO toy engine | mean reward over the run | reward **strictly rises** (loop learns) | **E[r] 0.186 → 0.666 · sampled mean_reward 0.194 → 0.667** (learns 2 of 3 tasks) | endpoints; deterministic seed 0; ~8 s CPU |
+| 2026-07-04 | W8c · GRPO toy engine | response-token entropy | falls (policy sharpens as it learns) | **0.543 → 0.005** | the entropy-collapse monitor confirms real learning, not noise |
+| 2026-07-04 | W8c · GRPO plateau | why it stops at 2/3 | group-variance plateau (all-same-reward group → 0 advantage) | **3rd task's groups go all-wrong → A=0 → no gradient** | the honest GRPO limitation the run exhibits; `[INFERENCE]` from the trace |
+
+**Predicted-before-run holds `[FACT]` (measured on the toy):** the Dr.GRPO advantage on the correct
+rollout `(1 − group_mean) > 0` drives `p(answer)` up; the exact (noise-free) expected reward rises
+0.186 → 0.666 while its Monte-Carlo estimate (the sampled `mean_reward`) tracks it 0.194 → 0.667. The
+loop plateaus at 2/3 because the third task's groups become all-wrong (uniform reward → zero
+advantage → zero gradient) — the group-variance requirement GRPO can't escape without exploration.
+Also ledgered: the real byte-level `CountdownEnv` integration smoke runs the loop end-to-end in
+~0.6 s with response-token entropy ≈ `log 256` at init (loss-at-init sanity), reward ~0 (random tiny
+model, expected). Artifacts: `src/scratch_llm/algos/grpo.py` · `tests/test_grpo_algos.py` (10/10
+green, 12.5 s) · `docs/adr/ADR-0017-a5-drgrpo-default-and-aggregation.md`.
+
+---
+
+## Perf track (A1 R4.2 — chunked prefill)
+
+### Pre-registration — A1 R4.2 (predict-before-run, D5)
+
+Spec: `performance/notes/A1_R42_chunked_prefill.md`. Standing GPU sm_120, `RUNG1_CONFIG` (~1B bf16),
+heavy-tail trace, N_SLOTS=32, compiled decode; baseline chunk=∞ = the R4.1 paged-kernel arm
+(ITL p50 ~6 ms, p99 ~29 ms). Oracle = R4.1/R3b greedy (token-exact).
+
+| # | experiment | predicted | measured | bound | note |
+|---|---|---|---|---|---|
+| P4.2.1 | token-exactness, chunk ∈ {∞,128,64,16,1} | bit-identical to R4.1 & `generate` | — (pending) | — | RoPE absolute-pos ⇒ chunked KV bit-identical |
+| P4.2.2 | ITL p99, C: ∞→16 | falls ≥2× (29→≤14 ms), monotone | — (pending) | scheduling | per-gap prefill capped at C tokens |
+| P4.2.3 | ITL p50, C: ∞→16 | rises modestly (~6→8–11 ms) | — (pending) | scheduling | every gap carries a chunk |
+| P4.2.4 | TTFT p50, C: ∞→16 | rises (⌈L/C⌉ chunk-gaps) | — (pending) | scheduling | latency-of-first-token tradeoff |
+| P4.2.5 | goodput @ ITL-SLO p99≤15 ms, chunk vs no-chunk | chunking ≥1.3× (or killed) | — (pending) | scheduling | spike violates SLO for a decode burst |
+
+**Kill line(s):** any token divergence ⇒ offset/causal-mask bug, fix before measuring · ITL p99 flat
+as C↓ (mechanism correct) ⇒ chunk forward not bounded, profile it · p50 super-linear as C→1 ⇒
+per-iteration fixed-overhead floor (document, don't gold-plate).
+
+### Measured — A1 R4.2 chunked prefill (2026-07-04, `bench/chunked_prefill.py` + `tests/test_chunked_prefill.py` 44/44 green)
+
+Standing GPU RTX PRO 4000 Blackwell (sm120), `RUNG1_CONFIG` 0.84B bf16, compiled decode + eager
+prefill, B=32, 160-req trace (26 × 512-tok prompts interspersed among 32-tok prompts). Clocks NOT
+locked (`nvidia-smi -lgc` blocked in this unprivileged container — same as `ncu` counters); all arms
+measured back-to-back so the RELATIVE curve is robust to clock drift. unique_graphs=1.
+
+| date | rung | hardware | metric | predicted | measured | bound | root cause (1 line) | next |
+|---|---|---|---|---|---|---|---|---|
+| 2026-07-04 | R4.2 · token-exactness (P4.2.1) | sm120 | greedy divergence | bit-identical | **token-exact** (single-chunk KV bit-identical `torch.equal`; float64 exact all chunk sizes; float32 divergences are argmax tie-flips, not logic) | — | RoPE absolute-pos ⇒ chunked KV algebraically identical to one-shot | ✓ correctness gate MET |
+| 2026-07-04 | R4.2 · ITL p99 vs C (P4.2.2) | sm120 | ITL p99 ratio, C ∞→32 | **falls ≥2×** | **ROSE ×1.03→×1.91** (198.8→204/284/294/380/304 ms at C=512/256/128/64/32) — **FALSIFIED** | scheduling→overhead | chunking did NOT reduce the spike | R4.2b (piggyback) |
+| 2026-07-04 | R4.2 · ITL p50 vs C (P4.2.3) | sm120 | ITL p50 ratio | rises modestly (~6→8-11 ms) | **ROSE ×6.56→×14.44** (12.6→82.6…181.9 ms) — **FALSIFIED (magnitude)** | overhead | un-piggybacked chunk-forward cost lands in every decode gap (up even at C=512=single-chunk) | R4.2b |
+| 2026-07-04 | R4.2 · throughput vs C | sm120 | agg tok/s | (not pre-reg) | **547→366→319→251→201→145** monotone DOWN as C↓ | overhead | serialized admission starves decode: **14 batched prefills (∞) → 160–550 unbatched (chunked)** | R4.2b |
+| 2026-07-04 | R4.2 · TTFT p50 (P4.2.4) | sm120 | TTFT ratio | rises | **ROSE ×1.46→×4.05** (dir. met, magnitude large; saturated trace ⇒ queue-dominated) | latency | reserved-but-prefilling slots + serialized admission inflate queue wait | R4.2b + shallow trace |
+| 2026-07-04 | R4.2 · goodput@SLO (P4.2.5) | sm120 | goodput @ ITL≤25.2 ms | ≥1.3× vs one-shot | **0 tok/s ALL arms (incl. one-shot)** — not measurable on the saturated B=32 trace | — | saturated trace's ITL exceeds the SLO for every arm; needs a Poisson/shallow trace | R4.2b |
+
+**Verdict (A1 R4.2 — mechanism SHIPPED & token-exact; spike-reduction FALSIFIED for the
+sequential-interleave design, diagnosed).** The chunked-prefill *mechanism* is correct and lossless:
+`ChunkPrefillView` writes KV bit-identical to a one-shot prefill (RoPE rotates each token at its
+absolute position), proven by 44 tests (single-chunk `torch.equal`; all chunk sizes token-exact in
+float64; the float32 divergences are greedy-argmax tie-flips from batched-inference reduction-order
+non-associativity — the same class the R3b path already has vs `generate`, removed entirely by
+float64). `[FACT]` P4.2.1.
+
+But the pre-registered latency win is **FALSIFIED**: this sequential-interleave scheduler
+*regresses* every serving metric (ITL p50 ×6.6–14.4, ITL p99 did NOT fall, throughput 547→145
+tok/s). Root cause, diagnosed from the ledgered `prefills`/`steps` columns `[FACT]`: (1) **serialized
+admission** — the scheduler advances ONE prefilling slot per iteration, so 160 requests become
+160–550 *unbatched* prefill forwards vs one-shot's **14 batched** (11–13 admits/forward), starving
+the decode batch (util↓ → 475→644 decode steps for the same tokens); (2) **the chunk is a separate
+sequential forward**, so its full cost lands in every decode gap — ITL p50 is 6.6× worse even at
+C=512 (single chunk == one-shot prefill), isolating this as pure per-forward overhead, not slicing.
+
+**The lesson (principal-level systems judgment):** chunked prefill's benefit is a KERNEL/BATCHING
+property, not a scheduling-only one. The production technique (Sarathi-Serve / vLLM-V1 "stall-free
+batching") **piggybacks the prefill chunk INTO the batched decode forward** — one fused ragged
+prefill+decode kernel — so the chunk adds compute but no extra launch and no idle slots. A scheduler
+that pays a separate sequential forward per chunk loses more than the spike it removes. This is
+exactly WHY real engines implement it as a fused batched kernel. **Scoped as R4.2b** (deferred): a
+fused mixed-query-length prefill+decode kernel (natural extension of the R4.1 paged Triton kernel to
+rows with query-len C alongside query-len 1) + batched (not serialized) chunk admission + a
+Poisson/shallow-arrival trace to isolate the spike from queue saturation. R4.2b is NOT a prerequisite
+for R4.3–R4.6 (spec decode, CUDA graphs, MLA, disagg are independent), so the node advances to R4.3;
+R4.2b returns with the paged-kernel work.

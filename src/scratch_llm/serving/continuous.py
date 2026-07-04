@@ -32,6 +32,7 @@ from torch import Tensor
 
 from scratch_llm.model import (
     BatchedKVCache,
+    ChunkPrefillView,
     PagedKVCache,
     PrefillView,
     SlotKVCache,
@@ -99,6 +100,7 @@ def serve(
     cache_kind: Literal["dense", "paged"] = "dense",
     paged_n_blocks: int | None = None,
     paged_use_kernel: bool = False,
+    prefill_chunk_size: int | None = None,
 ) -> ServeResult:
     """Run ``requests`` to completion over ``n_slots`` static KV slots under one of two policies.
 
@@ -125,11 +127,30 @@ def serve(
     pool exhaustion impossible without preemption machinery. FCFS is preserved: a blocked head
     stalls admission (no skip-ahead). ``paged_n_blocks`` defaults to the trivially safe
     ``n_slots × max_request_blocks + 1``.
+
+    ``prefill_chunk_size`` (A1 R4.2): when set, a prompt of length ``L`` is prefilled in
+    ``⌈L/C⌉`` chunks of ≤ ``C`` tokens, **one chunk per scheduler iteration interleaved with a
+    decode step**, so a long prefill no longer head-of-line-blocks the decode stream (the measured
+    R3b/R4.1 ITL p99 admission spike). A prefilling request holds a reserved-but-inactive slot
+    (masked out of the concurrent decode batch) until its final chunk emits its first token
+    (= TTFT), then it joins the decode batch. Token-exact to the one-shot path (``ChunkPrefillView``
+    writes bit-identical KV — RoPE rotates each token at its absolute position regardless of chunk
+    boundaries). Requires ``policy="continuous"`` and ``cache_kind="dense"`` (paged+chunk deferred);
+    ``None`` (default) = one-shot admission, unchanged.
     """
     if n_slots < 1:
         raise ValueError("n_slots must be ≥ 1")
     if len(requests) == 0:
         raise ValueError("requests must be non-empty")
+    if prefill_chunk_size is not None:
+        if prefill_chunk_size < 1:
+            raise ValueError("prefill_chunk_size must be ≥ 1")
+        if policy != "continuous":
+            raise ValueError("chunked prefill (prefill_chunk_size) requires policy='continuous'")
+        if cache_kind != "dense":
+            raise ValueError(
+                "chunked prefill is implemented for cache_kind='dense' (paged+chunk deferred, R4.2)"
+            )
     ids = [r.request_id for r in requests]
     if len(set(ids)) != len(ids):
         raise ValueError("request_id values must be unique")
@@ -198,6 +219,8 @@ def serve(
     committed_blocks = 0  # paged admission guard: worst-case blocks promised to active slots
     frag_samples: list[float] = []
     alloc_peak = 0
+    # R4.2 chunked prefill: slots mid-prefill, FIFO; entry = [slot, request, next_offset].
+    prefilling: deque[list[object]] = deque()
 
     t0 = now()  # every request "arrives" here: TTFT includes time spent queued
 
@@ -233,49 +256,98 @@ def serve(
         # 2) admit — continuous: whenever a slot is free; wave: only into an all-free batch.
         # Paged: the committed-blocks guard admits a request only if the pool can hold every
         # active request run to its FULL budget (no preemption needed, FCFS preserved).
-        free = [b for b, r in enumerate(slot_req) if r is None]
-        admits: list[Request] = []
-        if queue and free and (policy == "continuous" or len(free) == n_slots):
-            for _ in range(min(len(free), len(queue))):
-                if isinstance(cache, PagedKVCache):
-                    need = _blocks_needed(queue[0])
-                    if committed_blocks + need > cache.n_blocks - 1:  # block 0 is trash
-                        break  # head blocked ⇒ admission stalls (no skip-ahead)
-                    committed_blocks += need
-                admits.append(queue.popleft())
-        if admits:
-            slots = free[: len(admits)]
-            lens = [len(r.prompt_ids) for r in admits]
-            t_pre = now()
-            first = _prefill(
-                prefill_model if prefill_model is not None else model,
-                cache,
-                admits,
-                slots,
-                lens,
-                dev,
-            )
-            cache.mirror_admit(slots, lens)  # python half of the admission (outside the graph)
-            t_post = now()
-            prefill_s += t_post - t_pre
-            n_prefill_forwards += 1
-            first_list: list[int] = first.tolist()
-            for i, (b, req) in enumerate(zip(slots, admits, strict=True)):
-                slot_req[b] = req
-                slot_tokens[b] = [first_list[i]]  # the prefill emits token 1 (that's TTFT)
-                slot_times[b] = [t_post]
-                slot_admit_step[b] = n_decode_steps  # queue wait, in decode steps
-            last_ids[torch.tensor(slots, dtype=torch.long, device=dev)] = first
-            # a request admitted at its full budget (max_new_tokens == 1) is already complete —
-            # finish it before the decode step or it would over-generate
-            for b in slots:
-                req = slot_req[b]
-                if req is not None and len(slot_tokens[b]) >= req.max_new_tokens:
-                    finish(b)
+        if prefill_chunk_size is None:
+            free = [b for b, r in enumerate(slot_req) if r is None]
+            admits: list[Request] = []
+            if queue and free and (policy == "continuous" or len(free) == n_slots):
+                for _ in range(min(len(free), len(queue))):
+                    if isinstance(cache, PagedKVCache):
+                        need = _blocks_needed(queue[0])
+                        if committed_blocks + need > cache.n_blocks - 1:  # block 0 is trash
+                            break  # head blocked ⇒ admission stalls (no skip-ahead)
+                        committed_blocks += need
+                    admits.append(queue.popleft())
+            if admits:
+                slots = free[: len(admits)]
+                lens = [len(r.prompt_ids) for r in admits]
+                t_pre = now()
+                first = _prefill(
+                    prefill_model if prefill_model is not None else model,
+                    cache,
+                    admits,
+                    slots,
+                    lens,
+                    dev,
+                )
+                cache.mirror_admit(slots, lens)  # python half of the admission (outside the graph)
+                t_post = now()
+                prefill_s += t_post - t_pre
+                n_prefill_forwards += 1
+                first_list: list[int] = first.tolist()
+                for i, (b, req) in enumerate(zip(slots, admits, strict=True)):
+                    slot_req[b] = req
+                    slot_tokens[b] = [first_list[i]]  # the prefill emits token 1 (that's TTFT)
+                    slot_times[b] = [t_post]
+                    slot_admit_step[b] = n_decode_steps  # queue wait, in decode steps
+                last_ids[torch.tensor(slots, dtype=torch.long, device=dev)] = first
+                # a request admitted at full budget (max_new_tokens == 1) is already complete —
+                # finish it before the decode step or it would over-generate
+                for b in slots:
+                    req = slot_req[b]
+                    if req is not None and len(slot_tokens[b]) >= req.max_new_tokens:
+                        finish(b)
+        else:
+            # R4.2 chunked prefill: reserve free slots into the prefilling FIFO, then advance ONE
+            # C-token chunk of the oldest prefilling slot (the interleave that bounds per-gap
+            # prefill work). The chunk's KV is bit-identical to a one-shot prefill.
+            free = [b for b, r in enumerate(slot_req) if r is None]
+            for b in free:
+                if not queue:
+                    break
+                req = queue.popleft()
+                slot_req[b] = req  # reserved-but-inactive: masked out of the decode batch
+                prefilling.append([b, req, 0])
+            if prefilling:
+                entry = prefilling[0]
+                slot = int(entry[0])  # type: ignore[arg-type]
+                creq = entry[1]
+                assert isinstance(creq, Request)
+                offset = int(entry[2])  # type: ignore[arg-type]
+                length = len(creq.prompt_ids)
+                s = min(prefill_chunk_size, length - offset)
+                chunk_ids = creq.prompt_ids[offset : offset + s]
+                t_pre = now()
+                chunk_logits = _prefill_chunk(
+                    prefill_model if prefill_model is not None else model,
+                    cache,
+                    slot,
+                    offset,
+                    chunk_ids,
+                    dev,
+                )
+                t_post = now()
+                prefill_s += t_post - t_pre
+                n_prefill_forwards += 1
+                new_offset = offset + s
+                if new_offset >= length:  # final chunk → emit first token, activate the slot
+                    first_id = int(chunk_logits[s - 1].argmax())  # token at absolute position L
+                    cache.active[slot] = True  # device half of the admission
+                    cache.mirror_admit([slot], [length])  # python half
+                    slot_tokens[slot] = [first_id]
+                    slot_times[slot] = [t_post]
+                    slot_admit_step[slot] = n_decode_steps
+                    last_ids[slot] = first_id
+                    prefilling.popleft()
+                    if len(slot_tokens[slot]) >= creq.max_new_tokens:  # budget==1 already done
+                        finish(slot)
+                else:
+                    entry[2] = new_offset
 
-        # 3) one lockstep decode step over ALL slots (static shapes; inactive rows are masked)
-        if any(r is not None for r in slot_req):
-            utilization.append(sum(r is not None for r in slot_req) / n_slots)
+        # 3) one lockstep decode step over active slots (static shapes; inactive rows are masked).
+        # Guard/util on py_active (decoding rows) — identical to slot_req for the one-shot path,
+        # and correct for chunked prefill where reserved-but-prefilling slots are not yet active.
+        if any(cache.py_active):
+            utilization.append(sum(cache.py_active) / n_slots)
             cache.pre_decode_reserve()  # paged: boundary rows get a private block (outside graph)
             if isinstance(cache, PagedKVCache):
                 alloc_tok, _, frag = cache.waste_stats()
@@ -291,8 +363,12 @@ def serve(
             decode_s += t_done - t_step
             n_decode_steps += 1
             vals: list[int] = next_ids.tolist()
-            for b, req in enumerate(slot_req):
-                if req is not None:
+            # Record the token only for slots that actually DECODED this step — the active rows.
+            # (One-shot path: occupied == active, so this equals the old `slot_req is not None`.
+            # Chunked prefill: a reserved-but-prefilling slot is occupied yet inactive and must NOT
+            # accrue decode tokens, or it would hit its budget and be evicted mid-prefill.)
+            for b in range(n_slots):
+                if cache.py_active[b]:
                     slot_tokens[b].append(vals[b])
                     slot_times[b].append(t_done)
 
@@ -319,8 +395,12 @@ def serve_continuous(
     cache_kind: Literal["dense", "paged"] = "dense",
     paged_n_blocks: int | None = None,
     paged_use_kernel: bool = False,
+    prefill_chunk_size: int | None = None,
 ) -> ServeResult:
-    """Iteration-level (Orca) scheduling: freed slots are refilled every decode step."""
+    """Iteration-level (Orca) scheduling: freed slots are refilled every decode step.
+
+    ``prefill_chunk_size`` (A1 R4.2) interleaves ⌈L/C⌉-token prefill chunks with decode steps so a
+    long prompt does not head-of-line-block the decode stream; ``None`` = one-shot admission."""
     return serve(
         model,
         requests,
@@ -332,6 +412,7 @@ def serve_continuous(
         cache_kind=cache_kind,
         paged_n_blocks=paged_n_blocks,
         paged_use_kernel=paged_use_kernel,
+        prefill_chunk_size=prefill_chunk_size,
     )
 
 
@@ -385,3 +466,25 @@ def _prefill(
     rows = torch.arange(len(admits), device=dev)
     last = logits[rows, torch.tensor(lens, dtype=torch.long, device=dev) - 1]
     return last.argmax(dim=-1)
+
+
+@torch.no_grad()
+def _prefill_chunk(
+    model: TransformerLM,
+    cache: SlotKVCache,
+    slot: int,
+    offset: int,
+    chunk_ids: Sequence[int],
+    dev: torch.device,
+) -> Tensor:
+    """One chunked-prefill forward — A1 R4.2. Writes ``s`` tokens of a single slot at absolute
+    positions ``[offset, offset+s)`` into the slot's KV via :class:`ChunkPrefillView` and returns
+    the chunk's logits ``(s, vocab)``; the caller reads the last row (position ``offset+s−1``) for
+    the request's first generated token when this is the FINAL chunk. The KV written is bit-identical
+    to a one-shot prefill of the same prompt (RoPE rotates each token at its absolute position), so
+    the emitted token stream is token-exact to the non-chunked path."""
+    x = torch.tensor([list(chunk_ids)], dtype=torch.long, device=dev)  # (1, s)
+    view = ChunkPrefillView(cache, slot, offset)
+    logits = model(x, view)
+    assert isinstance(logits, Tensor)
+    return logits[0]  # (s, vocab)
