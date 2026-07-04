@@ -18,15 +18,26 @@
   thuật ngữ kỹ thuật (tensor, mask, slot, cache, kernel…) giữ tiếng Anh khi tự nhiên hơn.
 - Mỗi bất biến nêu ra phải chỉ được **test nào găm nó** trong `tests/`.
 
-## 🗺️ Lộ trình mastery Performance Engineering (A1→A6 + ISA) — [`roadmap/README.md`](roadmap/README.md)
+## 🗺️ Hai lộ trình mastery — bản đồ học TOÀN BỘ repo, từ first principles
 
-> **Bản đồ học TOÀN BỘ phần perf đã build**, từ first principles xuống tận từng file·hàm·dòng (pin
-> commit `9e61d7a`), 6 série theo thứ tự [S1 serving substrate → S2 engines → S3 CUDA-core kernels →
-> S4 tensor cores+flash → S5 quantization → S6 distributed+ISA]. Định luật xuyên suốt: *decode là
-> memory-bound; B=1 đi 16%→53%→77% của bức tường bộ nhớ*. Mỗi Bài: câu hỏi first-principles → Feynman
-> → cơ chế derive → **trace code thật** → cổng teach-back → frontier. Đây là hàng đợi học của chế độ
-> delegate ([ADR-0013](../adr/ADR-0013-execution-mode-full-delegation.md)) — code ship trước, học sau.
-> Study-queue bên dưới map 1-1 vào các série này.
+Repo có **hai nửa**, mỗi nửa một lộ trình song sinh (mỗi Bài: câu hỏi first-principles → Feynman → dẫn
+xuất → **trace code thật** file·hàm·dòng → cổng teach-back → frontier). Đây là hàng đợi học của chế độ
+delegate ([ADR-0013](../adr/ADR-0013-execution-mode-full-delegation.md)) — code ship trước, học sau.
+
+### 🧠 Lộ trình MODEL — LLM from scratch (CS336 + nanochat + frontier) — [`roadmap_model/README.md`](roadmap_model/README.md)
+> **Nửa MÔ HÌNH**: model HỌC thế nào. 10 série (pin `4ad0ac5`): M1 tokenizer → M2 transformer → M3
+> objective+optimization → M4 training loop → M5 distributed → M6 scaling laws → M7 data → M8 post-training/RL
+> → M9 MoE·MLA·MTP → M10 close-the-loop + F1–F9 ablations. **DERIVATION-first + đối chiếu frontier nặng**
+> (DeepSeek/GLM/Kimi/Qwen/nanochat — bản tham chiếu trong `.venv/.../transformers/models/`). Định luật:
+> *model là bản nén học bằng gradient descent; frontier là các đòn bẩy hội tụ; ablation chứng minh đòn bẩy
+> nào gánh việc.*
+
+### ⚡ Lộ trình PERFORMANCE — serving + kernels — [`roadmap/README.md`](roadmap/README.md)
+> **Nửa TỐC ĐỘ**: model CHẠY NHANH thế nào. 6 série (pin `9e61d7a`): S1 serving substrate → S2 engines →
+> S3 CUDA-core kernels → S4 tensor cores+flash → S5 quantization → S6 distributed+ISA. Định luật: *decode
+> là memory-bound; B=1 đi 16%→53%→77% của bức tường bộ nhớ.*
+
+Study-queue bên dưới map vào các série này. Đọc MODEL trước (dựng model), PERFORMANCE sau (làm nó nhanh).
 
 ## Series 0 — Meta (cách hệ thống vận hành)
 

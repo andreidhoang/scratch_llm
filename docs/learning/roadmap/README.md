@@ -9,6 +9,11 @@
 >
 > **Ngôn ngữ:** tiếng Việt; thuật ngữ kỹ thuật giữ tiếng Anh (roofline, kernel, warp, WGMMA, SQNR…).
 > Toán/số viết plain-text (không LaTeX). Xem [`../INDEX.md`](../INDEX.md) cho quy ước chung.
+>
+> **Anh em song sinh:** lộ trình này là nửa *TỐC ĐỘ* (model chạy nhanh thế nào). Nửa *MÔ HÌNH* — model
+> HỌC thế nào (tokenizer → transformer → optimizer → training → scaling → data → RL → MoE/MLA/MTP →
+> close-the-loop + F1–F9 ablations) — ở [`../roadmap_model/README.md`](../roadmap_model/README.md). Học
+> nửa mô hình trước, nửa tốc độ (đây) sau.
 
 ---
 
