@@ -1,7 +1,8 @@
 name: ci
 
-# Green CI from day one. Fast, CPU-only: lint + types + tests.
-# GPU-marked tests are skipped here and run on a rented GPU box.
+# Green CI from day one. HW-agnostic (CPU torch, no GPU): lint + types + tests.
+# This job MIRRORS the local commit hook (.claude/hooks/green-ci-gate.sh): the exact
+# `pytest -m "not gpu"` floor. GPU-marked tests are skipped here and run on the GPU box.
 on:
   push:
     branches: [main]
@@ -19,11 +20,22 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Set up Python
-        run: uv python install 3.11
+      # A real venv, not `--system`: the runner's /usr interpreter is PEP-668
+      # externally-managed, so `uv pip install --system` fails ("externally managed").
+      # Put .venv/bin on PATH for every later step via $GITHUB_PATH.
+      - name: Set up Python + venv
+        run: |
+          uv python install 3.11
+          uv venv --python 3.11
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
 
-      - name: Install (dev, CPU-only)
-        run: uv pip install --system -e ".[dev]"
+      # torch is not a core/[dev] dep (it is pulled per-environment), but the `not gpu`
+      # suite imports it — install the CPU-only wheel so CI runs the same tests the hook does.
+      - name: Install (dev + CPU torch)
+        run: |
+          uv pip install -e ".[dev]"
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Ruff (lint + import order)
         run: ruff check src tests
@@ -34,5 +46,5 @@ jobs:
       - name: Pyright (types)
         run: pyright
 
-      - name: Pytest (CPU gate)
+      - name: Pytest (CPU gate — mirrors the commit hook)
         run: pytest -m "not gpu and not slow" --cov=scratch_llm
