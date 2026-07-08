@@ -224,7 +224,12 @@ def test_loss_at_init_is_log_vocab() -> None:
     with torch.no_grad():
         log_probs = get_response_log_probs(model, input_ids, labels)["log_probs"]
     nll = masked_mean(-log_probs, mask).item()
-    assert abs(nll - math.log(vocab)) < 0.3, f"init NLL {nll:.3f} vs log V {math.log(vocab):.3f}"
+    # Band 0.5, not 0: at init NLL = log V + E[logsumexp(z) − z̄], a strictly-positive excess set by
+    # the logit variance. For this toy (d_model=32, vocab=64) the untied head — Linear(32→64), init
+    # std √(2/96) on unit-RMS input — gives logit_std ≈ 0.8 ⇒ a steady excess ≈ 0.4 (measured across
+    # seeds). A real head/embedding/norm bug moves NLL far off log V (wrong order of magnitude); the
+    # ~10% excess is expected init physics, not the bug this discipline gate catches.
+    assert abs(nll - math.log(vocab)) < 0.5, f"init NLL {nll:.3f} vs log V {math.log(vocab):.3f}"
 
 
 # --------------------------------------------------------------------------------------------
