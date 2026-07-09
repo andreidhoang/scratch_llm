@@ -672,6 +672,31 @@ d20 headline). The nano pre-flight (`--nano`, CPU, ~1 min) is the cheap gate bef
 rental. Report-card harness (`eval/`): `val_bpb` + MC (ARC/MMLU) + generative (GSM8K/HumanEval) +
 CORE-style aggregate, 8 tests. Next: F1 iso-FLOP on the real loop, then F2 MTP.
 
+### Pre-registration — A1 real-corpus shards (2026-07-09, MEASURED same day)
+
+**Hypothesis.** A headerless memmap token-shard format (nanoGPT/nanochat convention: raw
+little-endian uint16, one `<|eot|>` id after every document, `.meta.json` sidecar) feeds
+`train.py::get_batch` unchanged and replaces the in-RAM toy corpus as the pretrain data path —
+the piece every downstream rung (A2 chaining, F1-run, midtrain/SFT, the d20) consumes. Base spec
+is nano-only; the ~11B-token shuffled multi-shard streamer is the §D d20 extension (deferred).
+
+| rung | falsifier | predicted (pre-reg) | KILL if | measured |
+|---|---|---|---|---|
+| A1 round-trip | shard bytes → ids == `encode(d0)+[eot]+encode(d1)+[eot]` | byte-exact | any drift | **PASS** (`tests/test_shards.py`, byte-exact incl. sidecar meta) |
+| A1 size | file bytes == `2·n_tokens`, zero header/padding | exact | format needs a header | **PASS** — headerless `.bin` == 2·n_tokens exactly |
+| A1 alignment | `get_batch` on the loaded memmap: `targets` == stream shifted by one | exact, dtype int64 | misalignment or dtype break | **PASS** — every sampled window located uniquely in the stream, targets = shift-by-one, int64 via `.long()` (torch 2.12 consumes the uint16 memmap directly) |
+| A1 dtype kill-switch | any token id ≥ 2¹⁶ | auto-switch to uint32, `4·n_tokens` bytes, meta records it | silent overflow/wraparound | **PASS** — ids straddling 2¹⁶ produce a uint32 shard, 4·n bytes, values exact |
+| A1 FineWeb compression | bytes/token of a FineWeb-EDU slice under our slice-trained BPE | ∈ [3.0, 5.0] B/tok | < 2.5 (trainer under-merging) or > 6 | **3.804 B/tok** — 64 real docs (246,033 B) → 64,742-token uint16 shard, vocab 4096, BPE train 6.4 s |
+| A1 real-corpus nano | trained-nano `val_bpb` vs random-init `val_bpb` on the shard tail | trained ≤ 0.7 × random-init | trained ≥ random-init (nothing learned from real text) | **ratio 0.467** — trained 1.393 vs random-init 2.979 bpb (5.31M params, 200 steps, CPU-Mac 594 s; sample = web-English-shaped babble, as it should be at this scale) |
+
+**Verdict (A1 — 2026-07-09, `data/shards.py` + 10 tests green).** The shard substrate holds all four
+format falsifiers and both real-corpus numbers, first try. Honesty caveats: (a) the nano `val_bpb`
+tail is **in-sample** (the model trained on the whole shard — a held-out split arrives with the A2
+stage spine; the trained-vs-random margin is still meaningful because both see the same tail); (b)
+run on the **CPU Mac**, not the sm120 box — these are correctness/learning signals, not perf numbers.
+`speedrun --data-dir <dir>` is now the real-corpus path; the ~11B-token shuffled streamer stays the
+§D d20 extension. Next: **A2 checkpoint chaining**, then **F1-run**.
+
 ---
 
 ## Perf track (A4 — flash attention)

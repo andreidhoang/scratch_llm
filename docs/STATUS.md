@@ -15,9 +15,11 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 >
 > **✅ THE LOOP CLOSES (2026-07-04):** F1 Muon · train-wiring/F4 (bf16/compile + NaN guard) · eval
 > report card (`val_bpb`/MC/generative/CORE-style) · `speedrun.py` + `scripts/speedrun.sh` spine all
-> SHIPPED + pushed — GPU-verified end-to-end talking sample (`RESULTS.md` §Phase 0). **▶ NEXT NODE →
-> A1** (real-corpus shards) → A2 → F1-run. **The buildable next-phase DAG (23 rungs, code-grounded,
-> EV-ranked, with a START-HERE block) is [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)** — a
+> SHIPPED + pushed — GPU-verified end-to-end talking sample (`RESULTS.md` §Phase 0). **A1 real-corpus
+> shards ✅ 2026-07-09** (`data/shards.py` + shard-backed `speedrun --data-dir`, FineWeb-EDU slice
+> measured). **▶ NEXT NODE → A2** (checkpoint chaining) → F1-run. **The buildable next-phase DAG (23
+> rungs, code-grounded, EV-ranked, with a START-HERE block) is
+> [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)** — a
 > fresh session reads that + the SessionStart `frontier node →` line and builds immediately.
 
 **As of 2026-07-03: A1 substrate complete; perf-curriculum A1 serving rungs R0–R4.1 SHIPPED &

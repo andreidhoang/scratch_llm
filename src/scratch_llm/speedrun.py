@@ -4,6 +4,10 @@ Chains the stages that turn a corpus into a model you can sample from:
 
     tokenizer (byte-level BPE) → pretrain (MuonAdamW) → eval (report card) → sample
 
+or, with ``data_dir`` set (A1), pre-built shards replace the tokenizer stage:
+
+    shards (data/shards.py: tokenizer.json + *.bin memmap) → pretrain → eval → sample
+
 scaled by a single ``depth`` knob (nanochat's aspect-ratio scaling: ``d_model = 64·depth``,
 ``head_dim = 128``). Midtraining / SFT / RL are documented follow-on stages that reuse the same
 ``train`` loop + ``algos/`` (F2/F7) and are omitted from the **nano pre-flight** — whose only job is
@@ -24,6 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
+from scratch_llm.data.shards import load_dataset_tokens, load_tokenizer
 from scratch_llm.eval import ReportCard, build_report_card
 from scratch_llm.model import ModelConfig, TransformerLM
 from scratch_llm.sampling import SamplingParams, generate
@@ -54,6 +59,10 @@ class SpeedrunConfig:
     device: str = "cpu"
     seed: int = 0
     corpus_path: str | None = None  # None ⇒ the built-in nano corpus
+    # A1 shard-backed path: a dataset dir built by data/shards.py (tokenizer.json + *.bin).
+    # When set, corpus_path/vocab_size are ignored — the staged tokenizer defines the vocab axis.
+    data_dir: str | None = None
+    shard_glob: str = "*.bin"
     sample_tokens: int = 48
     sample_temperature: float = 0.8
 
@@ -118,18 +127,28 @@ def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
     t0 = time.perf_counter()
     stages: list[str] = []
 
-    text = _load_corpus(cfg)
-    tokenizer = _train_tokenizer(text, cfg.vocab_size)
-    stages.append("tokenizer")
+    if cfg.data_dir is not None:
+        # A1 shard-backed pretrain: tokens + the tokenizer that produced them come from disk.
+        tokenizer = load_tokenizer(cfg.data_dir)
+        tokens = load_dataset_tokens(cfg.data_dir, cfg.shard_glob)
+        vocab_size = len(tokenizer.vocab)  # the shard ids' true axis, not cfg.vocab_size
+        prompt_ids = [int(t) for t in tokens[:8]]
+        stages.append("shards")
+    else:
+        text = _load_corpus(cfg)
+        tokenizer = _train_tokenizer(text, cfg.vocab_size)
+        tokens = np.asarray(tokenizer.encode(text), dtype=np.int64)
+        vocab_size = cfg.vocab_size
+        prompt_ids = tokenizer.encode(text[:24])
+        stages.append("tokenizer")
 
-    tokens = np.asarray(tokenizer.encode(text), dtype=np.int64)
     if tokens.size <= cfg.context_length + 1:
         raise ValueError(
             f"corpus encodes to {tokens.size} tokens, too short for context_length "
-            f"{cfg.context_length}; supply a larger --corpus or a smaller --context."
+            f"{cfg.context_length}; supply a larger --corpus/--data-dir or a smaller --context."
         )
 
-    model = TransformerLM(model_config_for_depth(cfg.depth, cfg.vocab_size, cfg.context_length))
+    model = TransformerLM(model_config_for_depth(cfg.depth, vocab_size, cfg.context_length))
     train(
         TrainConfig(
             max_steps=cfg.train_steps,
@@ -152,7 +171,7 @@ def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
     # in-sample — the pre-flight proves the metric computes; a real run supplies a held-out split
     # via --corpus. num_bytes = the UTF-8 byte length the slice decodes to.
     val_len = min(cfg.context_length * 4, tokens.size // 2)
-    val = tokens[-val_len:]
+    val = np.asarray(tokens[-val_len:], dtype=np.int64)  # int64 copy: shards memmap as uint16
     val_bytes = len(tokenizer.decode(val.tolist()).encode("utf-8"))
     card = build_report_card(
         model,
@@ -164,7 +183,6 @@ def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
     )
     stages.append("eval")
 
-    prompt_ids = tokenizer.encode(text[:24])
     budget = max(1, min(cfg.sample_tokens, cfg.context_length - len(prompt_ids) - 1))
     gen_ids = generate(
         model,
@@ -222,6 +240,11 @@ def main() -> None:
     p.add_argument(
         "--corpus", default=None, help="Path to a text corpus (default: built-in nano corpus)."
     )
+    p.add_argument(
+        "--data-dir",
+        default=None,
+        help="Shard dataset dir from data/shards.py (overrides --corpus/--vocab).",
+    )
     args = p.parse_args()
 
     cfg = (
@@ -239,6 +262,7 @@ def main() -> None:
             compile=args.compile,
             device=args.device,
             corpus_path=args.corpus,
+            data_dir=args.data_dir,
         )
     )
     print(run_speedrun(cfg).summary())

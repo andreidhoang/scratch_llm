@@ -16,13 +16,14 @@
 > **Reference oracle available:** the venv vendors `transformers/models/{deepseek_v2,deepseek_v3,
 > deepseek_v32,glm4_moe,nanochat,qwen3}` — read these as implementation oracles (re-own, don't copy).
 
-<!-- Next-node: A1 real-corpus shards (data/shards.py) → A2 checkpoint chaining → F1-run iso-FLOP · UPDATE this line when a rung ships -->
+<!-- Next-node: A2 checkpoint chaining → F1-run iso-FLOP (A1 real-corpus shards ✅ 2026-07-09) · UPDATE this line when a rung ships -->
 
 > ▶ **START HERE (fresh session).** The loop is **CLOSED** (F1 Muon · train-wiring/F4 · eval report
-> card · speedrun spine shipped, GPU-verified talking sample). **Next node → A1** (real-corpus shards,
-> `data/shards.py`), then **A2** (checkpoint chaining) → **F1-run** (the *pending* iso-FLOP
-> Muon-vs-AdamW headline). Full order + deps in §0; each rung's interfaces/tests/falsifier/kill in
-> §A/§B; near-term picks in §E.
+> card · speedrun spine shipped, GPU-verified talking sample). **A1 real-corpus shards ✅ 2026-07-09**
+> (`data/shards.py`: memmap uint16/uint32 shards + staged tokenizer + FineWeb slice + shard-backed
+> `speedrun --data-dir`; measured in `bench/RESULTS.md` §Frontier). **Next node → A2** (checkpoint
+> chaining) → **F1-run** (the *pending* iso-FLOP Muon-vs-AdamW headline). Full order + deps in §0;
+> each rung's interfaces/tests/falsifier/kill in §A/§B; near-term picks in §E.
 >
 > **Build protocol — every rung, no exceptions:** ① pre-register the rung's falsifier in
 > `bench/RESULTS.md` §Frontier ablations *before* running (predict-before-run) → ② build **test-first**
