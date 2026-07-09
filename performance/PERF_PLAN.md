@@ -102,6 +102,23 @@ LINCHPIN realized: the static buffer + serve() harness from R3b is the substrate
   measures against (bench/continuous.py is the standing workload).
 ```
 
+> **⚠ 2026-07-09 frontier re-verification (read before the rental days).** A perf/kernel/serving/hiring
+> deep-research pass (`wf_f3af3987-949`, primary-source-verified) re-pointed the highest-value work —
+> verdict in `docs/PERFORMANCE_TRACK.md` §2.1 + §6. Load-bearing deltas for the remaining rungs: **(1)**
+> the **headline attention kernel is FA4-class on Blackwell in CuTe DSL** (arXiv 2603.05451; FA4 is 100%
+> CuTe-DSL Python, 1605 TF/s B200/71%), not FA3-on-H100 — reframe A4 R4; **(2) ADD a CuTe-DSL / TileLang
+> authoring rung** — CUTLASS 4.0 + FA4 + Qwen FlashQLA are all Python-DSL-authored (hand-PTX stays as the
+> understanding layer, since the DSL lowers to PTX); **(3)** the tcgen05/NVFP4 GEMM is now **vendor-served
+> by CUTLASS 4.0** (+ SM100 MLA/FMHA in 4.3.0) → understand+use, don't reimplement; **(4)** the A6 serving
+> day is **still the right teaching example** but should explicitly build the **wide-EP stack** (DeepEP
+> all-to-all · EPLB · Dual-Batch-Overlap · PD-disagg-as-*required* · CUDA-graph FULL_AND_PIECEWISE), not
+> just TP×EP+MLA-KV; DeepSeek-**V4-Flash** (285B, Blackwell) is a fresher optional target (R1 physics still
+> teaches, vLLM serves it at 2.2k tok/s/H200); **(5) DELTA is the #1 artifact — but RE-SCOPED:** FLA
+> already ships a *standard-precision* GDN-2 `fused_recurrent` decode kernel, so DELTA's only scarce niche
+> is the **fp8/nvfp4 recurrent-state decode path** (benchmark vs FLA's baseline); build it **married to the
+> model-side F10 Gated-DeltaNet** (architecture↔kernel co-design = the scarcest signal; comp evidence
+> UNVERIFIED — RQ6). Details + per-rung table + Blackwell/sm120 correctness note: §6.
+
 > **Reset 2026-07-01.** Built from scratch: the exploratory Jun-29 perf kernels were removed (tag
 > `pre-perf-kernel-reset`). Foundations reused: the `scratch_llm.bench` measurement apparatus,
 > `sampling.generate` (token-exact decode), CS336 A2 FA2.

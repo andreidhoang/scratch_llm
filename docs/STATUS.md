@@ -9,9 +9,16 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > rental-gated; serving numbers were measured on random-weight toys, `bench/RESULTS.md:383`), then
 > run an EV-ranked, pre-registered, iso-FLOP **frontier ablation study** (F1 MuonAdamW · F2 MTP
 > draft head · F3 de-confound serving · F4 bf16+compile · F5 MLA-real · F6 MoE-balancing · F7 GRPO
-> "aha" · F8 DSA · F9 logit-guard). Runs **in parallel** with perf + DELTA. Spec + DAG:
+> "aha" · F8 DSA · F9 logit-guard · **F10 hybrid linear attention · F11 agentic/tool-use RL**). Runs
+> **in parallel** with perf + DELTA. Spec + DAG:
 > [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md); ledger `bench/RESULTS.md` §Frontier
 > ablations. Headline artifact = **nanochat d20** (~561M, ~$100, 8×H100), target CORE ≈ GPT-2.
+> **🔁 Re-verified vs the mid-2026 frontier (2026-07-09, `ABLATIONS.md` §10 + `PERFORMANCE_TRACK.md`
+> §2.1/§6):** F1 Muon deflated → recalibrate to a tuned-baseline 1.1–1.4× band; F7 reframed
+> "reproduce"→"debunk the aha via a random-reward control"; F4 stretch FP8→NVFP4; F8 promoted to core;
+> **F10/F11 added**; nanochat numbers corrected (vocab 32768, D:N 8, base CORE 0.22). Perf: kernel
+> authoring moved to Python DSLs (FA4 = CuTe-DSL); **DELTA re-scoped** to the FP8/NVFP4 GDN-2 *decode*
+> kernel (FLA already ships the standard-precision one) married to F10 = the #1 co-designed artifact.
 >
 > **✅ THE LOOP CLOSES (2026-07-04):** F1 Muon · train-wiring/F4 (bf16/compile + NaN guard) · eval
 > report card (`val_bpb`/MC/generative/CORE-style) · `speedrun.py` + `scripts/speedrun.sh` spine all
@@ -134,10 +141,14 @@ runbook ready (`deploy/runbooks/A5_countdown_aha.md`). Historical framing below 
 Countdown (Qwen2.5-1.5B; CPU-scaffolded + one ~$30–100 burst). The A2 distributed finish + OSS Rung-1
 run in parallel; **DELTA is base-first** — its kernel is gated behind the A5 ship + the Step-0 gate.
 
-**Capstone — DELTA (GDN-2 decode kernel):** design doc + 4-week barbell plan written & fact-checked
-against primary sources (2026-06-14); **no kernel code yet** — build gated on the Step-0 dependency
-gate. Tracked in the Capstone section below; the build spine is in
-[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7.
+**Capstone — DELTA (GDN-2 *low-precision* decode kernel — re-scoped 2026-07-09):** design doc + 4-week
+barbell plan written & fact-checked (2026-06-14); **no kernel code yet** — build gated on the Step-0
+dependency gate. **Scope correction (perf re-verification, `PERFORMANCE_TRACK.md` §6 + `PERF_ENGINEERING_
+SPEC.md` §4/A7.2):** GDN-2 (arXiv 2605.22791) is already in flash-linear-attention incl. a
+*standard-precision* `fused_recurrent` decode kernel, so DELTA's only defensible scarcity is the
+**FP8/NVFP4 recurrent-state decode path**, benchmarked against FLA's baseline, built **married to F10**
+(model-side GDN-2) = architecture↔kernel co-design. Author in a Python DSL (TileLang/CuTe DSL). Tracked
+below; build spine in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7.
 
 ---
 

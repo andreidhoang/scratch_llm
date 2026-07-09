@@ -110,6 +110,72 @@ more; MiniMax CISPO clips the IS weight. Mandatory dashboard: entropy · KL(cur�
 **separately** · IS-ratio histogram · reward+`frac_reward_zero_std` · **length** (verbosity hacking:
 1171→2343 tokens). Dr.GRPO drops the length/std norm that causes "wrong answers get longer."
 
+### 2.1 — 2026-07-09 refresh (perf/kernel/serving re-verification `wf_f3af3987-949`, primary-source)
+
+The §2 findings above (2026-06-29) hold; four things moved since, and they **re-point the highest-paying
+signal toward architecture↔kernel co-design.** Full per-rung verdict below in §6.
+
+- **Kernel *authoring* moved to Python DSLs — but the PTX understanding did not become optional.** `[FACT]`
+  **FlashAttention-4** (arXiv **2603.05451**, 5 Mar 2026, MLSys-26 oral; Tri Dao et al.) is **written
+  entirely in CuTe-DSL (Python), zero CUDA C++** — it lowers to PTX → ptxas → SASS — and hits **1605
+  TFLOP/s B200 BF16 = 71%** (Blackwell-native: TMEM accumulators, fully-async 5th-gen tensor cores, 2-CTA
+  MMA), **20–30× faster compile** than C++ templates. **CUTLASS 4.0** (2025-06-03) shipped the **CuTe DSL**
+  ("write high-perf GPU kernels in Python"); 4.3 added SM100 FMHA-bwd + MLA in the DSL. **Nuance the
+  verifier flagged:** this is NOT "PTX is dead" — C++ CUTLASS is still developed and the DSL *lowers to
+  PTX*, so TMEM/2-CTA/async-tensor-core understanding is the prerequisite for writing good CuTe DSL. →
+  **Curriculum update:** the hand-PTX WGMMA/tcgen05 rungs are the *understanding layer* (keep — they're
+  the SASS you must read); **ADD a CuTe-DSL authoring rung** (author the DELTA/FA kernel in CuTe DSL,
+  diff against the hand-PTX version). Hand-sm90a-WGMMA-at-80%-cuBLAS is now closer to *table-stakes
+  understanding*; the 2026 differentiator is authoring in the DSL **and** explaining the PTX it emits.
+- **FA3 is one generation behind; FA4/Blackwell/CuTe-DSL is the headline.** The A4 "FA3-class Hopper
+  kernel" stays as *understand the Hopper warp-spec generation*, but the **headline attention artifact is
+  FA4-class on Blackwell in CuTe DSL** — and the standing sm120 card + the B200 rental are Blackwell.
+- **Linear-attention decode is a live problem — but DELTA's scarcity is NARROWER than first framed
+  (corrected).** `[FACT]` **GDN-2** (Gated DeltaNet-2, NVIDIA, arXiv **2605.22791**, 2026-05-22 —
+  Hatamizadeh/Choi/Kautz; channel-wise erase gate `b_t` + write gate `w_t`, generalizing Gated DeltaNet
+  and KDA) is real and current and beats Mamba-2/GDN/KDA/Mamba-3. At batch-1 GDN decode is **memory-bound**
+  — the full fixed-size recurrent state round-trips HBM every token (arXiv 2603.05931). **⚠ Correction to
+  the first draft of this note:** GDN-2 is **already in flash-linear-attention (FLA)** at BOTH the layer
+  (`fla/layers/gdn2.py`) AND the kernel level — **including a *standard-precision* `fused_recurrent` DECODE
+  kernel** (`fla/ops/gdn2/fused_recurrent.py`). Qwen's **FlashQLA** (TileLang, v0.1.2 2026-07-09) is
+  chunked-**prefill only**. So DELTA is **NOT** greenfield at the architecture level *or* the plain-decode
+  level — **its ONLY defensible scarcity is the FUSED LOW-PRECISION (FP8/NVFP4) recurrent-*state*
+  materialization decode path**, which is absent across all surveyed libraries. Low precision directly cuts
+  the HBM round-trip that bounds batch-1 decode → it's a real win, not a bandwidth dead-end (the stronger
+  "HBM-bounded, fusion/precision can't help" framing was **refuted 0-3**). → **Re-scope DELTA to exactly
+  the fp8/nvfp4 state-read/write decode kernel on the GDN-2 two-gate recurrence, benchmarked against FLA's
+  `fused_recurrent` (standard-precision) as the baseline oracle.** With that re-scope it stays the
+  program's **#1 co-designed artifact** married to F10 (see §6) — author it in a DSL (TileLang / CuTe DSL).
+- **Serving: wide-EP disaggregated is now the *required* production shape.** `[FACT]` Large-scale MoE
+  serving in 2026 = **DeepEP all-to-all + EPLB (expert-parallel load balancing) + Dual-Batch Overlap
+  (DBO) for decode + PD-disaggregation + CUDA-graph FULL_AND_PIECEWISE.** PD-disagg is **architecturally
+  required** (not just an optimization): DeepEP runs two dispatch modes — Normal (prefill) and
+  Low-Latency/CUDA-Graph (decode) — that can't coexist in one engine. SGLang reproduces DeepSeek's PD +
+  wide-EP on 96×H100 (~52k in / 22k out tok/s/node); vLLM ~2.2k tok/s/H200 for R1. The A1 primitives are
+  the right foundation; the A6 serving day should name the wide-EP stack. **Freshness:** the canonical
+  frontier-MoE serving target moved to **DeepSeek-V4** (1.6T Pro / 285B Flash, 1M ctx, Blackwell 8×B200/
+  B300) by Apr 2026 — R1-671B's *physics* still teaches (MLA KV, EP-vs-TP, routing), but flag it as the
+  baseline, V4-Flash/Kimi-K2/GLM-5 as the current flag. EAGLE-3.1 + Kimi-K2.6 draft models (TorchSpec)
+  make draft-model spec-decode a maintained 2026 workflow (→ F2b MTP drafter).
+- **Precision: NVFP4 confirmed the right bet — but the *vendor GEMM* now exists.** `[FACT]` NVFP4 ≫ MXFP4
+  (arXiv 2603.08747: Qwen2.5-0.5B WikiText PPL **21.63 vs 36.71**; 7B 6.47 vs 7.31). **Nuance (don't
+  over-claim):** the gap **shrinks with scale** (~70% at 0.5B → ~13% at 7B — "≫" is strongest for small
+  models), calibration (MR-GPTQ/OAS) closes most of MXFP4's gap, and MXFP4 has broader ecosystem adoption
+  (OpenAI gpt-oss). NVFP4-W4A4 ~6–8k tok/s (1.7–2× A100 on Blackwell). **CUTLASS 4.0 already ships NVFP4/
+  MXFP4/MXFP6/MXFP8 block-scaled GEMM via tcgen05** — so a hand-rolled tcgen05/NVFP4 GEMM is
+  **table-stakes-vs-vendor**; reframe A3 §4.3 / A5 R3 as *understand the two-level scaling + beat MXFP4 for
+  the documented reason + use the vendor primitive well*, not "reimplement the kernel." NVFP4 was not yet
+  the vLLM inference default as of late 2025 (FP4 kernels still maturing).
+- **Hiring signal (honest, `[INFERENCE]` on comp).** Frontier labs carry **dedicated** kernel/perf roles
+  (Anthropic May-2026: "TPU Kernel Engineer", "GPU Performance Engineer") screening for exactly this
+  cluster — serving, batching, quantization, **hardware↔software co-design.** Caveat (FOP-4): infra/perf
+  is a *minority of headcount* (Anthropic ~26 infra vs 71 research/eng vs 87 sales of 346+), and this
+  pass **could not verify specific comp bands** (job pages are JS-SPAs; salary didn't render) — so treat
+  "$X total-comp" claims as unverified. The verified signal is *skill-demand + scarcity*, not a number.
+  **The scarcest, highest-leverage artifact class = architecture↔kernel co-design** (own the model *and*
+  the kernel), which is precisely DELTA+F10 — not a reproduced GEMM (vendor-served) or a serving engine
+  (well-trodden).
+
 ---
 
 ## 3. The 80/20 build spine — RETIRED; each item's resolution (2026-07-03)
@@ -148,7 +214,40 @@ git history (`1a0900c`). Where every item landed:
 - DeepSeek-V3 **2.788M H800-hrs / $5.576M = final-run rent-equivalent, not total R&D.**
 - Decode tok/s lower bound = `(weights + KV bytes) / HBM_BW`.
 
-## 6. Pointers
+## 6. Per-rung perf verdict (2026-07-09 re-verification — §2.1 sources)
+
+Verdict legend: ✅ CONFIRMED high-value · ⚖️ TABLE-STAKES (necessary, do-well-but-not-a-headline) ·
+✏️ NEEDS-UPDATE (reframe to the 2026 generation) · ⬇️ COMMODITY / vendor-served.
+
+| Rung | Verdict | 2026 reality → action |
+|---|---|---|
+| **A1 serving** (paged KV · continuous batch · PD-disagg · spec-decode · CUDA-graph decode · MLA toy) | ✅ | Correct 2026 foundation. Add the wide-EP names (DeepEP · EPLB · DBO) and that **PD-disagg is now *architecturally required*** for wide EP (two DeepEP dispatch modes can't co-exist). |
+| **A2 CUDA-core ladder** (GEMV→GEMM 134% cuBLAS-proxy) | ⚖️ | Table-stakes kernel fluency. Necessary floor; not a differentiator. Keep, don't over-polish. |
+| **A3 tensor cores** (WMMA→mma.sync→WGMMA→tcgen05, hand-PTX) | ✏️ | The hand-PTX is the *understanding layer* (keep — the SASS you must read). **ADD a CuTe-DSL authoring rung** — FA4 & CUTLASS 4.0 are Python-DSL-authored; 2026 kernels ship in the DSL. |
+| **A4 FlashAttention** (FA2 done, FA3-Hopper deferred) | ✏️ | FA2 = table-stakes. FA3 = *understand the Hopper generation*. **Headline = FA4-class on Blackwell in CuTe DSL** (arXiv 2603.05451; TMEM/2-CTA; 1605 TF/s/71%) — the standing sm120 + B200 are Blackwell. |
+| **A5 quantization** (NVFP4/MXFP4/FP8-KV/AWQ) | ✅→⚖️ | NVFP4 numerics = the right Blackwell bet (✅, NVFP4≫MXFP4 verified). But **the tcgen05/NVFP4 *GEMM* is vendor-served (CUTLASS 4.0)** → reframe A3§4.3/A5R3 as understand+beat-MXFP4+use-the-primitive, not reimplement (⚖️). |
+| **A6 8×H200 R1-serving day** | ✅✏️ | Physics still teaches (MLA KV · EP-vs-TP · routing · PD-disagg). But **R1-671B is dated** — name **DeepSeek-V4-Flash (285B, Blackwell) / Kimi-K2 / GLM-5** as the current flag; R1 = the teaching baseline. Add the DeepEP/EPLB/DBO stack. |
+| **A7 capstone** (WGMMA GEMM · FP8 FA3 attn · NVFP4 GEMM + OSS PR) | ⚖️✅ | The three kernels reproduce vendor-served frontier (⚖️) — the **OSS PR is the hiring artifact** (a merged PR to FlashInfer/vLLM/CUTLASS). Reframe two of the three toward CuTe-DSL/FA4-class + point the capstone at **DELTA as the payload**. |
+| **DELTA** (GDN-2 **low-precision** fused *decode* kernel) | ✅ **#1 — re-scoped** | GDN-2 is a live NVIDIA arch (2605.22791) beating all linear-attn baselines. **⚠ FLA already ships a standard-precision GDN-2 `fused_recurrent` decode kernel** — so DELTA is **only** scarce as the **fp8/nvfp4 recurrent-*state* decode path** (absent everywhere). **Re-scope to exactly that + benchmark vs FLA's `fused_recurrent` baseline.** So-scoped it's the #1 co-designed artifact with F10 — author in a DSL (TileLang/CuTe). |
+
+**Blackwell / sm120 correctness note (verified):** on datacenter Blackwell (sm100) the Hopper **WGMMA
+(`wgmma.mma_async`) is deprecated**, replaced by **`tcgen05.mma` (UMMA) + Tensor Memory (TMEM, 256 KB/SM)**
+— so a hand-sm90a-WGMMA kernel targets a superseded ISA on the newest silicon, and **FA3 does not run on
+B200** (Hopper-bound). Crucially, **the standing sm120 consumer card has NO tcgen05/TMEM** (ptxas rejects
+`tcgen05.mma` for sm_120 → extended `mma.sync`), which *validates* the curriculum's decision to keep
+tcgen05/WGMMA as compile-verify-only, gated to the H100/B200 rentals. The FA3-on-H100 rung's transferable
+value is the **primitives** (TMA · warp-spec · pipelining · online-softmax), not the WGMMA *kernel*.
+
+**One-line perf thesis (2026):** the durable signal is the *roofline/predict-the-number discipline* (§0)
+plus **architecture↔kernel co-design** `[INFERENCE — comp evidence did not survive verification, RQ6
+unanswered]` — the DELTA GDN-2 **low-precision** decode kernel (re-scoped, vs FLA's standard-precision
+baseline) married to the F10 model-side Gated-DeltaNet is the one artifact here that no surveyed library
+ships. Everything else is table-stakes fluency (A2/A5-GEMM, now vendor-served by CUTLASS 4.x) or a
+reproduction whose hiring value is the landed **OSS PR**, not the kernel. **Honest caveat:** whether this
+niche co-design out-signals a broadly-useful OSS PR (FP8 attention / NVFP4 GEMM / Wide-EP) for the
+highest-paying roles is an *open question* — the research found **no verifiable 2026 comp data** (RQ6).
+
+## 7. Pointers
 
 - **The operating perf plan (current node, phases, rentals): `../performance/PERF_PLAN.md` +
   `../performance/PERF_ENGINEERING_SPEC.md`** — this doc is its reference layer.

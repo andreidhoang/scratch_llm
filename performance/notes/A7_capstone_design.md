@@ -49,3 +49,42 @@ A7 Track B runs on the **H100 day** (WGMMA GEMM + FA3) and the **B200 day** (NVF
 into those rentals — no separate cluster. Gate to start: A1–A6 at "Strong" (A1–A5 sm120 ✅; A6 primitives
 gloo-verified ✅; the ISA rungs compile-verified ✅). The DELTA GDN-2 spike (private workspace) then sits
 on this base — same infrastructure, one deep differentiating artifact.
+
+## 5. Re-verification 2026-07-09 — elevate DELTA to the headline; add the DSL layer
+
+A perf/hiring deep-research pass (`wf_f3af3987-949`, primary-source-verified — findings in
+`docs/PERFORMANCE_TRACK.md` §2.1 + §6) re-checked this capstone against the mid-2026 frontier. Two
+structural updates that maximize the highest-paying-role signal:
+
+**(a) DELTA is the #1 artifact — but re-scoped to the ONE thing no library ships: the fused
+LOW-PRECISION decode kernel.** `[FACT]` GDN-2 (Gated DeltaNet-2, NVIDIA, arXiv **2605.22791**, May 2026 —
+channel-wise erase+write gates, generalizing GDN and Kimi-KDA) beats Mamba-2/GDN/KDA/Mamba-3, biggest
+gains on long-context RULER. At batch-1 GDN decode is **memory-bound** — the fixed-size recurrent state
+round-trips HBM every token (arXiv 2603.05931). **⚠ Correction (second research pass):** GDN-2 is **already
+in flash-linear-attention (FLA)** at the layer (`fla/layers/gdn2.py`) *and* the kernel level — **including a
+standard-precision `fused_recurrent` DECODE kernel** (`fla/ops/gdn2/fused_recurrent.py`). Qwen's FlashQLA
+is chunked-**prefill only**. So DELTA is **not** greenfield at the arch level *or* the plain-decode level;
+its **only defensible scarcity is the FP8/NVFP4 recurrent-*state* materialization decode path** — low
+precision directly cuts the HBM round-trip that bounds batch-1 decode (the "HBM-bounded, precision can't
+help" framing was refuted 0-3). → **Re-scope DELTA to exactly the fp8/nvfp4 state-read/write decode kernel
+on the GDN-2 two-gate recurrence, benchmarked against FLA's `fused_recurrent` as the baseline oracle.**
+So-scoped, it stays the payload — the three A2–A5 kernels are the warm-up + reusable primitives (a fast
+low-precision GEMM = the GDN state projection) — built *married to F10* (model-side Gated-DeltaNet in
+`linear_attn.py`). Architecture↔kernel co-design is the scarcest RE signal `[INFERENCE — RQ6 comp evidence
+did not survive verification]`; whether this niche out-signals a broadly-useful OSS PR is an open question.
+
+**(b) Author in a Python DSL (CuTe DSL / TileLang), not only hand-PTX.** `[FACT]` **FlashAttention-4**
+(arXiv 2603.05451, Mar 2026, MLSys oral) is **written entirely in CuTe-DSL (Python), zero CUDA C++** —
+1605 TF/s B200 BF16 (71%), Blackwell-native (TMEM, 2-CTA MMA), 20–30× faster compile. **CUTLASS 4.0**
+(Jun 2025) made Python the kernel-authoring surface; FlashQLA uses **TileLang**. The hand-PTX WGMMA/
+tcgen05 work stays (it is the SASS you must be able to read — the DSL lowers to PTX), but the capstone's
+authored kernels — above all DELTA — should be **written in CuTe DSL or TileLang** to match how 2026
+frontier kernels actually ship. Deliverable framing: "here is the CuTe-DSL kernel, here is the PTX it
+lowers to, here is why it hits X% of the roofline" — that pairing is the 2026 kernel-engineer signal.
+
+**(c) Generation refresh.** FA3-on-H100 = *understand the Hopper warp-spec generation*; the **headline
+attention kernel is FA4-class on Blackwell** (the standing sm120 + B200 rental are Blackwell). The
+tcgen05/NVFP4 GEMM is now **vendor-served by CUTLASS 4.0** → its value is understanding + beating MXFP4
+for the documented reason + using the primitive well, not reimplementing it. The OSS-PR target that
+carries the most signal is a **linear-attention decode contribution** (FlashInfer / vLLM / the FLA
+ecosystem), i.e. a productized slice of DELTA — the gap FlashQLA leaves open.

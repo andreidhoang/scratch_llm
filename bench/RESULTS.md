@@ -622,6 +622,20 @@ embed/head tensor** (`model.py:917`) + all 1-D params stay on AdamW.
 | F1 iso-FLOP (30–50M) | val loss vs AdamW at fixed C=6ND | Muon reaches AdamW loss with ≥15% fewer tokens (or ≥0.02 nats lower @ iso-FLOP) | token saving <5% or divergence at reused AdamW LR | — pending (needs the training run — task 7 wiring + GPU) |
 | F1 NS overhead | wall-clock of Newton–Schulz vs step | <1% (analytic bound T·m/B) | >3% | — pending (GPU) |
 
+> **⚠ Pre-run recalibration — 2026-07-09 (BEFORE the F1 run; not a post-hoc goalpost move).** A second
+> research pass (`wf_b5d7adde-3bf`, primary-source-verified — see `docs/FRONTIER_2026_ABLATIONS.md` §10)
+> found the Muon-vs-AdamW edge is **deflated + scale-dependent**: **1.4×@0.1B → 1.1×@1.2B vs a *tuned*
+> AdamW** (Wen *Fantastic Optimizers I* `2509.02046`), plain MuonW ≈10%@1.2B (superseded by MuonH,
+> `2606.16899`), Essential AI 10–15% @100–500M (`2505.02222`). **The original ≥15% bar is at the
+> optimistic edge and only meaningful against a *separately LR-tuned* AdamW baseline** — the deflation
+> papers show the 1.4–2× headline came from *under-tuned baselines*. **Recalibrated pre-registration (F1
+> is still PENDING, so this is a legitimate pre-run prior update):** predict Muon in the **1.1–1.4×
+> scale-dependent band** (≈15–25% saving at 30–50M, shrinking with N) *only if* AdamW's LR is
+> independently swept; **NEW mandatory DoD: an LR-tuned AdamW arm** (an untuned baseline = a fake win,
+> the whole point of `2509.02046`). KILL unchanged (<5% vs the *tuned* baseline). The *methodology*
+> (tuned-baseline iso-FLOP) is now the artifact, not the headline number. Original bar kept above for
+> provenance.
+
 **Verdict (F1 unit level — 2026-07-04, `optim.py` + 10 tests green).** `Muon` (NS5 + Nesterov +
 Moonlight RMS-match) and `split_muon_adamw_params` are built and green. Two pre-registered
 over-claims on the NS spectrum were honestly falsified and the invariants corrected (band

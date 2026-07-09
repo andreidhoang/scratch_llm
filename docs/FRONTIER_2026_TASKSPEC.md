@@ -60,14 +60,23 @@ the frontier ablation study (the differentiating research). `[S/M/L]` = effort.
 | 15 | **F5** MLA-for-real | B | L | — | trainable+servable MLA + latent KV cache (**ship the first-slice first**, §D) |
 | 16 | **F7c** neural-RM control | B | M | — | a hackable proxy that proves why R1-Zero refuses a learned RM (**CPU-proof only**, §D) |
 | 17 | **F9** MuonClip guard | B | S | F1-run | QK-Clip gated OFF sub-1B + the qk-norm-bounds-logit test |
-| 18 | **F8.1 / F8.2** DSA lab | B | M/L | — | lightning indexer + top-k gather + KL warm-up (**stretch / opt-in**) |
+| 18 | **F8.1 / F8.2** DSA sparse attn | B | M/L | — | lightning indexer + top-k gather + KL warm-up (**PROMOTED to core — §10; scarce 2026 signal**) |
+| 19 | **F10.1 / F10.2** hybrid linear attn 🆕 | B | M/L | (F5 seam) | Gated-DeltaNet block (chunkwise==recurrent==ref) → `attn_schedule` 3:1 iso-param quality/KV ablation — **the 2026 attn frontier; model-side twin of DELTA GDN-2** |
+| 20 | **F11** agentic / tool-use RL 🆕 | B | L | — | multi-turn `ToolEnv`(VerifiableEnv) + masked multi-turn rollout + format-only reward-hack control — **the #1 stated 2026 lab priority** |
 | — | **A7** distributed d20 pretrain | A | L | A2 | wire `utils/{ddp,fsdp,zero1}` into `train()` — 561M needs data-parallel on 8×H100 |
 | — | **A8** d20 rental runbook + guardrails | A | M | A2,A7 | resume/off-box-sync + $/token cap + divergence kill-switch + repro manifest |
 | — | **A9** public release surface | A | S | A6 | model card + reproducible weights/tokenizer/config/transcript bundle |
 
+> **⚠ EV re-ranked 2026-07-09 (ABLATIONS §10).** The numeric order above is build-dependency order, not
+> EV. **Scarce-2026 EV order = F8(+F10) · F7-reframed(+F11) · F1 · F2 · F4**, then F3/F5/F6/F9. Attention
+> efficiency (F8 DSA + F10 linear-hybrid) and RL honesty/agentic (F7-reframed + F11) carry the
+> differentiating hiring signal; F1/F2/F4 are table-stakes done well. F7's falsifier is **reframed** to a
+> *random-reward debunk control* (length-growth is a GRPO-bias artifact, not the "aha"); F1's kill band is
+> **recalibrated** to the tuned-baseline 1.1–1.4× (see the F1-run DoD note + `bench/RESULTS.md`).
+
 **The d20 gate:** everything through A6 + the ablations you choose to *bake into the single d20
 pretrain* (F2a MTP is the one worth baking; F1-run picks the optimizer) + A7/A8 must be green before
-the $100 8×H100 run. F5/F6/F7/F8/F9 run at 30–300M on the **standing sm120 box** independently.
+the $100 8×H100 run. F5/F6/F7/F8/F9/F10/F11 run at 30–300M on the **standing sm120 box** independently.
 
 ---
 
@@ -131,6 +140,7 @@ the $100 8×H100 run. F5/F6/F7/F8/F9 run at 30–300M on the **standing sm120 bo
 ### F1-run · Iso-FLOP Muon vs AdamW `[M]` — the pending headline
 - **Interfaces:** NEW `eval/optimizer_race.py` (pure metric fns `tokens_to_match`/`token_saving_fraction` + the A/B driver); `train.py` additive val-eval hook + `TrainConfig.eval_every` (default byte-identical); `optim.py` `Muon(profile_ns=False)` NS wall-time instrument (additive, off); NEW `bench/optimizer_race.py` CLI → appends the row to `RESULTS.md`; NEW `tests/test_optimizer_race.py`.
 - **DoD:** pure-metric unit tests; both arms hold `C=6ND` constant; the additive hook is a no-op on the default path (identical loss history). **Measured falsifier:** at N≈35M / D≈700M (C≈1.5e17) on sm120, same seed/LR/cosine, only the optimizer differs → Muon `tokens_to_match ≤ 0.85·D` (≥15% saving) or ≥0.02 nats lower at iso-FLOP; NS overhead <1%. **Kill:** saving <5% AND nats_lower <0.02, or divergence at the reused AdamW LR.
+- **⚠ Recalibrated 2026-07-09** (`FRONTIER_2026_ABLATIONS.md` §10 + `bench/RESULTS.md` F1 pre-run note): Muon is **deflated + scale-dependent** (1.4×@0.1B→1.1×@1.2B vs a *tuned* AdamW; `2509.02046`) and superseded by MuonH (`2606.16899`). **New mandatory arm: an independently LR-tuned AdamW baseline** — the `tokens_to_match ≤ 0.85·D` bar is *only* meaningful against it (an untuned baseline is a fake win). Predict the **1.1–1.4× band**, not a fixed ≥15%. The tuned-baseline *methodology* is the hireable artifact.
 
 ### F2a · MTP training head `[L]`
 - **Interfaces:** NEW `mtp.py` `class MTPHead` (`RMSNorm(h) ⊕ RMSNorm(emb_next) → eh_proj Linear(2d→d) → 1 TransformerBlock(moe=None) → final_norm`, shared `lm_head`); `model.py` `ModelConfig.mtp_depth=0`, build `mtp_head` in `__init__` (RNG last → base bit-identical), **extract `_trunk`** from `forward` (embed→blocks→final_norm, external behavior identical), add `forward_train(ids,targets)→(logits,aux,mtp_logits)`; `train.py` `TrainConfig.mtp_loss_weight=0.3` + `λ·L_MTP` (`cross_entropy(mtp_logits[:,:-1], targets[:,1:])`).
@@ -187,6 +197,34 @@ the $100 8×H100 run. F5/F6/F7/F8/F9 run at 30–300M on the **standing sm120 bo
 ### F8.2 · DSA wired + measured `[L]` — deps F8.1
 - **Interfaces:** `model.py` `ModelConfig.dsa: DSAConfig|None=None` + indexer in `MultiHeadSelfAttention.__init__` + `dsa_active` flag + sparse forward branch + `dense_target_and_scores`; `dsa.py` `train_indexer`+`set_dsa_active`; pre-register `RESULTS.md`.
 - **DoD:** dense path bit-identical when `dsa_active=False`; sparse==dense at top_k≥ctx; loss-at-init ≈ log V with DSA active; `train_indexer` KL drops <0.5× first. **Measured falsifier:** at 8k, sparse (top_k=2048) within +0.03 nats/token of dense + a FLOP crossover. **Kill:** gap >0.1 nats at 8k, or recall <0.95 at k=2048.
+
+### F10 · Hybrid linear attention (Gated-DeltaNet / KDA-style) `[M/L]` 🆕 *(2026-07-09, ABLATIONS §10)*
+> **Why (verified 2026).** The attention frontier moved *past* MLA to **hybrid linear attention**:
+> Kimi Linear (Moonshot, Oct-25 — KDA extends Gated DeltaNet) **beats full attention** across
+> short/long/RL with **75% KV cut, 6× decode @1M**; Qwen3-Next/Qwen3.5 interleave **Gated-DeltaNet :
+> full-attention 3:1**. Attention is *contested, not settled* (MLA vs DSA vs linear-hybrid vs plain-GQA)
+> ⇒ high ablation signal. **This is the model-side twin of the DELTA GDN-2 decode-kernel spike** — F10
+> builds the trainable/servable torch reference + the quality/KV ablation; DELTA (perf/capstone zone)
+> builds the fused low-precision decode kernel on top. Ship them as one story.
+- **Interfaces:** NEW `linear_attn.py` — `LinearAttnConfig` (`d_head`, `n_heads`, `expand_v`, `chunk_size`), `GatedDeltaNet` block = the delta-rule recurrence `S_t = S_{t-1}(diag α_t − β_t k_t k_tᵀ) + β_t k_t v_tᵀ`, `y_t = S_t q_t` with a **chunkwise-parallel** forward (the training path) + a **recurrent-scan** forward (the decode path, single-step state update), a `linear_attn_state_bytes()` measurement, and a float64 reference loop the chunkwise path must match; `model.py` additive **per-layer attention schedule** `ModelConfig.attn_schedule: tuple[Literal['full','gqa','mla','gdn'],...] | None = None` (None ⇒ current uniform behavior, byte-identical) consumed in the block loop so a 3:1 `('gdn','gdn','gdn','full')·k` interleave is expressible; a `LinearAttnState` that duck-types the `KVCache`/`SlotKVCache` contract for the recurrent decode path.
+- **Config:** `attn_schedule` (default None = uniform, base bit-identical), `linear_attn: LinearAttnConfig|None`, `expand_v` (default 2, the GDN value-expansion), `chunk_size` (default 64).
+- **DoD:** chunkwise forward == recurrent-scan forward == float64 reference (rel ≤1e-5); loss-at-init ≈ log V with a GDN layer in the schedule; `attn_schedule=None` gives byte-identical base forward (RNG-neutral construction); recurrent decode step-by-step == chunkwise teacher-forced (token-exact greedy); **state bytes/token measured** vs GQA-8 KV/token. **Measured falsifier:** iso-param 3:1 `('gdn':full)` hybrid within **+0.03 val loss** of an all-full-attention baseline at ≤300M, with **state/token ≥2× smaller** than GQA-8 KV and a decode-throughput crossover as ctx grows. **Kill:** val gap >0.1 nats, OR no state/decode win (the linear block is dead weight at this scale).
+- **Zone:** NEW `linear_attn.py` (F-front-owned) + **additive** `model.py` (`attn_schedule` + block-loop branch — RNG-last, base-neutral). **Do NOT** write the fused GDN decode *kernel* here — that is the perf/DELTA zone (`kernels/`); F10 ships the torch reference + the model-quality/KV ablation, and exposes the recurrent state contract the DELTA kernel accelerates. Coordinate the shared attention seam with the perf front (satisfy `KVCache`/`SlotKVCache` Protocols, don't edit `serving/`/`mla.py`).
+- **Scope (ship first-slice first):** commit ① the `GatedDeltaNet` block + chunkwise==recurrent==reference test (no model wiring) as its own commit; ② the `attn_schedule` wiring + iso-param quality/KV ablation second. Deps: none (independent of F5/F8, but shares the `attn`-variant seam — land after F5's `attn` field exists to avoid a merge conflict, or introduce `attn_schedule` as the superset).
+- **Interview.** "Why did 2026 labs move to linear-attention *hybrids* over pure MLA — what does the 3:1 ratio buy, why keep *any* full-attention layers, and what makes the *decode* kernel (state materialization at low precision) the hard part?"
+
+### F11 · Agentic / tool-use RL `[L]` 🆕 *(2026-07-09, ABLATIONS §10 — the #1 stated 2026 lab priority)*
+> **Why (verified 2026).** Agentic + long-horizon tool-use RL is the **#1 stated post-training
+> priority** of DeepSeek (V3.2 agentic task synthesis), Moonshot (K2 joint real+synthetic-env RL, SOTA
+> open agentic), and Qwen (Qwen3.5 SWE-bench 76.4 > GPT-5.2 75.4); 2026 eval shifted chatbot→agentic.
+> A verifiable multi-turn tool env is **higher-signal than F6/F9** and turns the RL stack from a
+> single-turn RLVR toy into the actual 2026 frontier shape.
+- **Interfaces:** NEW `envs/tool_env.py` — a `ToolEnv` implementing the existing `VerifiableEnv` Protocol but **multi-turn**: `step(state, action) → (obs, reward, done)` where an action containing a tool call (e.g. `<tool>python: …</tool>`) is executed by a sandboxed evaluator (start with a pure-python calculator / arithmetic-expression evaluator — no network, no arbitrary exec) and the result is fed back as the next observation; a verifiable task family (multi-step arithmetic / unit-conversion whose gold answer is checkable). NEW multi-turn rollout in `algos/` (reuse `algos/grpo.py` primitives — a `multi_turn_rollout(policy, env, max_turns)` that concatenates turns into one trajectory for the GRPO/Dr.GRPO update, masking tool-result tokens out of the loss). NEW `rewards/tool_format_control.py` — a **format-only reward** (rewards well-formed tool-call *shape*, answer-blind) as the reward-hacking control.
+- **Config:** `max_turns` (default 4), `tool_timeout`, `mask_tool_output: bool=True` (tool results are observations, not learned tokens).
+- **DoD:** the sandboxed evaluator is **safe by construction** (no `eval`/network — an AST-restricted arithmetic evaluator, fuzz-tested to reject non-arithmetic input); a multi-turn trajectory round-trips (turns concatenated, tool-output tokens masked from CE); the mandatory RL logging is present + finite (entropy, KL(cur‖ref)/KL(cur‖old) **separately**, IS-ratio histogram, reward stats, **turns-used + length stats** — the `rl-run-auditor` gate); the format-only control **provably reward-hacks** (drives tool-call rate up with task success-rate flat). **Measured falsifier (rental/box-runnable at tiny scale):** on the synthetic tool env, verifiable-reward RL raises task success-rate with **turns-used bounded** (no tool-spam) while the **format-only control's success-rate stays flat** (proving the verifiable reward is load-bearing). **Kill:** success-rate flat under the true reward (env too hard / base too weak → shrink the task), OR the format-only control is *not* caught by the logging (monitoring is uninterpretable — the real failure).
+- **Zone:** `envs/`, `algos/` (additive multi-turn rollout — reuse, don't edit, `grpo.py`'s update), `rewards/`, `utils/monitors.py` — all F-front / main-track owned. No perf-owned files.
+- **Scope (§D-style):** ship the **CPU-green harness + the by-construction control proof** first (safe evaluator + multi-turn masking + the format-only-hacks incentive test); the real "does it learn tool-use" run is rental-gated (needs a ~0.5–1.5B base, like F7).
+- **Interview.** "Why is agentic/tool-use RL the 2026 frontier over single-turn RLVR — how do you mask tool outputs from the loss, credit-assign across turns, and stop the agent from reward-hacking the tool-call *format* instead of solving the task?"
 
 ---
 
