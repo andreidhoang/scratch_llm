@@ -9,10 +9,12 @@ or, with ``data_dir`` set (A1), pre-built shards replace the tokenizer stage:
     shards (data/shards.py: tokenizer.json + *.bin memmap) → pretrain → eval → sample
 
 scaled by a single ``depth`` knob (nanochat's aspect-ratio scaling: ``d_model = 64·depth``,
-``head_dim = 128``). Midtraining / SFT / RL are documented follow-on stages that reuse the same
-``train`` loop + ``algos/`` (F2/F7) and are omitted from the **nano pre-flight** — whose only job is
-to prove the whole pipeline composes end-to-end in seconds on CPU **before** a $100 d20 rental
-(ADR-0018 §5, Phase 0). Run it: ``python -m scratch_llm.speedrun --nano`` (or ``scripts/speedrun.sh``).
+``head_dim = 128``). Since A2 the run is a chain of stage functions with config-carrying,
+optimizer-free checkpoints at each boundary (``work_dir``/``resume`` — the rental safety-net);
+midtrain (A4) and SFT (A5) are declared slots that skip at 0 steps. RL reuses the same ``train``
+loop + ``algos/`` (F2/F7). The **nano pre-flight**'s only job is to prove the whole pipeline
+composes end-to-end in seconds on CPU **before** a $100 d20 rental (ADR-0018 §5, Phase 0).
+Run it: ``python -m scratch_llm.speedrun --nano`` (or ``scripts/speedrun.sh``).
 
 Model sizes (docs/FRONTIER_2026_ABLATIONS.md §2): ``--depth 20`` ⇒ d_model 1280 / 10 heads /
 ~561M params — the nanochat d20 headline; ``--nano`` ⇒ depth 4 in seconds.
@@ -33,7 +35,7 @@ from scratch_llm.eval import ReportCard, build_report_card
 from scratch_llm.model import ModelConfig, TransformerLM
 from scratch_llm.sampling import SamplingParams, generate
 from scratch_llm.tokenizer import Tokenizer, train_bpe
-from scratch_llm.train import TrainConfig, train
+from scratch_llm.train import TrainConfig, build_model_from_checkpoint, save_checkpoint, train
 
 # A tiny built-in corpus for the nano pre-flight (no external data needed). Repeated at runtime so
 # the tokenizer has something to merge and the loader has enough tokens for a window.
@@ -65,6 +67,13 @@ class SpeedrunConfig:
     shard_glob: str = "*.bin"
     sample_tokens: int = 48
     sample_temperature: float = 0.8
+    # A2 stage chaining. work_dir persists stage artifacts (tokenizer.json + <stage>.pt —
+    # config-carrying, optimizer-free); resume=True rebuilds a stage from its artifact instead
+    # of re-running it (the rental safety-net). midtrain/sft are the A4/A5 slots: 0 = skipped.
+    work_dir: str | None = None
+    resume: bool = False
+    midtrain_steps: int = 0
+    sft_steps: int = 0
 
 
 @dataclass
@@ -122,31 +131,58 @@ def _train_tokenizer(text: str, vocab_size: int) -> Tokenizer:
     return Tokenizer(vocab, merges)
 
 
-def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
-    """Run tokenizer → pretrain → eval → sample and return the assembled result."""
-    t0 = time.perf_counter()
-    stages: list[str] = []
+# -----------------------------------------------------------------------------------------------
+# A2 — the chained stage functions. Each stage is independently callable; stage boundaries
+# persist config-carrying, optimizer-FREE checkpoints into cfg.work_dir (the pinned
+# stage-transition policy: every stage builds a fresh optimizer with its own LR warmup —
+# resuming Adam/Muon moments across an adamw↔muon_adamw switch is undefined; intra-run resume
+# with optimizer state is train()'s separate checkpoint_every path). A4 midtrain / A5 SFT /
+# A6 chat hang off this spine.
+# -----------------------------------------------------------------------------------------------
 
+
+def _work_path(cfg: SpeedrunConfig, name: str) -> Path | None:
+    if cfg.work_dir is None:
+        return None
+    work = Path(cfg.work_dir)
+    work.mkdir(parents=True, exist_ok=True)
+    return work / name
+
+
+def stage_tokenizer(cfg: SpeedrunConfig) -> tuple[Tokenizer, np.ndarray, list[int], str]:
+    """Stage 1 — the token axis: pre-built shards (A1), a work_dir-staged tokenizer (resume),
+    or a corpus-trained byte BPE. Returns (tokenizer, tokens, prompt_ids, stage_name)."""
     if cfg.data_dir is not None:
         # A1 shard-backed pretrain: tokens + the tokenizer that produced them come from disk.
         tokenizer = load_tokenizer(cfg.data_dir)
         tokens = load_dataset_tokens(cfg.data_dir, cfg.shard_glob)
-        vocab_size = len(tokenizer.vocab)  # the shard ids' true axis, not cfg.vocab_size
         prompt_ids = [int(t) for t in tokens[:8]]
-        stages.append("shards")
-    else:
-        text = _load_corpus(cfg)
-        tokenizer = _train_tokenizer(text, cfg.vocab_size)
-        tokens = np.asarray(tokenizer.encode(text), dtype=np.int64)
-        vocab_size = cfg.vocab_size
-        prompt_ids = tokenizer.encode(text[:24])
-        stages.append("tokenizer")
+        return tokenizer, tokens, prompt_ids, "shards"
 
-    if tokens.size <= cfg.context_length + 1:
-        raise ValueError(
-            f"corpus encodes to {tokens.size} tokens, too short for context_length "
-            f"{cfg.context_length}; supply a larger --corpus/--data-dir or a smaller --context."
-        )
+    text = _load_corpus(cfg)
+    tok_path = _work_path(cfg, "tokenizer.json")
+    if cfg.resume and tok_path is not None and tok_path.exists():
+        # BPE training is the expensive part at real vocab sizes — reload, re-encode only.
+        tokenizer = Tokenizer.load(tok_path)
+        name = "tokenizer[resumed]"
+    else:
+        tokenizer = _train_tokenizer(text, cfg.vocab_size)
+        if tok_path is not None:
+            tokenizer.save(tok_path)
+        name = "tokenizer"
+    tokens = np.asarray(tokenizer.encode(text), dtype=np.int64)
+    return tokenizer, tokens, tokenizer.encode(text[:24]), name
+
+
+def stage_pretrain(
+    cfg: SpeedrunConfig, tokens: np.ndarray, vocab_size: int
+) -> tuple[TransformerLM, str]:
+    """Stage 2 — pretrain, or rebuild from the stage-boundary artifact when resume=True."""
+    ckpt = _work_path(cfg, "pretrain.pt")
+    if cfg.resume and ckpt is not None and ckpt.exists():
+        model, _ = build_model_from_checkpoint(ckpt)
+        model.to(cfg.device)
+        return model, "pretrain[resumed]"
 
     model = TransformerLM(model_config_for_depth(cfg.depth, vocab_size, cfg.context_length))
     train(
@@ -165,15 +201,39 @@ def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
         tokens,
         model,
     )
-    stages.append("pretrain")
+    if ckpt is not None:
+        save_checkpoint(model, None, cfg.train_steps, ckpt)
+    return model, "pretrain"
 
-    # Eval: bits-per-byte on a tail slice. NOTE (nano): with the built-in repeated corpus this is
-    # in-sample — the pre-flight proves the metric computes; a real run supplies a held-out split
-    # via --corpus. num_bytes = the UTF-8 byte length the slice decodes to.
+
+def stage_midtrain(cfg: SpeedrunConfig, model: TransformerLM) -> TransformerLM:
+    """Stage 3 slot — chat-mix midtraining. 0 steps = skipped; A4 wires the body."""
+    if cfg.midtrain_steps == 0:
+        return model
+    raise NotImplementedError(
+        "midtrain is the A4 rung (docs/FRONTIER_2026_TASKSPEC.md §A4) — set midtrain_steps=0"
+    )
+
+
+def stage_sft(cfg: SpeedrunConfig, model: TransformerLM) -> TransformerLM:
+    """Stage 4 slot — assistant-masked SFT. 0 steps = skipped; A5 wires the body."""
+    if cfg.sft_steps == 0:
+        return model
+    raise NotImplementedError(
+        "SFT is the A5 rung (docs/FRONTIER_2026_TASKSPEC.md §A5) — set sft_steps=0"
+    )
+
+
+def stage_eval(
+    cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer, tokens: np.ndarray
+) -> ReportCard:
+    """Stage 5 — bits-per-byte on a tail slice. NOTE (nano): with the built-in repeated corpus
+    this is in-sample — the pre-flight proves the metric computes; a real run supplies a held-out
+    split via --corpus. num_bytes = the UTF-8 byte length the slice decodes to."""
     val_len = min(cfg.context_length * 4, tokens.size // 2)
     val = np.asarray(tokens[-val_len:], dtype=np.int64)  # int64 copy: shards memmap as uint16
     val_bytes = len(tokenizer.decode(val.tolist()).encode("utf-8"))
-    card = build_report_card(
+    return build_report_card(
         model,
         tokenizer,
         val_tokens=val,
@@ -181,8 +241,12 @@ def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
         context_length=cfg.context_length,
         device=cfg.device,
     )
-    stages.append("eval")
 
+
+def stage_sample(
+    cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer, prompt_ids: list[int]
+) -> str:
+    """Stage 6 — greedy-ish sample from the trained model (the talking artifact)."""
     budget = max(1, min(cfg.sample_tokens, cfg.context_length - len(prompt_ids) - 1))
     gen_ids = generate(
         model,
@@ -190,7 +254,39 @@ def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
         SamplingParams(temperature=cfg.sample_temperature, max_tokens=budget, seed=cfg.seed),
         device=cfg.device,
     )
-    sample = tokenizer.decode(gen_ids)
+    return tokenizer.decode(gen_ids)
+
+
+def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
+    """Chain the stages: tokens → pretrain → [midtrain] → [sft] → eval → sample."""
+    t0 = time.perf_counter()
+    stages: list[str] = []
+
+    tokenizer, tokens, prompt_ids, stage_name = stage_tokenizer(cfg)
+    stages.append(stage_name)
+
+    if tokens.size <= cfg.context_length + 1:
+        raise ValueError(
+            f"corpus encodes to {tokens.size} tokens, too short for context_length "
+            f"{cfg.context_length}; supply a larger --corpus/--data-dir or a smaller --context."
+        )
+
+    # len(vocab) is the true id axis in both paths (train_bpe yields exactly vocab_size entries;
+    # shard ids are defined by the staged tokenizer, never cfg.vocab_size).
+    model, stage_name = stage_pretrain(cfg, tokens, len(tokenizer.vocab))
+    stages.append(stage_name)
+
+    model = stage_midtrain(cfg, model)
+    if cfg.midtrain_steps:
+        stages.append("midtrain")
+    model = stage_sft(cfg, model)
+    if cfg.sft_steps:
+        stages.append("sft")
+
+    card = stage_eval(cfg, model, tokenizer, tokens)
+    stages.append("eval")
+
+    sample = stage_sample(cfg, model, tokenizer, prompt_ids)
     stages.append("sample")
 
     return SpeedrunResult(
@@ -245,6 +341,16 @@ def main() -> None:
         default=None,
         help="Shard dataset dir from data/shards.py (overrides --corpus/--vocab).",
     )
+    p.add_argument(
+        "--work-dir",
+        default=None,
+        help="Persist stage artifacts (tokenizer.json + pretrain.pt) here — the rental safety-net.",
+    )
+    p.add_argument(
+        "--resume",
+        action="store_true",
+        help="Rebuild finished stages from --work-dir artifacts instead of re-running them.",
+    )
     args = p.parse_args()
 
     cfg = (
@@ -263,6 +369,8 @@ def main() -> None:
             device=args.device,
             corpus_path=args.corpus,
             data_dir=args.data_dir,
+            work_dir=args.work_dir,
+            resume=args.resume,
         )
     )
     print(run_speedrun(cfg).summary())

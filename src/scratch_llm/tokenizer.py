@@ -216,6 +216,33 @@ class Tokenizer:
             merges.append((a.encode("latin-1"), b.encode("latin-1")))
         return cls(vocab, merges, special_tokens)
 
+    def save(self, path: str | Path) -> Path:
+        """Serialize to ONE JSON file (vocab + merges + specials) and return its path.
+
+        Deliberately not the two-file ``from_files`` format: its ``A B``-per-line merges
+        file is ambiguous when the LEFT symbol itself contains a space — which byte-level
+        BPE produces almost immediately (``(b" t", b"he")``). JSON pair-lists carry no such
+        ambiguity. Bytes are latin-1-mapped to strings so every byte value round-trips.
+        """
+        path = Path(path)
+        payload = {
+            "vocab": {str(i): b.decode("latin-1") for i, b in self.vocab.items()},
+            "merges": [[a.decode("latin-1"), b.decode("latin-1")] for a, b in self.merges],
+            "special_tokens": self.special_tokens,
+        }
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    @classmethod
+    def load(cls, path: str | Path) -> Tokenizer:
+        """Rebuild the exact tokenizer written by :meth:`save`."""
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        vocab = {int(i): s.encode("latin-1") for i, s in payload["vocab"].items()}
+        merges: list[Pair] = [
+            (a.encode("latin-1"), b.encode("latin-1")) for a, b in payload["merges"]
+        ]
+        return cls(vocab, merges, special_tokens=list(payload["special_tokens"]))
+
     def _bpe(self, token_bytes: bytes) -> list[int]:
         """Apply learned merges to one pre-token's bytes, return its token ids."""
         cached = self._cache.get(token_bytes)

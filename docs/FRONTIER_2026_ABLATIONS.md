@@ -71,7 +71,8 @@ Tokenizer to match: GPT-4-style **Rust BPE**, vocab **65,536 = 2¹⁶** *(confir
 EV-ranked (leverage ÷ effort, weighted by frontier-lab signal). **#1–#4 are the 80/20.** Each rung
 is a pre-registered, falsifiable experiment; the discipline *is* the hireable skill.
 
-**Node pointer (current):** `F1 — MuonAdamW` (Phase 1). Advance the pointer as rungs ship.
+**Node pointer (current):** `F1-run — iso-FLOP Muon vs AdamW` (A1 shards + A2 checkpoint chaining
+✅ 2026-07-09; F1 unit level ✅). Advance the pointer as rungs ship.
 
 | # | Rung | Effort | Pre-registered result + KILL | Primary sources |
 |---|---|---|---|---|

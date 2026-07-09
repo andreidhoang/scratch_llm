@@ -38,7 +38,7 @@ from typing import Protocol
 
 import numpy as np
 
-from scratch_llm.tokenizer import Pair, Tokenizer, train_bpe
+from scratch_llm.tokenizer import Tokenizer, train_bpe
 
 # The document separator. Matches the `<|eot|>` special the A3 chat template will formalize,
 # so shards built today stay valid when chat specials land.
@@ -153,29 +153,17 @@ _TOKENIZER_FILE = "tokenizer.json"
 def save_tokenizer_files(tokenizer: Tokenizer, out_dir: str | Path) -> Path:
     """Stage the tokenizer next to the shards as one JSON file.
 
-    Deliberately NOT the ``Tokenizer.from_files`` two-file format: its ``A B``-per-line merges
-    file is ambiguous when the left symbol itself contains a space (which GPT-2-style byte BPE
-    produces almost immediately — ``(b" t", b"he")``). JSON pair-lists have no such ambiguity.
-    Bytes are latin-1-mapped to strings so every byte value round-trips through JSON.
-    (A2's ``Tokenizer.save()`` may supersede this; the loader below is the paired oracle.)
+    Since A2, a thin delegate to :meth:`Tokenizer.save` (which canonicalized this module's
+    JSON format — same payload, so pre-A2 ``tokenizer.json`` files keep loading). The
+    two-file ``Tokenizer.from_files`` format stays unused here: its ``A B``-per-line merges
+    file is ambiguous when the left symbol itself contains a space.
     """
-    out_dir = Path(out_dir)
-    payload = {
-        "vocab": {str(i): b.decode("latin-1") for i, b in tokenizer.vocab.items()},
-        "merges": [[a.decode("latin-1"), b.decode("latin-1")] for a, b in tokenizer.merges],
-        "special_tokens": tokenizer.special_tokens,
-    }
-    path = out_dir / _TOKENIZER_FILE
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    return path
+    return tokenizer.save(Path(out_dir) / _TOKENIZER_FILE)
 
 
 def load_tokenizer(data_dir: str | Path) -> Tokenizer:
     """Rebuild the exact tokenizer staged by :func:`save_tokenizer_files`."""
-    payload = json.loads((Path(data_dir) / _TOKENIZER_FILE).read_text(encoding="utf-8"))
-    vocab = {int(i): s.encode("latin-1") for i, s in payload["vocab"].items()}
-    merges: list[Pair] = [(a.encode("latin-1"), b.encode("latin-1")) for a, b in payload["merges"]]
-    return Tokenizer(vocab, merges, special_tokens=list(payload["special_tokens"]))
+    return Tokenizer.load(Path(data_dir) / _TOKENIZER_FILE)
 
 
 # ---------------------------------------------------------------------------------------------

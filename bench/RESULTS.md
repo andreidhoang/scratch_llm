@@ -697,6 +697,34 @@ run on the **CPU Mac**, not the sm120 box — these are correctness/learning sig
 `speedrun --data-dir <dir>` is now the real-corpus path; the ~11B-token shuffled streamer stays the
 §D d20 extension. Next: **A2 checkpoint chaining**, then **F1-run**.
 
+### Pre-registration — A2 checkpoint chaining (2026-07-09, MEASURED same day)
+
+**Hypothesis.** A config-carrying checkpoint (`asdict(model.cfg)` beside the state dicts) makes every
+stage boundary self-describing: `build_model_from_checkpoint()` rebuilds the exact model from the file
+alone — the rental safety-net (a died run resumes without retraining) and the spine A4 midtrain / A5
+SFT / A6 chat chain from. **Stage-transition optimizer policy (pinned, §D):** boundary snapshots carry
+model+config+step ONLY (`optimizer=None`) — each stage starts a FRESH optimizer with its own LR warmup,
+because resuming Adam/Muon moments across an `adamw↔muon_adamw` switch is undefined; intra-run resume
+(same stage) is `train()`'s existing `checkpoint_every` path, which does keep optimizer state.
+`Tokenizer.save()/load()` adopt the one-file JSON format `data/shards.py` proved (the two-file
+`from_files` merges format is ambiguous when a left symbol contains a space — `(b" t", b"he")`).
+
+| rung | falsifier | predicted (pre-reg) | KILL if | measured |
+|---|---|---|---|---|
+| A2 config round-trip | save → `build_model_from_checkpoint`: every param `torch.equal`, `step` restored, `cfg ==` original (incl. nested `MoEConfig`) | exact | reconstructed `ModelConfig` shape-mismatches the weights (strict `load_state_dict` must raise, not truncate) | **PASS** — GQA/qk_norm/rope_theta non-defaults + nested `MoEConfig` all round-trip; params `torch.equal`; step exact; pre-A2 (config-less) checkpoints raise a clear `ValueError` |
+| A2 warm vs cold | rebuilt trained-nano CE on a seeded batch vs a fresh same-cfg model | rebuilt < 1.0 nats; fresh ≈ log V = 3.47 ± 15% | rebuilt ≈ log V (config carried but weights didn't) | **⚠ tolerance FALSIFIED → corrected.** warm 0.008 ✓ ≪ cold; but fresh measured **4.02 = log V + 0.55** (>15%): on a structured half-vocab batch, init-logit non-uniformity adds a *positive excess* — "≈ log V" two-sided only holds on uniform-random ids (test_model.py ±0.3 check, still green). Corrected invariant: **cold ≥ log V − 0.3 AND warm < cold/2** — the kill (rebuilt comes back cold) still has teeth |
+| A2 tokenizer round-trip | `Tokenizer.save→load` on a specials-bearing string | ids identical; each special = exactly 1 id; text round-trips | any drift, or a special splits into >1 id | **PASS** — vocab/merges/specials + ids identical; `<\|eot\|>` = 1 id; format == the A1 `tokenizer.json` (shards.py now delegates, pre-A2 datasets keep loading) |
+| A2 stage chaining | `run_speedrun(work_dir)` twice — 2nd with `resume=True` | 2nd run rebuilds from `pretrain.pt` (no retrain): `val_bpb` equal, sample string byte-identical | resumed run diverges from the original | **PASS** — stages `tokenizer[resumed] → pretrain[resumed] → eval → sample`; `val_bpb` equal (rel 1e-6), sample byte-identical |
+| A2 policy is loud | loading a stage-boundary ckpt WITH an optimizer | clear `ValueError` (no silent None-state load) | optimizer state silently skipped | **PASS** — `ValueError: "stage-boundary checkpoint (no optimizer state)"` |
+
+**Verdict (A2 — 2026-07-09, `train.py`/`tokenizer.py`/`speedrun.py` + 9 tests green).** The stage
+spine holds: any stage rebuilds its predecessor from the checkpoint file alone, the resume path
+reproduces eval+sample byte-identically, and the stage-transition optimizer policy is pinned in code
+(boundary = model+config+step, fresh optimizer + re-warmup per stage) and fails loud when violated.
+One pre-registered tolerance honestly falsified and corrected (see row 2). CPU-verified (Mac) —
+correctness signals, not perf numbers. Deferred to §D d20 extension: resume-at-step inside a stage,
+RNG/dataloader-position restore, off-box sync. Next: **F1-run** (iso-FLOP Muon vs AdamW).
+
 ---
 
 ## Perf track (A4 — flash attention)
