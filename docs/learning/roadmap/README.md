@@ -52,18 +52,24 @@ serving; 3 cho phản xạ profiling + craft trên CUDA core; 4 mở khoá tenso
 kernel attention; 5 làm tất cả low-precision; 6 trải ra nhiều GPU. Mỗi Bài trong một série tựa lên
 Bài trước — đừng nhảy cóc.
 
+> **Lưu ý thứ tự (2026-07-05):** "1→6" ở đây là thứ tự phụ thuộc *nội bộ* nửa perf (đọc perf standalone).
+> Khi **đan xen với nửa mô hình**, nguồn-sự-thật là [`../CURRICULUM.md`](../CURRICULUM.md): nó xếp
+> **S3/S4 ngay sau M1–M4** (op còn nóng) và **S1/S2 sau M9** (MLA/MTP mới làm serving thú vị) — tức
+> KHÔNG phải S1-first. Nếu hai doc lệch, CURRICULUM thắng. (Ghi chú: MLA nằm ở **S2 Bài 2.8**, không phải S1.)
+
 ---
 
 ## Cách dùng lộ trình (giao thức mastery, one component per lesson)
 
-Với **mỗi Bài**, theo đúng "Master understanding (forced)" của [`../../../CLAUDE.md`](../../../CLAUDE.md)
-§How we build:
+Với **mỗi micro-concept**, chạy **PRR loop** (mặc định — "Master understanding — the PRR loop" của
+[`../../../CLAUDE.md`](../../../CLAUDE.md) §How we build). KHÔNG đọc monologue rồi gật: đọc derivation hay
+= *fluency illusion* (thấy hiểu nhưng không encode). Internalize = bạn *generate/run/draw*:
 
-1. **First principles** — đọc "Câu hỏi first-principles" + "Feynman", tự trả lời bằng lời TRƯỚC khi mở code.
-2. **Predict-before-run** — nhìn "Số đo (aha)" bị che, tự đoán con số/shape trước.
-3. **Trace code** — mở đúng file·hàm·dòng trong "Trace code", đi theo thứ tự chạy; đối chiếu với test được nêu.
-4. **Teach-back — CỔNG** — trả lời câu dạy-lại + biến thể "sửa-và-đoán"; **chưa dạy lại được thì chưa sang Bài sau.**
-5. **Frontier** — nối tới thực hành 2026 / câu hỏi interview.
+1. **Predict — COLD.** Che "Số đo (aha)"; viết dự đoán con số/shape/bound của bạn TRƯỚC mọi giải thích (đoán sai là tốt — cam kết một con số là lúc encode xảy ra). Ở perf đây đúng là roofline-first: đoán bound (mem/flop/comm) + con số trước khi chạy.
+2. **Run.** Chạy đúng file·hàm·dòng / script đo trên GPU; in shape/số thật. Prediction đụng số ĐO ĐƯỢC — hiểu = số bạn đoán khớp số đo; lệch ⇒ *khoảng lệch chính là ràng buộc bạn bỏ sót* (launch/latch/occupancy/bank-conflict).
+3. **Reconcile.** Chỉ giải thích ĐÚNG chỗ lệch (3 dòng, không phải tường) + trace code đúng chỗ đó.
+4. **Re-derive + tự VẼ** trên ví dụ/shape MỚI (tự vẽ data-flow/roofline — người vẽ mới nhớ).
+5. **Teach-back — CỔNG + modify-and-predict** ("đổi X → số đổi sao?"); **chưa dạy lại được thì chưa sang Bài sau.** Rồi nối **Frontier** (thực hành 2026 / câu hỏi interview). Mở session kế bằng 1 câu recall từ Bài ✅ trước (spaced).
 
 Khi qua cổng một Bài, tick nó ở bảng study-queue trong [`../INDEX.md`](../INDEX.md) (và viết bài giảng
 đầy đủ nếu muốn — mẫu: [`../serving/01-batched-kv-cache.md`](../serving/01-batched-kv-cache.md), Bài

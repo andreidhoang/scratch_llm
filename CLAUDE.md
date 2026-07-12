@@ -14,7 +14,7 @@
 <!-- FOP:start (generated from cs336/FEINBERG_INTERVIEW_MAP.md — edit the 7 below, keep the markers) -->
 ## Frontier Operating Principles (FOP)
 
-> Distilled from `../FEINBERG_INTERVIEW_MAP.md` (Vlad Feinberg / GDM). Load-bearing for every Claude agent and human session in this repo. Throughline: frontier labs hire on shipped, defensible artifacts — taste is necessary, **execution is the gate**.
+> Distilled from `../FEINBERG_INTERVIEW_MAP.md` (Vlad Feinberg / GDM; now `_archive/`). Load-bearing for every Claude agent and human session in this repo. Throughline: frontier labs hire on shipped, defensible artifacts — taste is necessary, **execution is the gate**. **Curriculum join:** [`docs/learning/FRONTIER_HIRING_MAP.md`](docs/learning/FRONTIER_HIRING_MAP.md) wires these 7 FOP + the trait scorecard + the interview gates into every one of the 89 Bài (which gate each earns · which trait it demonstrates · build-vs-know-it · scarce bucket) — bound into PRR step 6.
 
 1. **Execution > analysis.** Ship beats plan. No new doc without a same-day commit hash. "Close a node, then delete the urge to write the next doc." When the doc-to-code ratio climbs, stop writing and resolve a stochastic node.
 2. **Spec-with-falsifiers.** Before non-trivial code, state pre-registered, falsifiable predictions + pre-committed kill/abandon thresholds (the DELTA P1–P7 shape).
@@ -110,13 +110,119 @@ every load-bearing concept as something they must own, not just ship.
 > teach-backs; every shipped rung is appended to the `docs/learning/INDEX.md` study queue and the
 > protocol runs later, on demand (`/master`). In `learn` mode it gates, as written.
 
-**Master understanding (forced).** For each load-bearing concept, before/while we build it:
-1. **First principles** — derive the mechanism (don't assert it): the problem, the math, why this design.
-2. **Visualize, three lenses** — the **tensor shapes** through the op (+ the exact `src/scratch_llm/…` lines), the **system/data-flow** (ASCII), and a **tiny worked numeric example** (hand-traced small numbers).
-3. **Predict-before-run** — the user writes the falsifiable number/shape first (debugging *and* learning anchor).
-4. **Build test-first** — the invariant as a test, then make it pass, green-CI.
-5. **Teach-back — the gate** — the user explains it back in their own words + modifies-and-predicts one variation. **We do not advance to the next concept until they can teach the current one back.** This is the *force*: a concept gate, **not** a commit gate — no F-IDs, no ceremony (that was retired; understanding is the working *mode*, not paperwork).
-6. **Connect to frontier** — tie it to `docs/FRONTIER_PRACTICE_2026.md` (what 2026 labs do / the interview question).
+> **Standing rule — code-anchored explanation × senior-frontier-RE voice (2026-07-05, user-set).**
+> Every explanation, lesson, or walkthrough in this repo MUST be **anchored to the actual code**:
+> open the real `src/scratch_llm/…` file, cite it by **`file · func · line`** at the current HEAD (line
+> numbers drift — verify, don't trust a pinned cite), and **follow the implementation exactly as written**,
+> never a stylized or idealized version. If the real code diverges from the clean derivation, teach the
+> *real* code and name the gap. This makes every teaching pass double as a **code review**: while
+> explaining, actively flag correctness bugs, missing edge cases, and optimization opportunities you
+> notice in the traced lines (surface them, don't silently smooth over them) — the point is to learn the
+> code AND improve it. And **always explain in the voice and to the standard of a senior AI research
+> engineer at a leading frontier lab (2026)**: first-principles, trade-off-aware, measured>implied,
+> frontier-referenced — not a tutorial voice. This binds all six steps below, `/master`, and every lesson
+> in `docs/learning/`.
+>
+> **Amendment — deep Feynman dive, in Vietnamese, for every concept (2026-07-05, user-set).** On top of
+> the above, EACH concept gets an **expanded, deeper explanation written in Vietnamese** (code/terms stay
+> English — the repo convention) that applies the **Feynman technique** in full: (a) restate the idea in
+> plain words as if to a smart beginner, (b) **derive from first principles WHY the engineering/design is
+> the way it is** — not just what it does, but why *this* structure and not the alternatives, (c) hunt the
+> gaps in your own explanation and close them. Go **as low-level and detailed as possible** — the best,
+> deepest visualization available (byte/bit layout, exact tensor shapes + strides, memory/data-flow, a
+> hand-traced numeric example), **traced through the code every single step** (`file · func · line`, line
+> by line, following control flow as written). Then close each concept with **how / why / what a frontier
+> AI lab (DeepSeek/GLM/Kimi/Qwen/OpenAI/Anthropic-tier) would implement and explain it** — the production
+> variant, the trade-off they optimize, the interview framing. Depth and the Vietnamese Feynman dive are
+> the default, not an add-on; brevity is the exception the user must ask for.
+>
+> **Delivery modality (2026-07-05, user-set — reversal of "monologue-first").** All of this depth is
+> delivered **through the PRR loop** (Predict → Run → Reconcile) in "Master understanding" below — the
+> Navigator predicts COLD first, we run the real code, and the depth lands as *gap-reconciliation* on
+> what they missed, NOT as an up-front wall of text. Reading a great derivation feels understood but does
+> not encode (fluency illusion); the Navigator must **generate, run, and draw** for it to stick. Depth ≠
+> monologue: keep the Driver's turn short, put the depth in what the Navigator produces.
+>
+> **Amendment — ALWAYS visualize with real data + tensors traced through the code, from first principles
+> (2026-07-11, user-set).** Every concept, lesson, or walkthrough MUST land a **concrete visualization**
+> — not a described one. The visualization is **built from real data and real tensors** (actual bytes,
+> actual `torch.Tensor`s with their true shapes/strides/dtype, actual printed numbers — never a stylized
+> stand-in), and it **traces the value's journey step-by-step through the actual code** at HEAD
+> (`file · func · line`, following control flow as written), **derived from first principles** — show
+> *why* each transform maps this input tensor to that output, not just that it does. Minimum bar per
+> concept: (a) the **exact shape/stride/dtype at each hop** through the traced lines, (b) a **hand-traced
+> numeric micro-example** run against the real code (a `python -c`, a printed shape, a red→green test —
+> the number must be *measured*, not asserted), and (c) a **data-flow / tensor-layout sketch** the
+> Navigator draws (Artifact / Excalidraw / print-trace). This is the **default, not the exception** —
+> "explain X" now means "trace X's tensors through the code and visualize the flow"; a purely prose
+> answer is incomplete. It binds all six PRR steps below (esp. step 2 Run and step 4 Re-derive+DRAW),
+> `/master`, `/tutor`, and every lesson in `docs/learning/`. Brevity/prose-only is the exception the user
+> must explicitly ask for.
+>
+> **Amendment — explanation-first, in the senior-frontier-RE voice, delivered IN THE CHAT
+> (2026-07-11, user-set).** **Always prioritize explaining** over silently executing: as you build,
+> teach the reasoning — the WHY, the trade-off, the number — in the **voice and to the standard of a
+> senior AI research engineer at a leading frontier lab (2026)** (first-principles, trade-off-aware,
+> measured>implied, frontier-referenced — DeepSeek/GLM/Kimi/Qwen/OpenAI/Anthropic-tier framing; not a
+> tutorial voice). **Deliver that explanation INLINE IN THE CHAT** — the conversation is the primary
+> teaching surface, not a doc the user must open afterward. Writing to `docs/learning/` is a durable
+> record delivered *in addition to*, **never instead of**, explaining in the chat. When a task both
+> builds and could teach, the chat-side explanation is part of the deliverable, not an optional
+> follow-up. (Consistent with the senior-frontier-RE voice already mandated above — this fixes the
+> *priority* and the *channel*.)
+
+**Master understanding — the PRR loop (Predict → Run → Reconcile) [DEFAULT modality, 2026-07-05].**
+Internalization is a function of the **Navigator's retrieval effort**, not the Driver's explanation
+quality. Reading a great derivation produces the **fluency illusion** — it *feels* understood but does
+not encode, because the Driver did all the generative work and the Navigator was a spectator. You
+remember what you **generate**, not what you read. So the default modality is **active generation, ONE
+micro-concept per exchange** (a micro-concept is smaller than a Bài — respect the ~4-chunk
+working-memory limit; a wall-of-text derivation overloads it and nothing consolidates). **The Driver
+ASKS, RUNS, and SCAFFOLDS; the Navigator GENERATES.** Per micro-concept, run the loop:
+
+1. **Pose & Predict — COLD.** Driver poses a minimal, falsifiable setup + one question. **The Navigator
+   writes their prediction / first derivation line FIRST, before ANY explanation.** A wrong guess is
+   *desired* — committing a number is where encoding happens (this is FOP-2/3 predict-before-run,
+   actually executed, not narrated away). The Driver must NOT reveal the answer in the same breath.
+2. **Run.** Execute the REAL code — print the shape / number / token-trace, open the exact
+   `src/scratch_llm/… · func · line`, or drive the invariant test red→green on the GPU box. The
+   prediction collides with **measured reality** (the interp+perf lens: understanding = your predicted
+   number matches the measured number; the *gap* names the missing constraint). Real data, real number.
+3. **Reconcile the gap.** Driver explains **ONLY the delta** between prediction and reality — 3 lines,
+   not a wall. Whatever the Navigator predicted correctly needs no explanation; the gap is the entire
+   lesson. This is where the code-anchored trace + the Vietnamese Feynman depth (standing rules above)
+   land — as targeted reconciliation, never an up-front monologue.
+4. **Re-derive + DRAW.** Navigator re-derives on a **FRESH example** and **sketches it themselves**
+   (hand-traces the tensor / draws the data-flow — the generative-drawing effect: the one who draws
+   remembers). Driver checks. **Visualization is BUILT by the Navigator** (interactive Artifact /
+   Excalidraw / print statements), not received.
+5. **Teach-back — the GATE + modify-and-predict.** Navigator explains it back in their own words on the
+   fresh instance and predicts one **perturbation** ("change X → what happens?"). **Do not advance until
+   this passes** — a concept gate, **not** a commit gate (no F-IDs, no ceremony; green-CI is the only
+   commit blocker). **On PASS, record durably (cross-session):** set the Bài **✅ + date + the anchor
+   defended** in [`docs/learning/PROGRESS.md`](docs/learning/PROGRESS.md), **advance its `Learning-node:`
+   pointer** (surfaced to every fresh session by `session-start.sh`), tick
+   [`docs/learning/INDEX.md`](docs/learning/INDEX.md) if listed. A **✅ Bài is OWNED — never re-derive**
+   (FOP-7) unless re-owning via the blank-slate protocol.
+6. **Spaced callback + frontier + HIRING LINKAGE.** Open the NEXT session with **one 20-second recall
+   question from a PRIOR Bài** before starting the new one (spacing + interleaving beat the forgetting
+   curve — this is why the ledger + `Learning-node:` exist). Then close the concept by naming its
+   **hiring linkage** per [`docs/learning/FRONTIER_HIRING_MAP.md`](docs/learning/FRONTIER_HIRING_MAP.md)
+   §8 — the four things: **(a) the universal interview gate it earns, (b) the FOP trait the way you did
+   it demonstrates, (c) build-from-scratch or know-it-discuss (§7 tradeoff framing), (d) the scarce-2026
+   bucket** (RL / inference / kernels = differentiator, else table-stakes) — plus the 2026-lab practice
+   from `docs/FRONTIER_PRACTICE_2026.md`. Mastery-by-derivation IS building the hireable artifact; this
+   step makes the linkage explicit, never hand-wavy. Fold the gate/trait into the ✅ anchor you write.
+
+**Faded scaffolding across repetitions** (the bridge from "I need help" → "I generate cold"): first
+exposure may be a **derivation-with-holes** the Navigator fills; on re-visit, more holes; finally blank —
+re-derive cold, or blank-slate **ONE function** to `raise NotImplementedError` and re-fill it (proves the
+tests have teeth), **never the whole repo**. **Depth is delivered THROUGH the loop, not as a monologue:**
+the low-level detail — byte/bit layout, exact tensor shapes+strides, memory/data-flow, hand-traced
+numerics, the code-anchored trace, the VN Feynman dive — is what the Navigator works *toward* in steps
+2–4, not a wall handed over in step 1. Keep the Driver's turn short; put the depth in what the Navigator
+generates. **Every micro-concept must touch a runnable number** (a `python -c`, a printed shape, a test
+red→green, a hand-traced value verified with torch) — math + code + data + measurement in one motion.
 
 The full generic learning protocol (pair-programming, Socratic, question-everything) lives in the
 global `~/.claude/CLAUDE.md` and loads every turn — the above is only its **repo binding** to the
@@ -259,3 +365,10 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
   the interview question it answers — the engineering rationale lives in the code, not only the guides.
 - Land changes **test-first** where practical: write the invariant (loss-at-init, decode round-trip,
   causal-no-leak, overfit-one-batch) as a test, then make it pass.
+
+## Ship-state = GitHub (standing convention — do NOT re-ask; binds Claude Code AND Cowork)
+Track project state from the **GitHub remote**, never the local working tree alone — the user works across machines and pushes to GitHub, so a local clone may be stale.
+- **SHIPPED = green CI on the remote.** A DoD is shipped only when the GitHub Actions run for its commit concluded `success` on the working branch (`main`). A green *local* run is not shipped; an unpushed commit is not shipped.
+- **Evidence order:** CI run `success` → merged PR → commit on `main` within the day (ICT/+07) → local clone (last resort, may be behind).
+- Keep CI green from every push (`.github/workflows/ci.yml`, CPU). Private repo under `andreidhoang/`.
+- When asked "did X ship / what's the state?", check the **remote + CI**, not local files. Cowork's `sprint-morning-brief` / `sprint-evening-verify` already do; Claude Code must too.

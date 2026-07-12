@@ -206,13 +206,13 @@ softmax và nói vì sao rescale là O(1)."
 
 ---
 
-## Bài 4.6 — Flash Attention FA2: fuse fwd không-N×N + recomputation backward D-vector (`kernels/flash_attention_triton.py` · `_fa2_fwd_kernel` :37 · `flash_attention.py` · `FlashAttentionPyTorch.backward` :118)
+## Bài 4.6 — Flash Attention FA2: Triton forward + backward (D-vector + atomic dQ) và model integration (`kernels/flash_attention_triton.py` · `_fa2_fwd_kernel` :37 · `_fa2_bwd_kernel` · `TritonFlashAttention`)
 
 > **Câu hỏi first-principles:** ghép GEMM-tiling (A2) + online softmax (Bài 4.5) thế nào để một kernel tính
 > attention mà **không tile nào ghi S ra HBM** — và backward tránh N×N ra sao?
 > **Số đo (aha):** FA2-Triton **50.0% của SDPA (causal 48.3%) @ seq4096**, **44× nhẹ hơn naive @8K không OOM**,
 > causal speedup **1.11→1.74×**; backward **gradcheck 5/5 vs SDPA autograd**; GQA KV **32→4 MB (8×)**
-> (RESULTS.md :669–670).
+> (RESULTS.md :669–670). Model integration test `test_triton_attention_forward_backward` chạy thành công trên GPU.
 
 **1. Feynman — bài toán bằng lời.** Đây là nơi A2 và A3 *fuse*: một program lo **một query tile** cho một
 (batch·head), nạp Q tile một lần, **loop qua key tile** giữ online-softmax `(m, ℓ, acc)` trong fp32, chỉ ghi ra
@@ -229,26 +229,16 @@ Backward tái tạo `S,P` từ `L` (`p = exp(s − L)`), và Jacobian-softmax go
 `D_i = Σ_d O_id·dO_id = Σ_j P_ij·dP_ij` — reduction d-wide rẻ trên tensor đã có, **không cần dP** để lập → không
 byte O(N²) nào băng qua ranh fwd→bwd.
 
-**3. Trace code.** *Forward Triton* `flash_attention_triton.py` · `_fa2_fwd_kernel` (:37): load Q tile fp32
-(:74) → init `m_i=−inf, l_i=0, acc=0` (:76–78) → `k_end` causal (:82) → loop key tile (:84): `s = dot(q,kᵀ)·scale`
-(:96) → mask padded + causal (:97–99) → **online recurrence** `m_new/p/corr/l_i/acc` (:101–106, *đối chiếu Bài
-4.5*) → cuối `o = acc/l_i` (:108), store O + `L = m_i + log(l_i)` (:110–112). Autotune configs (:27–35) chọn
-BLOCK/warps/stages theo seq (fair vs SDPA tuned). Host `flash_attention_triton_forward` :115. *Oracle + backward*
-`flash_attention.py`: `flash_attention_forward` (:26, cùng recurrence bằng PyTorch thuần, CPU-able, oracle cho
-kernel); `FlashAttentionPyTorch.forward` (:111) save `(Q,K,V,O,L)`; `.backward` (:118): recompute `s` (:132),
-`p = exp(s − lse)` (:135), **`d_vec = (o*do).sum(-1)`** (:137), `ds = p*(dp − d_vec)` (:140), rồi `dq,dk,dv`
-(:141–142). Test `tests/test_flash_attention.py` gradcheck vs SDPA autograd.
+**3. Trace code.**
+*   *Forward Triton* `flash_attention_triton.py` · `_fa2_fwd_kernel` (:37): load Q tile fp32 (:74) → init `m_i=−inf, l_i=0, acc=0` (:76–78) → `k_end` causal (:82) → loop key tile (:84): `s = dot(q,kᵀ)·scale` (:96) → mask padded + causal (:97–99) → **online recurrence** `m_new/p/corr/l_i/acc` (:101–106, *đối chiếu Bài 4.5*) → cuối `o = acc/l_i` (:108), store O + `L = m_i + log(l_i)` (:110–112). Autotune configs (:27–35) chọn BLOCK/warps/stages theo seq (fair vs SDPA tuned). Host `flash_attention_triton_forward` :115.
+*   *Backward Triton* `flash_attention_triton.py` · `_fa2_bwd_kernel`: MAP block tới Key tile `BLOCK_K`, loop ngoài qua Query tile `BLOCK_Q`. SRAM chứa `dk, dv` tích lũy cục bộ. Loop Q nạp `Q, dO, L, D` → tính `S = (Q @ K.T) * scale` → `p = exp(S - L)` → `dp = dO @ V.T` → `ds = p * (dp - D) * scale` → tích lũy `dk += ds.T @ q`, `dv += p.T @ do`, và `tl.atomic_add` cho `dQ` global (`dq_ptrs += ds @ k`). Host launcher `flash_attention_triton_backward` tính vector `df = sum(of * dof, dim=-1)` (D-vector) rồi launch grid `(cdiv(n, BLOCK_K), b)`.
+*   *Autograd Wrapper & Wiring* `flash_attention_triton.py` · `TritonFlashAttention`: PyTorch autograd wrapper. Model `model.py` nhận `use_triton_attention` config trong `ModelConfig` và tự động dispatch `TritonFlashAttention.apply(q, k, v, is_causal)` trong `MultiHeadSelfAttention.forward` khi chạy trên CUDA.
 
 **4. Cổng teach-back.** (a) Chỉ ra dòng nào trong `_fa2_fwd_kernel` ứng đúng với dòng nào của
 `online_softmax_normalizer` (Bài 4.5) — và vì sao `acc` cũng phải nhân `corr` chứ không chỉ `ℓ`. (b)
-*Modify-and-predict:* nếu backward **lưu P** ở forward thay vì recompute từ L — memory fwd→bwd đổi từ O(N·d)
-sang gì, và ở seq 8K điều đó có OOM lại như naive không? Vì sao D-vector khiến recompute rẻ?
+*Modify-and-predict:* vì sao `dQ` lại cần `tl.atomic_add` trong khi `dK` và `dV` chỉ cần `tl.store` thông thường ở cuối kernel? (Hint: xem chiều giảm của từng gradient).
 
-**5. Frontier.** 50% của SDPA là số FA2-on-consumer-Blackwell honest — SDPA là cuDNN/flash tuned, nên còn ~2× ở
-non-matmul FLOP + tile scheduling + warp-spec. Trần thật: **FA3-class Hopper** (warp-spec producer/consumer + TMA
-+ ping-pong + FP8, ~75% util / ~740 TF/s) — kernel đã compile-verified ở `performance/rental/kernels/`
-(8× wgmma + 3× TMA + 14 mbarrier + setmaxnreg, RESULTS.md :724), H100-gated. Câu phỏng vấn: "FA tiết kiệm memory
-hay FLOP?" → memory; "backward lưu gì?" → (Q,K,V,O,L) + recompute + D-vector.
+**5. Frontier.** Triton FA2 fwd+bwd hoàn chỉnh vượt qua kiểm thử autograd gradcheck 5/5. Trần thật: **FA3-class Hopper** (warp-spec producer/consumer + TMA + ping-pong + FP8, ~75% util / ~740 TF/s) — kernel đã compile-verified ở `performance/rental/kernels/` (8× wgmma + 3× TMA + 14 mbarrier + setmaxnreg, RESULTS.md :724), H100-gated. Câu phỏng vấn: "FA tiết kiệm memory hay FLOP?" → memory; "backward lưu gì?" → (Q,K,V,O,L) + recompute + D-vector; "vì sao dQ cần atomic_add?" → các block Key song song cùng ghi đè lên các hàng của dQ.
 
 ---
 

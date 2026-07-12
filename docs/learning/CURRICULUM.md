@@ -38,7 +38,7 @@ nhau tại các mối nối tự nhiên, thay vì "học hết model rồi mới
 |---|---|
 | **Kernels (S3–S4) ngay sau model+training (M1–M4)** | "Make it work, then make it fast." Bạn vừa *dẫn xuất* matmul/softmax/norm/attention (M2–M3) — giờ xem chúng chạy ở tốc độ ánh sáng trên GPU. Op còn nóng hổi ⇒ khắc sâu nhất. |
 | **Distributed serving (S6) kề distributed training (M5)** | Song sinh: M5 = data-parallel phía huấn luyện (DDP→ZeRO→FSDP); S6 = TP/PP/EP + ISA phía phục vụ. Cùng "trải ra nhiều GPU". |
-| **Serving+quant (S1–S2, S5) SAU frontier arch (M9)** | MLA (S1 Bài 2.8) và MTP (S2 spec-decode) *là* thứ làm serving thú vị. Bạn phục vụ một model **frontier đã huấn luyện**, không phải toy random-weight. |
+| **Serving+quant (S1–S2, S5) SAU frontier arch (M9)** | MLA (S2 Bài 2.8) và MTP (S2 spec-decode) *là* thứ làm serving thú vị. Bạn phục vụ một model **frontier đã huấn luyện**, không phải toy random-weight. |
 | **Ablation (M10) cuối cùng** | Capstone: cần MỌI thứ trước đó — model biết nói (M1–M9) + serving thật (S1–S2) để de-confound, rồi *chứng minh* F1–F9. |
 
 Roofline xuất hiện **hai lần, đúng lúc**: mức-kernel ở **S3 Bài 3.0** (Stage 2, khi tối ưu compute) và
@@ -125,7 +125,7 @@ mức-decode ở **S1 Bài 1.0** (Stage 7, khi phục vụ). Không phải trùn
                         │                       │ dùng    │
                         ▼                       ▼ serving  │
                        M9 (MLA,MTP) ──────► S1 → S2 → S5   │ serving
-                        │  MLA→S1.2.8  MTP→S2 spec-decode  │
+                        │  MLA→S2.2.8  MTP→S2 spec-decode  │
                         └──────────────► M10 (capstone) ◄──┘
 ```
 Mũi tên = "phải hiểu trước". Hai mối đan then chốt: **M2→S3/S4** (op→kernel) và **M9→S1/S2** (arch→serving).
@@ -135,9 +135,34 @@ Mũi tên = "phải hiểu trước". Hai mối đan then chốt: **M2→S3/S4**
 ## Cách dùng — giao thức mastery (một Bài một lần)
 
 1. **Theo thứ tự chặng 1→8.** Trong mỗi série, đọc theo thứ tự Bài nội bộ của nó (M2: 2.1→2.6; S1: 1.0→1.7…).
-2. **Mỗi Bài, 5 nhịp** (đúng "Master understanding (forced)" của [`../../CLAUDE.md`](../../CLAUDE.md)): first-principles/derive → predict-before-run (che "Neo") → trace code thật → **cổng teach-back** (dạy lại + sửa-và-đoán) → frontier.
-3. **Cổng là thật:** chưa dạy lại được một Bài thì chưa sang Bài sau. Qua cổng ⇒ tick ở study-queue [`INDEX.md`](INDEX.md).
-4. **Trung thực số (FOP-4):** "Neo" đã gắn nhãn — invariant đã đo / số thật trong `bench/RESULTS.md` / PREDICTION pre-registered. Nửa mô hình phần lớn built+toy-tested (run thật rental-gated); nửa tốc độ sm120 đã đo. Đừng tin một con số chưa gắn nhãn measured.
+2. **Mỗi micro-concept = PRR loop** (mặc định — "Master understanding — the PRR loop" của [`../../CLAUDE.md`](../../CLAUDE.md)): **Predict COLD** (Navigator viết dự đoán TRƯỚC mọi giải thích) → **Run** code thật (in shape/số/token, test red→green) → **Reconcile** chỉ chỗ lệch (Driver 3 dòng, không monologue) → **Re-derive + tự VẼ** ví dụ mới → **cổng teach-back + modify-and-predict** → frontier. KHÔNG đọc wall-of-text; internalize = Navigator *generate/run/draw*, không phải đọc. Chunk nhỏ hơn một Bài.
+3. **Cổng là thật:** chưa dạy lại được (trên ví dụ MỚI) thì chưa sang Bài sau. Qua cổng ⇒ tick ở study-queue [`INDEX.md`](INDEX.md). **Spaced callback:** mở session kế bằng 1 câu recall từ Bài ✅ trước.
+4. **Trung thực số (FOP-4):** "Neo" đã gắn nhãn — invariant đã đo / số thật trong `bench/RESULTS.md` / PREDICTION pre-registered. Nửa mô hình phần lớn built+toy-tested (run thật rental-gated); nửa tốc độ sm120 đã đo. Đừng tin một con số chưa gắn nhãn measured — và trong PRR, *chính con số đo được* là cái đối chiếu với prediction của bạn.
+
+---
+
+## Neo tuyển dụng — mỗi chặng "ăn" gate phỏng vấn nào (join với [`FRONTIER_HIRING_MAP.md`](FRONTIER_HIRING_MAP.md))
+
+Master từ first principles CHÍNH LÀ dựng artifact được tuyển. Mỗi chặng đóng một *universal interview
+gate* + phô một *FOP trait*. Bản đồ đầy đủ (7 FOP · trait scorecard · gate · build-vs-know-it · scarce
+bucket, đúng tới từng bit, nguồn = `CLAUDE.md §FOP` + `STRATEGY.md` + `README.md` + `FRONTIER_PRACTICE_2026.md`):
+[`FRONTIER_HIRING_MAP.md`](FRONTIER_HIRING_MAP.md). Tóm tắt per-chặng:
+
+| Chặng · Série | Gate phỏng vấn ăn được | FOP trait | Tier |
+|---|---|---|---|
+| 1 · M1–M4 | *MHA/Transformer from scratch trong 45'* | overfit/sanity gates (loss-at-init≈log V), spec-with-falsifiers | table-stakes |
+| 2 · S3–S4 | *vì sao batch-1 decode memory-bound; roofline* | roofline-first/predict-the-number; measured≠theoretical | ★ kernels |
+| 3 · M5+S6 | *train model 100B: DP+TP+PP + memory math* | comms discipline; lock evals before arch | table-stakes |
+| 4 · M6+M7 | *derive scaling laws; compute-optimal N,D* | extrapolation honesty (a+b=1); dedup-scope judgment | table-stakes |
+| 5 · M8 | *RLHF vs DPO; RL stability; GRPO advantage* | **mandatory RL logging**; own the KL toggle | **★ differentiator** |
+| 6 · M9 | *MLA vs GQA tradeoff; aux-loss-free* | convergent-defaults reasoning | table-stakes |
+| 7 · S1–S2+S5 | *KV-cache; quant; train/inference drift* | inference co-design; TCO≈electricity | **★ differentiator** |
+| 8 · M10 | *what would falsify your result?* (capstone) | **spec-with-falsifiers (A+)** · ablate-one-var · **epistemic honesty (A+)** | ★ artifact |
+
+**Trục bị tuyển = EXECUTION** (`STRATEGY.md`: planning ~90% vs execution ~25% — "committee hires on
+execution"). Vì vậy PRR bắt mỗi micro-concept **chạm một con số chạy được**, không phải một đoạn văn — đó
+cũng là vì sao FOP-1 = *Execution > analysis*. Portfolio ăn tiền = **repo green-CI + tests + design docs
+giải thích được từ first principles** (`README.md`) — chính là `scratch_llm/`.
 
 ---
 

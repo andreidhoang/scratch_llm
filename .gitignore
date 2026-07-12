@@ -45,3 +45,7 @@ wandb/
 # Local machine state — not source
 .venv-backups/
 .claude/settings.local.json
+
+# Hands-on mastery track folder
+mastery/
+

@@ -20,5 +20,6 @@
 | 10 | Expert Iteration (STaR) + verifiable-reward grader | `algos/expert_iteration.py` · `rewards/r1_zero.py` · `envs/countdown.py` | Why does filter-then-SFT already improve reasoning, and where does it plateau? | — | ☐ |
 | 11 | GRPO / Dr.GRPO (group advantage, clip trust region, length-norm de-bias) | `algos/grpo.py` · `tests/test_grpo_algos.py` · `docs/adr/ADR-0017` | Derive GRPO's group-relative advantage; what bias does Dr.GRPO remove? | — | ☐ |
 | 12 | DPO loss + Bradley-Terry reward modeling | `algos/dpo.py` · `tests/test_dpo_algos.py` | RLHF (PPO+RM) vs DPO — what's the closed-form reduction? | — | ☐ |
+| 13 | Triton FlashAttention-2 backward (recomputation, D-vector, atomic dQ, model wiring) | `kernels/flash_attention_triton.py` · `model.py` | Derive FlashAttention-2's backward pass, the D-vector optimization, and explain why dQ needs atomic operations. | — | ☐ |
 
 *(rows appended as modules ship — see `docs/EXECUTION_SPEC_CS336_FINISH.md` for the build DAG)*

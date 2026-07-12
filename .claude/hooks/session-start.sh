@@ -26,4 +26,9 @@ node="$(grep -m1 '^Phase:' performance/PERF_PLAN.md 2>/dev/null || true)"
 # Close-the-loop / frontier-ablation front (ADR-0018): the buildable next rung for a fresh session.
 fnode="$(grep -m1 'Next-node:' docs/FRONTIER_2026_TASKSPEC.md 2>/dev/null | sed -E 's/.*Next-node: *//; s/ *-->.*//' || true)"
 [ -n "$fnode" ] && echo "frontier node → ${fnode} (source: docs/FRONTIER_2026_TASKSPEC.md — START HERE block + §0)"
+# Learning track (teach-back mastery): the next Bài to master so a /master session resumes seamlessly.
+lnode="$(grep -m1 '^Learning-node:' docs/learning/PROGRESS.md 2>/dev/null | sed -E 's/^Learning-node: *//' || true)"
+[ -n "$lnode" ] && echo "learning node → ${lnode} (source: docs/learning/PROGRESS.md — 89-Bài teach-back ledger; ✅=owned, don't re-derive)"
+[ -n "$lnode" ] && echo "  teach via PRR loop (default): Navigator predicts COLD → run real code/number → reconcile only the gap → re-derive+draw → teach-back gate. NO monologue; open with a spaced recall Q. (CLAUDE.md §How we build)"
+[ -n "$lnode" ] && echo "  hiring linkage (PRR step 6): each Bài earns a named interview gate + FOP trait + build-vs-know-it + scarce bucket → docs/learning/FRONTIER_HIRING_MAP.md. Hired on EXECUTION/shipped artifacts, not plans (FOP-1)."
 exit 0

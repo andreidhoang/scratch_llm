@@ -66,16 +66,19 @@ vòng** thành model biết nói rồi *chứng minh* đòn bẩy nào gánh vi�
 
 ## Cách dùng — giao thức DERIVATION mastery
 
-Với **mỗi Bài**, theo "Master understanding (forced)" của [`../../../CLAUDE.md`](../../../CLAUDE.md):
+Với **mỗi micro-concept**, chạy **PRR loop** (mặc định — "Master understanding — the PRR loop" của
+[`../../../CLAUDE.md`](../../../CLAUDE.md)). KHÔNG đọc monologue rồi gật (fluency illusion). Ở nửa mô hình
+này DERIVATION-first nghĩa là bước Predict *chính là tự dựng lại toán/thiết kế từ blank* — mục tiêu
+*re-derive được lạnh*, không chỉ đọc hiểu. Bạn có thể sử dụng thư mục [mastery/](file:///Users/danghuyhoang/Desktop/cs336/scratch_llm/mastery/README.md) để tự code tay từ con số 0 trên các skeleton files và chạy test cục bộ (`PYTHONPATH=mastery/src pytest mastery/tests/`) trước khi đối chiếu với Oracle ở `src/scratch_llm/`.
 
-1. **First principles / derive** — đọc "Câu hỏi first-principles" + "Feynman" + "Dẫn xuất", rồi **tự dựng
-   lại toán/thiết kế từ blank** trước khi mở code. Đây là điểm khác cốt lõi: mục tiêu là *re-derive được
-   lạnh*, không chỉ đọc hiểu.
-2. **Predict-before-run** — che "Neo (invariant/số đo/prediction)", tự đoán invariant/con số trước.
-3. **Trace code** — mở đúng file·hàm·dòng, đi theo thứ tự chạy; đối chiếu test được nêu.
-4. **Teach-back — CỔNG** — dạy lại + biến thể "sửa-và-đoán"; chưa dạy lại được thì chưa sang Bài sau.
-5. **Frontier** — đọc implementation frontier được trỏ (trong `.venv/.../transformers/models/`), trả lời
-   "ta khác họ ở đâu, vì sao" + câu hỏi interview.
+1. **Predict — COLD.** Che "Câu hỏi first-principles" + "Dẫn xuất" + "Neo"; **tự dựng lại toán/thiết kế +
+   đoán invariant/con số TRƯỚC** khi mở code (đoán sai là tốt — đó là lúc encode).
+2. **Run.** Mở đúng file·hàm·dòng, chạy theo thứ tự / in số / test red→green; prediction đụng số đo được.
+3. **Reconcile.** Chỉ giải thích ĐÚNG chỗ lệch (Driver 3 dòng, không tường) + trace code đúng chỗ đó.
+4. **Re-derive + tự VẼ** trên ví dụ/shape MỚI (tự vẽ data-flow/tensor — người vẽ mới nhớ).
+5. **Teach-back — CỔNG + modify-and-predict**; chưa dạy lại được (ví dụ MỚI) thì chưa sang Bài sau. Rồi
+   **Frontier** — đọc implementation frontier được trỏ (`.venv/.../transformers/models/`), trả lời "ta
+   khác họ ở đâu, vì sao" + câu hỏi interview. Mở session kế bằng 1 câu recall từ Bài ✅ trước (spaced).
 
 Qua cổng ⇒ tick ở study-queue [`../INDEX.md`](../INDEX.md).
 

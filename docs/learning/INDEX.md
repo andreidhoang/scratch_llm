@@ -1,14 +1,17 @@
 # Learning track — chuỗi bài mastery (tiếng Việt), trace code thật
 
-> **Đây là gì.** Bài giảng theo đúng giao thức "Master understanding (forced)" của repo
-> (`CLAUDE.md` §How we build): **first principles → visualize 3 lăng kính (tensor shapes + đúng
-> dòng `src/`, data-flow ASCII, ví dụ số tay) → predict-before-run → teach-back gate**. Mỗi bài mổ
-> MỘT component đã build và đã đo — không lý thuyết suông, mọi trích dẫn là file/hàm/dòng thật,
-> mọi con số là số đã log trong `bench/RESULTS.md`.
+> **Đây là gì.** Bài giảng chạy theo **PRR loop** — giao thức "Master understanding — the PRR loop"
+> của repo (`CLAUDE.md` §How we build): mỗi micro-concept = **Predict COLD → Run code/số thật →
+> Reconcile chỉ chỗ lệch → Re-derive + tự vẽ → teach-back gate + modify-and-predict**. KHÔNG đọc
+> monologue rồi gật (fluency illusion — thấy hiểu nhưng không encode); Navigator *generate/run/draw*,
+> Driver chỉ hỏi/chạy/lấp chỗ lệch. Mỗi bài mổ MỘT component đã build và đã đo — mọi trích dẫn là
+> file/hàm/dòng thật, mọi con số là số đã log trong `bench/RESULTS.md` (và là số bạn đối chiếu với
+> prediction của mình).
 >
-> **Luật dùng:** học tuần tự, mỗi bài kết thúc bằng **cổng teach-back** — tự trả lời (nói to /
-> viết ra) trước khi mở đáp án gấp trong `<details>`; chưa dạy lại được thì chưa sang bài sau.
-> Bài mới chỉ được viết khi bài trước đã qua cổng (đúng nhịp "one concept at a time").
+> **Luật dùng:** học tuần tự, mỗi micro-concept **predict COLD trước** (đừng mở đáp án gấp trong
+> `<details>` cho tới khi đã viết dự đoán), chạy code thật, rồi **cổng teach-back** trên ví dụ MỚI —
+> chưa dạy lại được thì chưa sang bài sau. Mở session kế bằng 1 câu recall từ bài ✅ trước (spaced).
+> Đúng nhịp "one concept at a time".
 
 ## Quy ước
 
@@ -17,6 +20,34 @@
 - Code giữ nguyên tiếng Anh (nó là sự thật trên đĩa); giải thích + chú thích tiếng Việt;
   thuật ngữ kỹ thuật (tensor, mask, slot, cache, kernel…) giữ tiếng Anh khi tự nhiên hơn.
 - Mỗi bất biến nêu ra phải chỉ được **test nào găm nó** trong `tests/`.
+- **Code-anchored bắt buộc (2026-07-05).** Mọi giải thích phải **mở đúng file `src/` và bám sát code THẬT
+  y như đã viết** (không phiên bản lý tưởng hoá) — trace theo `file · hàm · dòng` ở HEAD hiện tại (số dòng
+  trôi thì verify lại). Vì vậy mỗi lần giảng đồng thời là một lượt **review code**: vừa dạy vừa chỉ ra bug,
+  edge-case thiếu, và chỗ tối ưu được trong chính dòng đang trace (nêu ra, đừng làm mượt bỏ qua) — học code
+  VÀ cải thiện nó. Giọng: **senior AI research engineer ở frontier lab 2026** (first-principles, trade-off,
+  measured>implied, đối chiếu frontier), không phải giọng tutorial.
+- **Feynman deep-dive bắt buộc, tiếng Việt (2026-07-05).** Mỗi concept phải có phần **giải thích SÂU hơn,
+  mở rộng, bằng tiếng Việt** theo đúng **kỹ thuật Feynman**: (a) phát biểu lại bằng lời thật đơn giản, (b)
+  **dẫn xuất từ first principles VÌ SAO thiết kế/engineering lại như vậy** — vì sao cấu trúc NÀY chứ không
+  phải phương án khác, (c) tự soi chỗ hổng trong lời giải thích rồi bịt lại. Đi **càng low-level, chi tiết
+  càng tốt** — visualization sâu nhất có thể (bố cục byte/bit, shape+stride tensor chính xác, memory/
+  data-flow, ví dụ số hand-trace), **trace qua code TỪNG bước** (`file · hàm · dòng`, theo đúng control
+  flow đã viết). Chốt mỗi concept bằng **how/why/what một frontier AI lab (DeepSeek/GLM/Kimi/Qwen/OpenAI/
+  Anthropic-tier) sẽ implement và giải thích** — biến thể production, trade-off họ tối ưu, khung interview.
+  Chiều sâu + Feynman tiếng Việt là MẶC ĐỊNH, không phải phần thêm; ngắn gọn chỉ khi user yêu cầu.
+- **Neo tuyển dụng (PRR bước 6).** Chốt mỗi Bài bằng linkage tuyển dụng theo
+  [`FRONTIER_HIRING_MAP.md`](FRONTIER_HIRING_MAP.md) §8: (a) gate phỏng vấn ăn được, (b) FOP trait phô ra,
+  (c) build-from-scratch hay know-it-discuss (nếu know-it: nêu *khung trade-off*, đừng code), (d) scarce
+  bucket (RL/inference/kernels = differentiator, còn lại table-stakes). Master từ first principles = dựng
+  artifact được tuyển; bị tuyển trên **EXECUTION/shipped**, không phải plan (FOP-1).
+
+## ▶️ ĐANG Ở ĐÂU / HỌC GÌ TIẾP → [`PROGRESS.md`](PROGRESS.md) (sổ cái teach-back 89 Bài)
+
+> **Con trỏ resume của nửa học** (song sinh với `performance/PERF_PLAN.md` của nửa build). Đầu file có
+> dòng `Learning-node:` = Bài kế tiếp cần master — `session-start.sh` tiêm vào MỌI session mới, nên bất kỳ
+> session nào (kể cả "não trắng") **pick up ngay** đúng chỗ, không re-derive Bài đã ✅. Qua cổng teach-back
+> ⇒ tick ✅ + ngày + neo ở đó, advance `Learning-node:`. Đây là cái làm trải nghiệm học **liền mạch xuyên
+> session**.
 
 ## 🎓 BẮT ĐẦU Ở ĐÂY — Master Curriculum (thứ tự học đúng) → [`CURRICULUM.md`](CURRICULUM.md)
 
@@ -94,3 +125,4 @@ quantization A5 — theo `performance/PERF_PLAN.md`.
 | A2 R0 roofline harness | _(2026-07-04)_ | `bench/kernel_roofline.py` | peaks 0.551 TB/s / 72.1 TF/s reproduced; ncu blocked → %-of-peak + nsys, ncu-debt cho H100 day. Bài học: đo peak trên CHÍNH card, roofline = mem/cmp bound | ⬜ |
 | A2 R1–R6 kernel ladder (GEMV/softmax/RMSNorm/TopK/GEMM) | _(2026-07-04)_ | `kernels/{gemv,softmax,norm,topk,gemm}_triton.py` · `bench/*.py` · 79 gpu tests | 4 kernel memory-bound đạt 96–100% HBM peak; TopK 46.9% (poor GPU fit) + fusion 3.4×; GEMM 0.2%→134% cuBLAS-proxy. Bài học: Triton lo coalescing/float4/swizzle; craft = chạm tường HBM / tensor-core; A2 design note "Climbing to the Hopper ceiling" | ⬜ |
 | A5 R0–R4 quantization (INT8/INT4/NVFP4-MXFP4/FP8-KV) | _(2026-07-04)_ | `quant/{int8,int4_group,nvfp4_mxfp4,fp8_kv}.py` · 43 CPU tests | SQNR/MSE oracle (không allclose); NVFP4 MSE 1.48× < MXFP4; FP8-KV E2E 24.45 dB; INT4-KV degrade. Bài học: SQNR ~6.02·bits+c; per-channel > per-tensor; two-level scale placement; E4M3 clamp-before-cast | ⬜ |
+| A4 R3b Triton FA2 backward (recomputation + D-vector + model integration) | _(2026-07-05)_ | `kernels/flash_attention_triton.py` · `model.py` · `tests/test_flash_attention_triton.py` · `tests/test_model.py` | gradcheck 5/5 matching SDPA autograd, model use_triton_attention=True forward/backward verified on GPU. Bài học: D-vector recenters softmax Jacobian to avoid storing N² probability matrix; dQ needs global atomic_add because parallel Key thread blocks accumulate gradients on overlapping Query rows. | ⬜ |

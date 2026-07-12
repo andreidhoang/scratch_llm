@@ -1,9 +1,9 @@
 # Bài 1 — `BatchedKVCache`: bộ đệm slot tĩnh và nguyên tắc write-then-mask
 
-> **Series 1 · Serving substrate** · số dòng pin theo commit **`93a94fc`**
-> Code: `src/scratch_llm/model.py` — `SlotKVCache` (:240), `BatchedKVCache` (:380)
+> **Series 1 · Serving substrate** · số dòng re-pin theo commit **`d7e4603`** (2026-07-05)
+> Code: `src/scratch_llm/model.py` — `SlotKVCache` (:255), `BatchedKVCache` (:409)
 > Tests găm bất biến: `tests/test_batched_cache.py` · Số đo gốc: `bench/RESULTS.md` §A1-R3b
-> Tiên quyết: hiểu attention + KV-cache đơn request (`model.py:202 KVCache`, spec
+> Tiên quyết: hiểu attention + KV-cache đơn request (`model.py:203 KVCache`, spec
 > `docs/design/L2_kv_cache_SPEC.md`).
 
 ---
@@ -123,7 +123,7 @@ slot 2 (len 5): [k20]   [k21]  [k22]  [k23]      [k24]  [★30,31]  [·] [·]
 
 **Đọc** — `decode_view` trả `(3, 1, 6, 2)` (cắt tới `view_len=6`, là *view*, 0 byte copy).
 
-**Rèm che** — attention dựng mask `j ≤ lengths[b]` (`model.py:730–731`; chi tiết đường attention
+**Rèm che** — attention dựng mask `j ≤ lengths[b]` (`model.py:825–826`; chi tiết đường attention
 ở bài 2):
 
 ```
@@ -187,5 +187,5 @@ trên cửa sổ rộng `view_len` của **hàng dài nhất**. Trên bench th�
 ---
 
 *Tiếp theo:* **Bài 2 — RoPE per-row + per-row mask trong `MultiHeadSelfAttention.forward`
-(`model.py:704–760`)**: vì sao mỗi hàng cần *góc xoay riêng*, `positions =
-cache.lengths.unsqueeze(1)` (:835) làm điều đó thế nào — kèm ví dụ xoay vector 2-D bằng tay.
+(`model.py:774–860`)**: vì sao mỗi hàng cần *góc xoay riêng*, `positions =
+cache.lengths.unsqueeze(1)` (:936) làm điều đó thế nào — kèm ví dụ xoay vector 2-D bằng tay.
