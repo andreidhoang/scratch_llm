@@ -40,7 +40,7 @@ tok/forward via n-gram drafting)** → **R4.4 CUDA-graph decode (2026-07-04: SHI
 253 tok/s = 77% of the memory wall; eager 20%→compiled 53%→graph 77%, R1 gap closed)**. Perf curriculum:
 **ALL sm120-runnable rungs of A1–A5 COMPLETE 2026-07-04** — A1 R0–R4.6 (serving) · A2 R0–R6 (kernels:
 GEMV/softmax/norm 96–100% HBM, TopK 46.9% + 3.4× fusion, GEMM 134% cuBLAS-proxy) · A3 R0–R2 (tensor
-cores 4.1%→38.9%→81.9% cuBLAS, CUDA WMMA/mma.sync) · A4 R0–R3 (flash attn ~50% SDPA, 44× leaner) · A5
+cores 4.1%→38.9%→81.9% cuBLAS, CUDA WMMA/mma.sync) · A4 R0–R3+bwd (flash attn ~50% SDPA, custom Triton bwd, 44× leaner) · A5
 R0–R4 + §4.3 (INT8/INT4/NVFP4 1.48×<MXFP4/FP8-KV/AWQ 1.71×) · **A6 code-only** (TP MLP/1F1B/EP-MoE/MFU
 gloo-verified, 112 tests) · **ISA kernels compile-verified** (WGMMA sm_90a, FA3 sm_90a, tcgen05 sm_100a
 — PTX-checked on-box, runtime deferred). **Design notes A1–A7 ✅**; H100/B200/8×H200 runbooks + WGMMA

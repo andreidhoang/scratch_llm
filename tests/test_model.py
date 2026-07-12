@@ -174,3 +174,38 @@ def test_qk_norm_bounds_query_magnitude() -> None:
     rms1 = q_off(x).pow(2).mean(dim=-1).sqrt()
     rms100 = q_off(x * 100).pow(2).mean(dim=-1).sqrt()
     torch.testing.assert_close(rms100, rms1 * 100, rtol=1e-4, atol=0)
+
+
+def test_triton_attention_forward_backward() -> None:
+    # Verify that model runs forward/backward with custom Triton FlashAttention on CUDA
+    if not torch.cuda.is_available():
+        import pytest
+
+        pytest.skip("CUDA required for the Triton attention model test")
+
+    # Check if triton is present
+    try:
+        import triton  # noqa: F401
+    except ImportError:
+        import pytest
+
+        pytest.skip("Triton required for the Triton attention model test")
+
+    torch.manual_seed(0)
+    cfg = _small_cfg(use_triton_attention=True)
+    model = TransformerLM(cfg).cuda()
+    ids = torch.randint(0, cfg.vocab_size, (2, 16), device="cuda")
+    targets = torch.randint(0, cfg.vocab_size, (2, 16), device="cuda")
+
+    # Forward
+    logits = model(ids)
+    loss = cross_entropy(logits, targets)
+    assert logits.shape == (2, 16, cfg.vocab_size)
+
+    # Backward
+    loss.backward()
+
+    # Assert gradients exist
+    for p in model.parameters():
+        if p.requires_grad:
+            assert p.grad is not None

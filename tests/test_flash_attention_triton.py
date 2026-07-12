@@ -48,3 +48,27 @@ def test_triton_bf16_matches_sdpa(is_causal: bool) -> None:
     o_tri, _ = flash_attention_triton_forward(q, k, v, is_causal=is_causal)
     ref = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
     torch.testing.assert_close(o_tri.float(), ref.float(), atol=2e-2, rtol=2e-2)
+
+
+@pytest.mark.parametrize("is_causal", [False, True])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_triton_backward_matches_autograd(is_causal: bool, dtype: torch.dtype) -> None:
+    from scratch_llm.kernels.flash_attention_triton import TritonFlashAttention
+
+    torch.manual_seed(42)
+
+    # Use size 128, 64
+    b, h, n, d = 2, 4, 128, 64
+    base = [torch.randn(b, h, n, d, device="cuda", dtype=dtype) for _ in range(3)]
+    do = torch.randn(b, h, n, d, device="cuda", dtype=dtype)
+
+    q1, k1, v1 = (t.clone().requires_grad_(True) for t in base)
+    F.scaled_dot_product_attention(q1, k1, v1, is_causal=is_causal).backward(do)
+
+    q2, k2, v2 = (t.clone().requires_grad_(True) for t in base)
+    TritonFlashAttention.apply(q2, k2, v2, is_causal, False).backward(do)
+
+    tol = 1e-2 if dtype == torch.bfloat16 else 2e-4
+    torch.testing.assert_close(q2.grad, q1.grad, atol=tol, rtol=tol)
+    torch.testing.assert_close(k2.grad, k1.grad, atol=tol, rtol=tol)
+    torch.testing.assert_close(v2.grad, v1.grad, atol=tol, rtol=tol)
