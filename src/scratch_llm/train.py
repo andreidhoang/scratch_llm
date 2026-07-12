@@ -16,6 +16,7 @@ Correctness invariants (tested in tests/test_train.py):
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -157,14 +158,62 @@ class TrainConfig:
     muon_momentum: float = 0.95
     amp_dtype: str | None = None  # None ⇒ fp32; "bf16" ⇒ bf16 autocast (no GradScaler needed)
     compile: bool = False  # torch.compile the forward (the cheap-MFU win on the GPU box)
+    # F1-run — val-eval hook + NS instrument (defaults are byte-identical no-ops).
+    eval_every: int = 0  # 0 = never; >0 ⇒ val CE every N steps AND at the final step
+    eval_batches: int = 8  # fixed sequential val windows per eval (no RNG — see _val_loss)
+    muon_profile_ns: bool = False  # time Newton–Schulz inside Muon (perturbs; measurement-only)
+
+
+def _val_loss(
+    model: TransformerLM,
+    val_data: np.ndarray,
+    context_length: int,
+    eval_batches: int,
+    device: str,
+) -> float:
+    """Mean cross-entropy over FIXED sequential windows of ``val_data`` — deliberately no RNG.
+
+    Determinism is the contract: the same checkpoint always scores the same number, every arm of
+    an A/B race scores on the same windows, and — critically — evaluating consumes no random
+    state, so switching eval ON cannot perturb the training batch stream (tested in
+    tests/test_optimizer_race.py). Runs in fp32 (no autocast): val numbers must be comparable
+    across arms that train under different precision regimes.
+    """
+    n_windows = min(eval_batches, (len(val_data) - 1) // context_length)
+    if n_windows < 1:
+        raise ValueError(
+            f"val corpus of {len(val_data)} tokens too short for context_length={context_length}"
+        )
+    starts = [i * context_length for i in range(n_windows)]
+    inputs = np.stack([val_data[s : s + context_length] for s in starts])
+    targets = np.stack([val_data[s + 1 : s + 1 + context_length] for s in starts])
+    was_training = model.training
+    model.eval()
+    with torch.no_grad():
+        loss = cross_entropy(
+            model(torch.from_numpy(inputs).long().to(device)),
+            torch.from_numpy(targets).long().to(device),
+        )
+    if was_training:
+        model.train()
+    return float(loss.item())
 
 
 def train(
     cfg: TrainConfig,
     train_data: np.ndarray,
     model: TransformerLM,
+    val_data: np.ndarray | None = None,
+    eval_hook: Callable[[int, float], None] | None = None,
+    optimizer_out: list[torch.optim.Optimizer | CombinedOptimizer] | None = None,
 ) -> list[tuple[int, float]]:
     """Run the training loop. Returns the loss history as (step, loss) pairs.
+
+    F1-run additions (all default-off, byte-identical to the A1 path): when
+    ``cfg.eval_every > 0`` and ``val_data`` is given, ``eval_hook(step, val_ce)`` fires every
+    ``eval_every`` steps and at the final step (the iso-FLOP endpoint); ``optimizer_out``, if a
+    list, receives the built optimizer so callers can read instruments (Muon NS counters) after
+    the run — the loop's return type stays unchanged.
 
     Same plumbing an RL fine-tune resumes from: cosine LR per step, global-ℓ₂ grad clip,
     periodic checkpointing.
@@ -186,7 +235,10 @@ def train(
         betas=cfg.betas,
         weight_decay=cfg.weight_decay,
         muon_momentum=cfg.muon_momentum,
+        muon_profile_ns=cfg.muon_profile_ns,
     )
+    if optimizer_out is not None:
+        optimizer_out.append(optimizer)
     # torch.compile wraps the module; keep the ORIGINAL for .cfg / .moe_update_biases / checkpoint
     # (the compiled module's state_dict carries an `_orig_mod.` prefix, and the split for Muon must
     # see the real submodules).
@@ -235,6 +287,16 @@ def train(
             history.append((step, loss_value))
             if cfg.verbose:
                 print(f"step {step:6d} | lr {lr:.2e} | loss {loss_value:.4f}")
+        if (
+            cfg.eval_every
+            and val_data is not None
+            and eval_hook is not None
+            and (step % cfg.eval_every == 0 or step == cfg.max_steps - 1)
+        ):
+            eval_hook(
+                step,
+                _val_loss(model, val_data, cfg.context_length, cfg.eval_batches, cfg.device),
+            )
         if (
             cfg.checkpoint_every
             and cfg.checkpoint_path

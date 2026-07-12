@@ -15,6 +15,7 @@ Correctness invariants (tested in tests/test_optim.py):
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable, Iterable
 
 import torch
@@ -200,6 +201,7 @@ class Muon(torch.optim.Optimizer):
         ns_steps: int = 5,
         weight_decay: float = 0.1,
         rms_scale: float = 0.2,
+        profile_ns: bool = False,
     ) -> None:
         if lr < 0:
             raise ValueError(f"invalid lr: {lr}")
@@ -218,6 +220,14 @@ class Muon(torch.optim.Optimizer):
             rms_scale=rms_scale,
         )
         super().__init__(params, defaults)
+        # F1-run NS wall-time instrument (off by default). Instance attributes, deliberately NOT
+        # in ``defaults``/param_groups: an instrument is not a hyperparameter, and keeping it out
+        # of ``state_dict`` leaves checkpoint round-trips byte-identical. When on, each
+        # Newton–Schulz call is timed with a CUDA sync fence — that perturbs the run, which is
+        # fine: the mode exists only to measure the NS-overhead falsifier (<1% predicted, >3% kill).
+        self.profile_ns = profile_ns
+        self.ns_seconds: float = 0.0
+        self.ns_calls: int = 0
 
     @torch.no_grad()
     def step(self, closure: Callable[[], float] | None = None) -> float | None:  # type: ignore[override]
@@ -248,7 +258,17 @@ class Muon(torch.optim.Optimizer):
                 buf = state["momentum_buffer"]
                 buf.mul_(momentum).add_(grad)
                 g_eff = grad.add(buf, alpha=momentum) if nesterov else buf
-                ortho = _zeropower_via_newtonschulz5(g_eff, ns_steps)
+                if self.profile_ns:
+                    if p.is_cuda:
+                        torch.cuda.synchronize()
+                    t0 = time.perf_counter()
+                    ortho = _zeropower_via_newtonschulz5(g_eff, ns_steps)
+                    if p.is_cuda:
+                        torch.cuda.synchronize()
+                    self.ns_seconds += time.perf_counter() - t0
+                    self.ns_calls += 1
+                else:
+                    ortho = _zeropower_via_newtonschulz5(g_eff, ns_steps)
                 scale = rms_scale * math.sqrt(max(p.shape[0], p.shape[1]))
                 if weight_decay != 0:
                     p.mul_(1 - lr * weight_decay)  # decoupled WD (uses current θ)
@@ -342,6 +362,7 @@ def build_optimizer(
     betas: tuple[float, float] = (0.9, 0.95),
     weight_decay: float = 0.1,
     muon_momentum: float = 0.95,
+    muon_profile_ns: bool = False,
 ) -> torch.optim.Optimizer | CombinedOptimizer:
     """Construct the training optimizer.
 
@@ -355,7 +376,13 @@ def build_optimizer(
         return AdamW(model.parameters(), lr=lr, betas=betas, weight_decay=weight_decay)
     if kind == "muon_adamw":
         muon_params, adamw_params = split_muon_adamw_params(model)
-        muon = Muon(muon_params, lr=lr, momentum=muon_momentum, weight_decay=weight_decay)
+        muon = Muon(
+            muon_params,
+            lr=lr,
+            momentum=muon_momentum,
+            weight_decay=weight_decay,
+            profile_ns=muon_profile_ns,
+        )
         adamw = AdamW(adamw_params, lr=lr, betas=betas, weight_decay=weight_decay)
         return CombinedOptimizer([muon, adamw])
     raise ValueError(f"unknown optimizer kind {kind!r} (expected 'adamw' or 'muon_adamw')")

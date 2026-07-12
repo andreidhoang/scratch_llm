@@ -647,6 +647,21 @@ Sources: Keller Jordan (Muon writeup); Moonlight `2502.16982` (Lemma 1 — RMS =
 corrected from the draft); Kimi-K2 `2507.20534` (MuonClip at trillion scale). Reuses
 `src/scratch_llm/scaling/isoflop.py` to hold compute constant.
 
+**Harness shipped (2026-07-12 — `eval/optimizer_race.py` + `bench/optimizer_race.py` + the
+`train.py` val-eval hook + `Muon(profile_ns)`, 15 CPU tests green).** The race apparatus is
+code-complete: pure metrics (`tokens_to_match` = interpolated first crossing of the baseline's
+final val CE, `token_saving_fraction`, `nats_delta_at_budget` with an iso-FLOP budget guard), the
+A/B driver on the REAL `train()` loop (same seed ⇒ identical init + identical batch stream; val CE
+on FIXED sequential windows — no RNG, so an active eval hook provably does not perturb training —
+tested), and the NS wall-time instrument. **Pre-committed sweep protocol (registered BEFORE the GPU
+run):** AdamW `max_lr ∈ {1e-4, 2e-4, 3e-4, 6e-4, 1e-3}` at a **20% horizon**, winner = argmin final
+val CE (tie → smaller LR); the full-horizon race reuses the winner's LR for the Muon arm (the
+Moonlight RMS-match band — `--muon-lr` overrides if that assumption is ever the question). Caveat,
+stated now: short-horizon LR selection is a proxy — the sweep curves ship in the run's JSON so the
+choice is auditable. Run = `python bench/optimizer_race.py --data-dir … --depth 8 --tokens 7e8
+--amp bf16` on the sm120 box, **bf16 EAGER** (the F4 sm120 bf16+compile NaN stands). The two
+pending rows above remain the falsifier of record.
+
 ### Measured — F1/F4 train wiring (2026-07-04, `train.py` + 8 tests green, GPU-verified sm120)
 
 `build_optimizer` + `CombinedOptimizer` wire the MuonAdamW hybrid + bf16 autocast + `torch.compile`

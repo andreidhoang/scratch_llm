@@ -2,7 +2,8 @@
 
 `val_bpb` (intrinsic) + multiple-choice (ARC/MMLU) + generative (GSM8K/HumanEval) folded into one
 :class:`ReportCard`, with a documented CORE-*style* aggregate. See
-`docs/FRONTIER_2026_ABLATIONS.md` §7.
+`docs/FRONTIER_2026_ABLATIONS.md` §7. `optimizer_race` is the F1-run iso-FLOP A/B harness
+(Muon vs LR-tuned AdamW at fixed C=6ND).
 """
 
 from __future__ import annotations
@@ -15,6 +16,17 @@ from scratch_llm.eval.multiple_choice import (
     option_logprob,
     predict_choice,
 )
+from scratch_llm.eval.optimizer_race import (
+    ArmResult,
+    RaceResult,
+    SweepResult,
+    nats_delta_at_budget,
+    run_arm,
+    run_race,
+    sweep_lr,
+    token_saving_fraction,
+    tokens_to_match,
+)
 from scratch_llm.eval.report_card import (
     GenTask,
     MCTask,
@@ -24,17 +36,26 @@ from scratch_llm.eval.report_card import (
 )
 
 __all__ = [
+    "ArmResult",
     "BpbResult",
     "GenResult",
     "GenTask",
     "MCResult",
     "MCTask",
+    "RaceResult",
     "ReportCard",
+    "SweepResult",
     "bits_per_byte",
     "build_report_card",
     "core_style_score",
     "evaluate_generative",
     "evaluate_multiple_choice",
+    "nats_delta_at_budget",
     "option_logprob",
     "predict_choice",
+    "run_arm",
+    "run_race",
+    "sweep_lr",
+    "token_saving_fraction",
+    "tokens_to_match",
 ]
