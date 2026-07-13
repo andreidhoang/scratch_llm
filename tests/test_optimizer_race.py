@@ -228,6 +228,23 @@ def test_run_race_iso_flop_contract() -> None:
     assert race.challenger.ns_seconds >= 0.0
 
 
+def test_run_arm_surfaces_f9_max_logit_when_tracked() -> None:
+    """The F9 ride-along: an observer-built model yields a finite max_attn_logit; default None."""
+    from dataclasses import replace as dc_replace
+
+    data = _structured_corpus()
+    val = _structured_corpus(512)
+    cfg = TrainConfig(max_steps=4, batch_size=4, context_length=16, seed=2, eval_every=2)
+
+    plain = run_arm(_tiny_cfg(), cfg, data, val, optimizer="adamw", max_lr=3e-3, label="plain")
+    assert plain.max_attn_logit is None  # observer off by default — byte-identical base path
+
+    tracked_cfg = dc_replace(_tiny_cfg(), track_attn_logits=True)
+    tracked = run_arm(tracked_cfg, cfg, data, val, optimizer="adamw", max_lr=3e-3, label="obs")
+    assert tracked.max_attn_logit is not None
+    assert np.isfinite(tracked.max_attn_logit)
+
+
 def test_sweep_lr_picks_argmin_final_val_loss() -> None:
     data = _structured_corpus(4096)
     val = _structured_corpus(512)

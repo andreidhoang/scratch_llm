@@ -118,6 +118,10 @@ class ArmResult:
     wall_seconds: float
     ns_seconds: float
     ns_calls: int
+    # F9 ride-along: max over layers/heads of the observer's running max pre-softmax attention
+    # logit (None unless the model was built with ModelConfig.track_attn_logits=True). The F1 GPU
+    # run reads its F9 falsifier (S_max < 30 under qk_norm ⇒ QK-Clip γ≡1 sub-1B) from this field.
+    max_attn_logit: float | None = None
 
     @property
     def ns_overhead(self) -> float:
@@ -185,6 +189,16 @@ def run_arm(
             ns_seconds += sub.ns_seconds
             ns_calls += sub.ns_calls
 
+    max_attn_logit: float | None = None
+    running_maxima = [
+        float(running.max().item())
+        for block in getattr(model, "blocks", [])
+        if (running := getattr(getattr(block, "attn", None), "max_logits_running", None))
+        is not None
+    ]
+    if running_maxima:
+        max_attn_logit = max(running_maxima)
+
     return ArmResult(
         label=label,
         optimizer=optimizer,
@@ -194,6 +208,7 @@ def run_arm(
         wall_seconds=wall,
         ns_seconds=ns_seconds,
         ns_calls=ns_calls,
+        max_attn_logit=max_attn_logit,
     )
 
 

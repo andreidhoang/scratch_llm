@@ -662,6 +662,20 @@ choice is auditable. Run = `python bench/optimizer_race.py --data-dir … --dept
 --amp bf16` on the sm120 box, **bf16 EAGER** (the F4 sm120 bf16+compile NaN stands). The two
 pending rows above remain the falsifier of record.
 
+**Six-rung CPU batch shipped (2026-07-13 — parallel build, all green-CI; nothing here is a
+measured GPU claim).** A0 decontamination (13-gram exact-collision gate + additive shard
+`doc_filter`; eval text filtered BEFORE BPE training; >20% flag ⇒ `suspicious`, never a silent
+drop) · A3 chat template (single-id specials via the public encode path; mask = assistant content
++ its eot ONLY) · F3 acceptance harness (per-domain n-gram-draft acceptance over the public
+serving API; **measured falsifier waits for the F1-trained ckpt** — prose <10%, code/JSON 40–60%)
+· F8.1 DSA core (CPU-measured: top-k==dense bitwise at k≥L; KL-trained indexer held-out
+attention-mass recall **0.9915** vs random-init **0.2999**, margin 0.69 — the test has teeth) ·
+F9 QK-clip (observer `last_max_logits`/`max_logits_running` per head + `apply_qk_clip`
+√(τ/S_max); GQA case: full factor on W_q only, siblings untouched; **the F1 GPU run MUST set
+`track_attn_logits=True` — F9's falsifier (S_max<30 under qk_norm, γ≡1) rides that run**) ·
+F10.1 Gated-DeltaNet (CPU-measured: chunkwise==recurrent==float64-ref ≤1e-5 incl. ragged tail +
+chunk-size independence; state **1024×** smaller than GQA-8 KV @ T=4096 bf16 — 2 KB vs 2 MB).
+
 ### Measured — F1/F4 train wiring (2026-07-04, `train.py` + 8 tests green, GPU-verified sm120)
 
 `build_optimizer` + `CombinedOptimizer` wire the MuonAdamW hybrid + bf16 autocast + `torch.compile`

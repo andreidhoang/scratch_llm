@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from scratch_llm.data.shards import load_dataset_tokens, load_shard
@@ -53,6 +53,11 @@ def main() -> None:
     ap.add_argument("--val-frac", type=float, default=0.005, help="tail fraction held out for val")
     ap.add_argument("--eval-every", type=int, default=0, help="0 = auto (~50 evals per run)")
     ap.add_argument("--eval-batches", type=int, default=16)
+    ap.add_argument(
+        "--no-track-logits",
+        action="store_true",
+        help="disable the F9 ride-along max-attn-logit observer (on by default)",
+    )
     ap.add_argument("--amp", choices=["none", "bf16"], default="bf16")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--seed", type=int, default=0)
@@ -68,6 +73,10 @@ def main() -> None:
     tokens_per_step = args.batch_size * args.context_length
     max_steps = math.ceil(args.tokens / tokens_per_step)
     model_cfg = model_config_for_depth(args.depth, vocab_size, args.context_length)
+    if not args.no_track_logits:
+        # F9 ride-along: the per-head max-logit observer costs one amax per forward and lets this
+        # run double as F9's falsifier (S_max < 30 under qk_norm => QK-Clip gamma==1 sub-1B).
+        model_cfg = replace(model_cfg, track_attn_logits=True)
 
     def _train_cfg(steps: int) -> TrainConfig:
         return TrainConfig(
@@ -130,6 +139,9 @@ def main() -> None:
         "ns_calls": race.challenger.ns_calls,
         "baseline_wall_s": race.baseline.wall_seconds,
         "muon_wall_s": race.challenger.wall_seconds,
+        "max_attn_logit_baseline": race.baseline.max_attn_logit,
+        "max_attn_logit_muon": race.challenger.max_attn_logit,
+        "qk_norm": model_cfg.qk_norm,
     }
     Path(args.out).write_text(
         json.dumps(
@@ -160,6 +172,12 @@ def main() -> None:
         f"saving {saving_txt} · Δ {race.nats_delta:+.4f} nats · NS {race.challenger.ns_overhead:.2%} "
         f"→ **{verdict}** |"
     )
+    if race.challenger.max_attn_logit is not None:
+        print(
+            f"| F9 ride-along (qk_norm={model_cfg.qk_norm}) | max per-head attn logit | <30 ⇒ "
+            f"QK-Clip γ≡1 sub-1B | ≥30 sustained | adamw {race.baseline.max_attn_logit:.1f} · "
+            f"muon {race.challenger.max_attn_logit:.1f} |"
+        )
     print(f"full curves + config → {args.out}")
 
 

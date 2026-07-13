@@ -16,7 +16,7 @@
 > **Reference oracle available:** the venv vendors `transformers/models/{deepseek_v2,deepseek_v3,
 > deepseek_v32,glm4_moe,nanochat,qwen3}` — read these as implementation oracles (re-own, don't copy).
 
-<!-- Next-node: F1-run iso-FLOP Muon vs AdamW (A2 checkpoint chaining ✅ 2026-07-09) · UPDATE this line when a rung ships -->
+<!-- Next-node: F1-run GPU DAY on the sm120 box — harness ✅ 2026-07-12 + F9 observer ✅ 2026-07-13: run `python bench/optimizer_race.py --data-dir <shards> --depth 8 --tokens 7e8 --amp bf16` (bf16 EAGER, never +compile on sm120); F3 spec-acceptance + F9 max-logit read off the same trained ckpt/run. Build-next on CPU (batch 2): A5 chat-SFT → A6 REPL → F7a aha → F2a MTP → A7 DDP wiring → A4 midtrain (spec now complete) → F10.2/F8.2 wiring → F11. Shipped 2026-07-13: A0 · A3 · F3-harness · F8.1 · F9 · F10.1 (six rungs, one batch). · UPDATE this line when a rung ships -->
 
 > ▶ **START HERE (fresh session).** The loop is **CLOSED** (F1 Muon · train-wiring/F4 · eval report
 > card · speedrun spine shipped, GPU-verified talking sample). **A1 real-corpus shards ✅ 2026-07-09**
@@ -24,8 +24,18 @@
 > `speedrun --data-dir`). **A2 checkpoint chaining ✅ 2026-07-09** (config-carrying `save_checkpoint`
 > / `build_model_from_checkpoint` + `Tokenizer.save/load` + the speedrun stage spine with
 > `work_dir`/`resume` + the pinned stage-transition optimizer policy; measured in `bench/RESULTS.md`
-> §Frontier). **Next node → F1-run** (the *pending* iso-FLOP Muon-vs-AdamW headline). Full order +
-> deps in §0; each rung's interfaces/tests/falsifier/kill in §A/§B; near-term picks in §E.
+> §Frontier). **F1-run HARNESS ✅ 2026-07-12** (`eval/optimizer_race.py` + `bench/optimizer_race.py`:
+> pure metrics + A/B driver on the real `train()` + the MANDATORY LR-tuned-AdamW sweep arm + NS
+> instrument; sweep protocol pre-registered in RESULTS.md). **SIX-RUNG CPU BATCH ✅ 2026-07-13** —
+> A0 decontamination (`data/decontaminate.py`, 13-gram gate + shard `doc_filter` seam) · A3 chat
+> template (`chat.py` + `SpeedrunConfig.chat`) · F3 acceptance harness (`eval/spec_acceptance.py` +
+> CLI; measured falsifier awaits a trained ckpt) · F8.1 DSA core (`dsa.py`, top-k==dense + indexer
+> recall 0.99 vs 0.30 random) · F9 QK-clip guard (observer + `apply_qk_clip` + train wiring — **run
+> F1 with `track_attn_logits=True`; its falsifier rides that run**) · F10.1 Gated-DeltaNet
+> (`linear_attn.py`, chunkwise==recurrent==ref, state 1024× < GQA-8 KV @4k). A4's truncated spec is
+> now COMPLETE in §A (ids-only shards; mask reconstructed at SFT collate). **Next node → the F1-run
+> GPU day** (sm120 box; see the Next-node marker above for the exact command), and on CPU →
+> **batch 2: A5 → A6 → F7a → F2a → A7** . Full order + deps in §0; near-term picks in §E.
 >
 > **Build protocol — every rung, no exceptions:** ① pre-register the rung's falsifier in
 > `bench/RESULTS.md` §Frontier ablations *before* running (predict-before-run) → ② build **test-first**
@@ -107,11 +117,28 @@ the $100 8×H100 run. F5/F6/F7/F8/F9/F10/F11 run at 30–300M on the **standing 
 - **DoD:** each special encodes to exactly 1 id; a turn round-trips `<\|user\|>…<\|eot\|><\|assistant\|>…<\|eot\|>` in order; mask covers **only** assistant tokens + its eot; completion prompt ends with the `<\|assistant\|>` id, no trailing eot. **Kill:** `len(encode(special))>1` (specials weren't threaded into both `train_bpe` and the constructor).
 - **§D note:** if tool-use is trained (A4), add tool-boundary specials so tool structure is tokenizable.
 
-### A4 · Midtrain stage `[M]` — deps A1,A3
-- **Interfaces:** NEW `data/chat_adapters.py` — 3 shape→conversation adapters (SmolTalk/MC/tool-use), `build_midtrain_shard()`, `DEFAULT_MIDTRAIN_MIX` + optional SmolTalk loader; `speedrun.py` `stage_midtrain`.
-- **Config:** `SpeedrunConfig.midtrain_steps`, `midtrain_mix: str|None`.
-- **DoD:** MC assistant decodes to the gold letter; tool-use span contains expression + output; shard is a valid next-token-aligned memmap; oversize convos dropped + counted. **Kill:** >30% of the mix exceeds `context_length` and can't truncate without cutting a special.
-- ⚠️ **The A4 agent spec was truncated** (critic flag) — complete `build_midtrain_shard` body + DoD before building.
+### A4 · Midtrain stage `[M]` — deps A1,A3 *(deep spec completed 2026-07-12, replacing the truncated body)*
+- **Interfaces:** NEW `data/chat_adapters.py` —
+  `adapt_smoltalk(row) -> list[Message]` (accepts the SmolTalk `{role, content}` messages shape, network
+  loader optional + CI-skipped); `adapt_mc(question, choices, gold_letter) -> list[Message]` (user =
+  question + lettered options, assistant = **exactly the gold letter**); `adapt_tool_use(expr, result)
+  -> list[Message]` (assistant carries expression + result inline; tool-boundary *specials* stay
+  deferred to A3 §D/F11); `build_midtrain_shard(convos, tokenizer, out_path, context_length) ->
+  tuple[ShardMeta, MidtrainStats]` — render each convo via A3 `render_conversation` and persist **ids
+  only, NO mask**: midtrain is *continued pretraining* on chat-shaped data (full CE over every token —
+  the model learns the specials' statistics); the assistant-only mask is A5's business, reconstructed
+  from special positions at collate time (single source of truth = the token structure). Conversations
+  whose rendered ids exceed `context_length` are **dropped whole + counted** (never truncate through a
+  special); concatenate survivors into the A1 shard writer. `DEFAULT_MIDTRAIN_MIX`: a deterministic
+  seeded synthetic mix (MC + tool-use; SmolTalk when the network loader is allowed).
+  `speedrun.py` `stage_midtrain`: chains from the pretrain ckpt under the pinned A2 stage-transition
+  policy (fresh optimizer + LR re-warmup); `midtrain_steps=0` ⇒ byte-identical skip.
+- **Config:** `SpeedrunConfig.midtrain_steps=0`, `midtrain_mix: str|None`.
+- **DoD (as tests):** MC assistant span decodes to exactly the gold letter; tool-use span contains
+  expression + output; the shard round-trips next-token-aligned through `get_batch`; oversize convos
+  dropped AND counted in `MidtrainStats`; the mix is deterministic under a seed; `midtrain_steps=0` is
+  byte-identical. **Kill:** >30% of the mix exceeds `context_length` (can't include without cutting a
+  special) — shrink the sources or raise ctx, don't truncate.
 
 ### A5 · SFT stage `[M]` — deps A2,A3
 - **Interfaces:** NEW `algos/chat_sft.py` — `collate_chat_batch()`, `chat_sft_epoch()` (imports `algos/sft.py` primitives, no edits to it); `speedrun.py` `stage_sft`.

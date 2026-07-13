@@ -24,7 +24,13 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > report card (`val_bpb`/MC/generative/CORE-style) · `speedrun.py` + `scripts/speedrun.sh` spine all
 > SHIPPED + pushed — GPU-verified end-to-end talking sample (`RESULTS.md` §Phase 0). **A1 real-corpus
 > shards ✅ 2026-07-09** (`data/shards.py` + shard-backed `speedrun --data-dir`, FineWeb-EDU slice
-> measured). **▶ NEXT NODE → A2** (checkpoint chaining) → F1-run. **The buildable next-phase DAG (23
+> measured). **A2 chaining ✅ 07-09 · F1-run harness ✅ 07-12** (`eval/optimizer_race.py` + the
+> mandatory LR-tuned-AdamW sweep arm + `bench/optimizer_race.py`) **· SIX-RUNG CPU BATCH ✅ 07-13:
+> A0 decontam · A3 chat template · F3 acceptance harness · F8.1 DSA core · F9 QK-clip guard ·
+> F10.1 Gated-DeltaNet** (+ the A4 spec completed in the taskspec). **▶ NEXT NODE → the F1-run GPU
+> day on the sm120 box** (`bench/optimizer_race.py`, bf16 EAGER, build arms with
+> `track_attn_logits=True` so F9's falsifier rides the run; F3 scores the same trained ckpt);
+> **CPU batch 2 → A5 chat-SFT → A6 REPL → F7a → F2a → A7**. **The buildable next-phase DAG (23
 > rungs, code-grounded, EV-ranked, with a START-HERE block) is
 > [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)** — a
 > fresh session reads that + the SessionStart `frontier node →` line and builds immediately.
