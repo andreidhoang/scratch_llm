@@ -30,7 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
-from scratch_llm.chat import CHAT_SPECIAL_TOKENS
+from scratch_llm.chat import CHAT_SPECIAL_TOKENS, EOT, Message
 from scratch_llm.data.shards import load_dataset_tokens, load_tokenizer
 from scratch_llm.eval import ReportCard, build_report_card
 from scratch_llm.model import ModelConfig, TransformerLM
@@ -75,6 +75,10 @@ class SpeedrunConfig:
     resume: bool = False
     midtrain_steps: int = 0
     sft_steps: int = 0
+    # A5: assistant-masked SFT over the chat template. sft_steps>0 requires chat=True (the
+    # tokenizer must carry the specials). sft_set names a chat dataset; None ⇒ the built-in
+    # nano chat set (proves the stage composes, like the built-in pretrain corpus).
+    sft_set: str | None = None
     # A3: True ⇒ the tokenizer stage trains the BPE with CHAT_SPECIAL_TOKENS (each special
     # becomes a single id inside vocab_size — required by midtrain/SFT/chat, A4–A6).
     # False (default) is byte-identical to the pre-A3 path: no specials anywhere.
@@ -90,6 +94,8 @@ class SpeedrunResult:
     sample: str
     stages: list[str] = field(default_factory=list)
     seconds: float = 0.0
+    # A6: a one-turn chat preview, populated only when the SFT stage ran (chat + sft_steps>0).
+    chat_reply: str | None = None
 
     def summary(self) -> str:
         return (
@@ -228,13 +234,84 @@ def stage_midtrain(cfg: SpeedrunConfig, model: TransformerLM) -> TransformerLM:
     )
 
 
-def stage_sft(cfg: SpeedrunConfig, model: TransformerLM) -> TransformerLM:
-    """Stage 4 slot — assistant-masked SFT. 0 steps = skipped; A5 wires the body."""
+# A tiny built-in chat set for the nano SFT stage — content is drawn from the pretrain corpus so
+# the small byte-BPE can represent it. A real run supplies --sft-set (one JSON conversation/line).
+_BUILTIN_CHAT: list[list[tuple[str, str]]] = [
+    [("say hi", "hello world")],
+    [("what runs", "the dog ran")],
+    [("the animal", "the quick brown fox jumps over the lazy dog")],
+    [("what does a model do", "a language model learns to predict the next token")],
+]
+
+
+def _load_chat_set(cfg: SpeedrunConfig) -> list[list[Message]]:
+    """Load conversations for SFT: a JSONL file of ``[{role, content}, ...]`` rows, or the
+    built-in nano set when ``sft_set is None``."""
+    if cfg.sft_set is None:
+        return [
+            [m for user, asst in pairs for m in (Message("user", user), Message("assistant", asst))]
+            for pairs in _BUILTIN_CHAT
+        ]
+
+    import json
+
+    conversations: list[list[Message]] = []
+    for line in Path(cfg.sft_set).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        turns = json.loads(line)
+        conversations.append([Message(t["role"], t["content"]) for t in turns])
+    if not conversations:
+        raise ValueError(f"{cfg.sft_set} contained no conversations")
+    return conversations
+
+
+def stage_sft(cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer) -> TransformerLM:
+    """Stage 4 — assistant-masked SFT over the chat template (A5). 0 steps = skipped.
+
+    Runs ``cfg.sft_steps`` gradient steps, cycling ``chat_sft_epoch`` over the chat set, under the
+    pinned stage-transition policy (a FRESH AdamW with its own warmup — resuming Muon/Adam moments
+    across the pretrain→SFT boundary is undefined). Requires ``chat=True`` so the tokenizer carries
+    the specials; a stage-boundary checkpoint is written to ``work_dir/sft.pt``.
+    """
     if cfg.sft_steps == 0:
         return model
-    raise NotImplementedError(
-        "SFT is the A5 rung (docs/FRONTIER_2026_TASKSPEC.md §A5) — set sft_steps=0"
-    )
+    if not cfg.chat:
+        raise ValueError(
+            "sft_steps>0 needs chat=True — the tokenizer must be trained with CHAT_SPECIAL_TOKENS "
+            "(the assistant mask is defined by the special positions)."
+        )
+    ckpt = _work_path(cfg, "sft.pt")
+    if cfg.resume and ckpt is not None and ckpt.exists():
+        model, _ = build_model_from_checkpoint(ckpt)
+        model.to(cfg.device)
+        return model
+
+    from scratch_llm.algos.chat_sft import chat_sft_epoch
+    from scratch_llm.optim import build_optimizer
+
+    conversations = _load_chat_set(cfg)
+    pad_id = tokenizer.encode(EOT)[0]  # eot is inert as pad (always masked off)
+    optimizer = build_optimizer(model, kind="adamw", lr=cfg.lr, weight_decay=0.0)
+    model.train()
+    steps_done = 0
+    while steps_done < cfg.sft_steps:
+        for _ in chat_sft_epoch(
+            model,
+            conversations,
+            tokenizer,
+            optimizer,
+            batch_size=min(cfg.batch_size, len(conversations)),
+            pad_token_id=pad_id,
+            device=cfg.device,
+        ):
+            steps_done += 1
+            if steps_done >= cfg.sft_steps:
+                break
+    if ckpt is not None:
+        save_checkpoint(model, None, cfg.train_steps + cfg.sft_steps, ckpt)
+    return model
 
 
 def stage_eval(
@@ -292,7 +369,7 @@ def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
     model = stage_midtrain(cfg, model)
     if cfg.midtrain_steps:
         stages.append("midtrain")
-    model = stage_sft(cfg, model)
+    model = stage_sft(cfg, model, tokenizer)
     if cfg.sft_steps:
         stages.append("sft")
 
@@ -302,6 +379,16 @@ def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
     sample = stage_sample(cfg, model, tokenizer, prompt_ids)
     stages.append("sample")
 
+    # A6: a one-turn chat preview, only meaningful once the model has been SFT'd on the template.
+    chat_reply: str | None = None
+    if cfg.chat and cfg.sft_steps:
+        from scratch_llm.chat_cli import ChatSession
+
+        chat_reply = ChatSession(
+            model, tokenizer, max_tokens=cfg.sample_tokens, device=cfg.device
+        ).reply("say hi")
+        stages.append("chat")
+
     return SpeedrunResult(
         config=cfg,
         n_params=sum(p.numel() for p in model.parameters()),
@@ -310,6 +397,7 @@ def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
         sample=sample,
         stages=stages,
         seconds=time.perf_counter() - t0,
+        chat_reply=chat_reply,
     )
 
 

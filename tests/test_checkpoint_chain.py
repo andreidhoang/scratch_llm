@@ -220,11 +220,16 @@ def test_speedrun_resume_rebuilds_and_reproduces(tmp_path: Path) -> None:
 
 
 def test_speedrun_midtrain_sft_slots_skip_at_zero_and_fail_loud_otherwise() -> None:
+    from typing import cast
+
     model = TransformerLM(ModelConfig(vocab_size=32, d_model=32, n_layers=1, n_heads=2))
     cfg = _nano_cfg()
-    assert stage_midtrain(cfg, model) is model  # 0 steps = stage skipped
-    assert stage_sft(cfg, model) is model
+    # Both slots skip at 0 steps (the SFT skip short-circuits before touching the tokenizer).
+    assert stage_midtrain(cfg, model) is model
+    assert stage_sft(cfg, model, cast(Tokenizer, None)) is model
+    # midtrain is still the unbuilt A4 slot; SFT (A5) is now implemented and instead fails loud
+    # when asked to run without the chat specials (the mask is defined by the special positions).
     with pytest.raises(NotImplementedError, match="A4"):
         stage_midtrain(_nano_cfg(midtrain_steps=5), model)
-    with pytest.raises(NotImplementedError, match="A5"):
-        stage_sft(_nano_cfg(sft_steps=5), model)
+    with pytest.raises(ValueError, match="chat=True"):
+        stage_sft(_nano_cfg(sft_steps=5), model, cast(Tokenizer, None))
