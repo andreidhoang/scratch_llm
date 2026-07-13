@@ -49,6 +49,12 @@
 > ⇒ tick ✅ + ngày + neo ở đó, advance `Learning-node:`. Đây là cái làm trải nghiệm học **liền mạch xuyên
 > session**.
 
+## 🧭 PRE-FLIGHT trước khi train GPU thật → [`CODEBASE_READING_ORDER.md`](CODEBASE_READING_ORDER.md)
+
+> Cách một senior frontier-RE (hay Karpathy) **đọc cả codebase trước khi tiêu một GPU-hour**: đúng thứ
+> tự file (theo dòng chảy của tensor), mỗi file kèm oracle cần verify + anchor `file · symbol · line`.
+> Không phải derivation — là **orientation pass** trước run thật; ghép với `deploy/runbooks/frontier_gpu_day.md`.
+
 ## 🎓 BẮT ĐẦU Ở ĐÂY — Master Curriculum (thứ tự học đúng) → [`CURRICULUM.md`](CURRICULUM.md)
 
 > **Một con đường DUY NHẤT, xếp đúng thứ tự**, hợp nhất cả hai lộ trình (model + performance) thành 8
