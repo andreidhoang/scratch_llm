@@ -31,7 +31,7 @@ import json
 import tempfile
 import urllib.parse
 import urllib.request
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Protocol
@@ -62,6 +62,9 @@ class ShardMeta:
     dtype: str  # "uint16" | "uint32" — the pre-registered kill-switch axis
     eot_id: int
     max_token_id: int
+    # Docs rejected by the A0 ``doc_filter`` seam (decontamination). Defaults to 0 so pre-A0
+    # sidecars (missing the key) keep loading unchanged.
+    n_docs_filtered: int = 0
 
 
 def _meta_path(shard_path: Path) -> Path:
@@ -73,21 +76,36 @@ def tokenize_to_shard(
     tokenizer: TokenEncoder,
     eot_id: int,
     out_path: str | Path,
+    *,
+    doc_filter: Callable[[str], bool] | None = None,
 ) -> ShardMeta:
     """Encode ``docs``, appending ``eot_id`` after every document, and write the shard.
 
     The EOT after *every* doc (not between) makes concatenated shards seamless and gives the
     model an unambiguous document boundary — without it, windows sampled across two unrelated
     documents teach spurious long-range dependencies.
+
+    ``doc_filter`` (A0 seam, optional): a keep-predicate (True = keep) applied to each doc
+    BEFORE tokenization — e.g. :func:`scratch_llm.data.decontaminate.decontam_doc_filter`.
+    ``None`` is byte-identical to the pre-seam behavior; rejected docs are counted in
+    ``ShardMeta.n_docs_filtered``.
     """
     out_path = Path(out_path)
     ids: list[int] = []
     n_docs = 0
+    n_docs_filtered = 0
     for doc in docs:
+        if doc_filter is not None and not doc_filter(doc):
+            n_docs_filtered += 1
+            continue
         ids.extend(tokenizer.encode(doc))
         ids.append(eot_id)
         n_docs += 1
     if not ids:
+        if n_docs_filtered:
+            raise ValueError(
+                f"tokenize_to_shard: doc_filter rejected all {n_docs_filtered} document(s)"
+            )
         raise ValueError("tokenize_to_shard needs at least one document")
 
     max_token_id = max(max(ids), eot_id)
@@ -103,6 +121,7 @@ def tokenize_to_shard(
         dtype=np.dtype(dtype).name,
         eot_id=eot_id,
         max_token_id=int(max_token_id),
+        n_docs_filtered=n_docs_filtered,
     )
     _meta_path(out_path).write_text(json.dumps(asdict(meta), indent=2), encoding="utf-8")
     return meta
@@ -176,15 +195,25 @@ def build_dataset(
     out_dir: str | Path,
     vocab_size: int,
     docs_per_shard: int | None = None,
+    *,
+    doc_filter: Callable[[str], bool] | None = None,
 ) -> list[ShardMeta]:
     """Train a byte-level BPE on ``docs`` (with the EOT special), stage it, and shard the corpus.
 
     ``docs_per_shard=None`` writes one shard; otherwise documents are chunked in order. The
-    tokenizer is trained on the same documents it shards — for a *scored* run, A0's
-    decontamination gate must run on ``docs`` first.
+    tokenizer is trained on the same documents it shards — so ``doc_filter`` (A0's
+    decontamination gate, True = keep) is applied ONCE, up front, before BPE training: eval
+    text must not shape the merges either. ``None`` is byte-identical to the pre-seam
+    behavior. For dropped-doc accounting, run
+    :func:`scratch_llm.data.decontaminate.decontaminate_docs` first and pass ``result.kept``.
     """
     if not docs:
         raise ValueError("build_dataset needs at least one document")
+    if doc_filter is not None:
+        n_before = len(docs)
+        docs = [doc for doc in docs if doc_filter(doc)]
+        if not docs:
+            raise ValueError(f"build_dataset: doc_filter rejected all {n_before} document(s)")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
