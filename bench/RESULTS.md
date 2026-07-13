@@ -676,6 +676,19 @@ F9 QK-clip (observer `last_max_logits`/`max_logits_running` per head + `apply_qk
 F10.1 Gated-DeltaNet (CPU-measured: chunkwise==recurrent==float64-ref ≤1e-5 incl. ragged tail +
 chunk-size independence; state **1024×** smaller than GQA-8 KV @ T=4096 bf16 — 2 KB vs 2 MB).
 
+**A5 chat-SFT + A6 chat REPL shipped (2026-07-13 — the loop now TALKS; green-CI, 780 passed).**
+A5 `algos/chat_sft.py`: `collate_chat_batch` renders conversations via the A3 template and applies
+the **same shift-after-pad label alignment** `sft.py` pins (response_mask = render-mask shifted
+left one), then `chat_sft_step`/`chat_sft_epoch` reuse `get_response_log_probs` +
+`sft_microbatch_train_step` **with zero edits to `sft.py`**. CPU-proven: masked loss-at-init ≈
+log V; **200 steps overfit one chat batch to mean-token NLL <0.1**; the mask is True on assistant
+content + its `<|eot|>` only (the off-by-one tripwire). A6 `chat_cli.py`: `ChatSession.reply`
+greedy-decodes with `stop_ids=(<|eot|>,)` and strips specials — the overfit model **reproduces its
+trained answer and stops on its own eot** (the kill: never emits eot); `batch_reply` routes
+equal-length prompts through the public `serving/batched.py::batched_greedy_decode` (zone-safe) and
+**equals per-turn greedy**. `speedrun.py` wires `stage_sft` (fresh optimizer per the A2
+stage-transition policy) + a one-turn `chat_reply` preview. Next CPU rung: F7a GRPO aha harness.
+
 ### Measured — F1/F4 train wiring (2026-07-04, `train.py` + 8 tests green, GPU-verified sm120)
 
 `build_optimizer` + `CombinedOptimizer` wire the MuonAdamW hybrid + bf16 autocast + `torch.compile`

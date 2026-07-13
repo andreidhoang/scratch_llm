@@ -16,7 +16,7 @@
 > **Reference oracle available:** the venv vendors `transformers/models/{deepseek_v2,deepseek_v3,
 > deepseek_v32,glm4_moe,nanochat,qwen3}` — read these as implementation oracles (re-own, don't copy).
 
-<!-- Next-node: F1-run GPU DAY on the sm120 box — harness ✅ 2026-07-12 + F9 observer ✅ 2026-07-13: run `python bench/optimizer_race.py --data-dir <shards> --depth 8 --tokens 7e8 --amp bf16` (bf16 EAGER, never +compile on sm120); F3 spec-acceptance + F9 max-logit read off the same trained ckpt/run. Build-next on CPU (batch 2): A5 chat-SFT → A6 REPL → F7a aha → F2a MTP → A7 DDP wiring → A4 midtrain (spec now complete) → F10.2/F8.2 wiring → F11. Shipped 2026-07-13: A0 · A3 · F3-harness · F8.1 · F9 · F10.1 (six rungs, one batch). · UPDATE this line when a rung ships -->
+<!-- Next-node: F1-run GPU DAY on the sm120 box — harness ✅ 2026-07-12 + F9 observer ✅ 2026-07-13: run `python bench/optimizer_race.py --data-dir <shards> --depth 8 --tokens 7e8 --amp bf16` (bf16 EAGER, never +compile on sm120); F3 spec-acceptance + F9 max-logit read off the same trained ckpt/run. Build-next on CPU (batch 2): A5 ✅ + A6 ✅ 2026-07-13 (chat-SFT + REPL — the loop now TALKS via chat template) → NEXT: F7a aha → F2a MTP → A7 DDP wiring → A4 midtrain (spec now complete) → F10.2/F8.2 wiring → F11. Shipped 2026-07-13: A0 · A3 · F3-harness · F8.1 · F9 · F10.1 · A5 · A6. · UPDATE this line when a rung ships -->
 
 > ▶ **START HERE (fresh session).** The loop is **CLOSED** (F1 Muon · train-wiring/F4 · eval report
 > card · speedrun spine shipped, GPU-verified talking sample). **A1 real-corpus shards ✅ 2026-07-09**

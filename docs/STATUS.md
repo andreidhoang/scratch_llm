@@ -27,10 +27,14 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > measured). **A2 chaining ✅ 07-09 · F1-run harness ✅ 07-12** (`eval/optimizer_race.py` + the
 > mandatory LR-tuned-AdamW sweep arm + `bench/optimizer_race.py`) **· SIX-RUNG CPU BATCH ✅ 07-13:
 > A0 decontam · A3 chat template · F3 acceptance harness · F8.1 DSA core · F9 QK-clip guard ·
-> F10.1 Gated-DeltaNet** (+ the A4 spec completed in the taskspec). **▶ NEXT NODE → the F1-run GPU
+> F10.1 Gated-DeltaNet** (+ the A4 spec completed in the taskspec). **A5 chat-SFT ✅ + A6 chat REPL
+> ✅ 2026-07-13** — `algos/chat_sft.py` (assistant-masked SFT reusing `sft.py` unedited) +
+> `chat_cli.py` (`ChatSession`/`batch_reply` over the public serving path) + speedrun `stage_sft`
+> and chat preview; **the loop now TALKS through the chat template** (overfit-one-chat-batch →
+> greedy reply reproduces the trained answer and stops at `<|eot|>`). **▶ NEXT NODE → the F1-run GPU
 > day on the sm120 box** (`bench/optimizer_race.py`, bf16 EAGER, build arms with
 > `track_attn_logits=True` so F9's falsifier rides the run; F3 scores the same trained ckpt);
-> **CPU batch 2 → A5 chat-SFT → A6 REPL → F7a → F2a → A7**. **The buildable next-phase DAG (23
+> **CPU batch 2 continues → F7a aha → F2a MTP → A7 DDP → A4 midtrain**. **The buildable next-phase DAG (23
 > rungs, code-grounded, EV-ranked, with a START-HERE block) is
 > [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)** — a
 > fresh session reads that + the SessionStart `frontier node →` line and builds immediately.
