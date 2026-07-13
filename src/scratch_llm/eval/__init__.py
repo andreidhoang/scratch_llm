@@ -3,7 +3,9 @@
 `val_bpb` (intrinsic) + multiple-choice (ARC/MMLU) + generative (GSM8K/HumanEval) folded into one
 :class:`ReportCard`, with a documented CORE-*style* aggregate. See
 `docs/FRONTIER_2026_ABLATIONS.md` §7. `optimizer_race` is the F1-run iso-FLOP A/B harness
-(Muon vs LR-tuned AdamW at fixed C=6ND).
+(Muon vs LR-tuned AdamW at fixed C=6ND). `spec_acceptance` is the F3 harness — n-gram
+speculative-decode acceptance measured BY PROMPT DOMAIN on a trained checkpoint, with the
+committed-equals-greedy losslessness oracle riding along.
 """
 
 from __future__ import annotations
@@ -34,14 +36,27 @@ from scratch_llm.eval.report_card import (
     build_report_card,
     core_style_score,
 )
+from scratch_llm.eval.spec_acceptance import (
+    AcceptanceReport,
+    DomainPrompt,
+    DomainStats,
+    PromptResult,
+    measure_domain_acceptance,
+    report_to_markdown,
+    tokenize_domain_prompts,
+)
 
 __all__ = [
+    "AcceptanceReport",
     "ArmResult",
     "BpbResult",
+    "DomainPrompt",
+    "DomainStats",
     "GenResult",
     "GenTask",
     "MCResult",
     "MCTask",
+    "PromptResult",
     "RaceResult",
     "ReportCard",
     "SweepResult",
@@ -50,12 +65,15 @@ __all__ = [
     "core_style_score",
     "evaluate_generative",
     "evaluate_multiple_choice",
+    "measure_domain_acceptance",
     "nats_delta_at_budget",
     "option_logprob",
     "predict_choice",
+    "report_to_markdown",
     "run_arm",
     "run_race",
     "sweep_lr",
     "token_saving_fraction",
+    "tokenize_domain_prompts",
     "tokens_to_match",
 ]
