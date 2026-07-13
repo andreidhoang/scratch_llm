@@ -29,6 +29,7 @@ from scratch_llm.model import ModelConfig, TransformerLM, cross_entropy
 from scratch_llm.moe import MoEConfig
 from scratch_llm.optim import (
     CombinedOptimizer,
+    apply_qk_clip,
     build_optimizer,
     cosine_lr,
     gradient_clipping,
@@ -162,6 +163,11 @@ class TrainConfig:
     eval_every: int = 0  # 0 = never; >0 ⇒ val CE every N steps AND at the final step
     eval_batches: int = 8  # fixed sequential val windows per eval (no RNG — see _val_loss)
     muon_profile_ns: bool = False  # time Newton–Schulz inside Muon (perturbs; measurement-only)
+    # F9 — QK-Clip guard (Kimi-K2, arXiv:2507.20534): post-step per-head W_q/W_k rescale of any
+    # head whose max pre-softmax logit exceeded τ this step. Requires the model built with
+    # ModelConfig.track_attn_logits=True (the observer supplies S_max). Default OFF = untouched loop.
+    qk_clip: bool = False
+    qk_clip_tau: float = 100.0
 
 
 def _val_loss(
@@ -226,6 +232,11 @@ def train(
         raise ValueError(
             f"amp_dtype must be None or 'bf16' (fp16 needs a GradScaler); got {cfg.amp_dtype!r}"
         )
+    if cfg.qk_clip and not model.cfg.track_attn_logits:
+        raise ValueError(
+            "qk_clip=True requires ModelConfig.track_attn_logits=True — the clip reads the "
+            "per-head max-logit observer; without it every step would be a silent no-op"
+        )
     seed_everything(cfg.seed)
     model.to(cfg.device)
     optimizer = build_optimizer(
@@ -269,6 +280,11 @@ def train(
         loss.backward()
         gradient_clipping(model.parameters(), cfg.grad_clip)
         optimizer.step()
+        if cfg.qk_clip:
+            # F9 QK-Clip: rescale any head whose observed max logit exceeded τ this step. The
+            # observer recorded S_max on this step's forward (pre-update weights); the clip lands
+            # post-step, in weight space — exactly the Kimi-K2 MuonClip ordering.
+            apply_qk_clip(model, cfg.qk_clip_tau)
         if model.cfg.moe is not None:
             # Aux-loss-free load balancing: nudge the router biases after the weight update.
             model.moe_update_biases()

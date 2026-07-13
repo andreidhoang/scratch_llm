@@ -386,3 +386,55 @@ def build_optimizer(
         adamw = AdamW(adamw_params, lr=lr, betas=betas, weight_decay=weight_decay)
         return CombinedOptimizer([muon, adamw])
     raise ValueError(f"unknown optimizer kind {kind!r} (expected 'adamw' or 'muon_adamw')")
+
+
+@torch.no_grad()
+def apply_qk_clip(model: nn.Module, tau: float = 100.0) -> int:
+    """Post-step per-head QK-Clip — the MuonClip guard (Kimi-K2, arXiv:2507.20534). F9.
+
+    Intent: bound FUTURE attention logits in *weight space*. For every attention head whose
+    observed max pre-softmax logit ``S_max`` (recorded by the ``ModelConfig.track_attn_logits``
+    observer on this step's forward) exceeds ``tau``, rescale the head's projection rows so the
+    head's logits — bilinear in (W_q x)·(W_k x) — shrink by exactly ``tau/S_max``:
+
+    - **MHA (1:1 q↔k heads):** both the W_q and W_k head slices scale by ``sqrt(tau/S_max)``
+      (the symmetric Kimi-K2 split — neither side's magnitude runs away).
+    - **GQA (shared kv head):** the kv rows serve several query heads, so rescaling W_k would
+      perturb under-τ siblings; the over-τ head's W_q rows take the FULL ``tau/S_max`` instead
+      (same bound, siblings byte-identical — the same asymmetric handling Kimi-K2 uses for
+      MLA's shared components).
+
+    Invariants (tested in tests/test_qk_clip.py): heads with ``S_max <= tau`` are byte-identical;
+    all-under-τ (or never-observed) is a no-op; a re-forward on the same input lands ≤ τ; under
+    qk_norm the clip is inert (RMSNorm renormalizes q,k after the projection — by design, the
+    two guards compose). Returns the number of clipped heads (log it — a persistently non-zero
+    count under qk_norm is the F9 KILL signal).
+
+    Interview question: why clip weights post-step instead of clamping logits in the forward?
+    — clamping distorts gradients and merely hides the blow-up; a post-step weight rescale
+    leaves the training-time function smooth while permanently pulling the runaway head back.
+    """
+    from scratch_llm.model import MultiHeadSelfAttention  # lazy: keep optim import-light
+
+    clipped = 0
+    for module in model.modules():
+        if not isinstance(module, MultiHeadSelfAttention):
+            continue
+        s_max = module.last_max_logits
+        if s_max is None:  # observer never ran (flag off / no forward yet) ⇒ nothing to clip
+            continue
+        head_dim = module.head_dim
+        shared_kv = module.n_kv != module.n_heads
+        for h in range(module.n_heads):
+            observed = float(s_max[h])
+            if not observed > tau:  # strict: a head AT τ is already bounded (NaN ⇒ skip too)
+                continue
+            gamma = tau / observed
+            rows = slice(h * head_dim, (h + 1) * head_dim)
+            if shared_kv:
+                module.q_proj.weight[rows] *= gamma
+            else:
+                module.q_proj.weight[rows] *= math.sqrt(gamma)
+                module.k_proj.weight[rows] *= math.sqrt(gamma)
+            clipped += 1
+    return clipped

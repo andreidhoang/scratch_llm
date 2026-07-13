@@ -71,6 +71,9 @@ class ModelConfig:
     )
     moe: MoEConfig | None = None  # None ⇒ dense SwiGLU (the default); else opt-in MoE
     use_triton_attention: bool = False
+    # F9 observer (QK-Clip, Kimi-K2 arXiv:2507.20534): record each head's max pre-softmax logit
+    # per forward on MultiHeadSelfAttention. OFF (default) is byte-identical — zero extra ops.
+    track_attn_logits: bool = False
 
     def __post_init__(self) -> None:
         if self.d_model % self.n_heads != 0:
@@ -241,6 +244,11 @@ class MultiHeadSelfAttention(nn.Module):
         # these are nn.Identity ⇒ the path is byte-identical to the no-QK-norm model.
         self.q_norm: nn.Module = RMSNorm(self.head_dim) if cfg.qk_norm else nn.Identity()
         self.k_norm: nn.Module = RMSNorm(self.head_dim) if cfg.qk_norm else nn.Identity()
+        # F9 observer state (QK-Clip, Kimi-K2 arXiv:2507.20534): per-forward per-head max
+        # pre-softmax logit + a running max across forwards. None until a tracked forward runs;
+        # apply_qk_clip (optim.py) reads last_max_logits to decide which heads to rescale.
+        self.last_max_logits: Tensor | None = None
+        self.max_logits_running: Tensor | None = None
 
     def forward(
         self,
@@ -324,6 +332,9 @@ class MultiHeadSelfAttention(nn.Module):
                 k_pos = torch.arange(total, device=x.device).unsqueeze(0)  # (1, total)
                 mask = k_pos <= q_pos  # (s, total) bool, True = attend
 
+            if self.cfg.track_attn_logits:
+                self._observe_max_logits(q, k, mask)
+
             if self.cfg.use_triton_attention and q.is_cuda and row_mask is None:
                 from scratch_llm.kernels.flash_attention_triton import (
                     TritonFlashAttention,  # pyright: ignore[reportAttributeAccessIssue]
@@ -335,6 +346,33 @@ class MultiHeadSelfAttention(nn.Module):
                 out = scaled_dot_product_attention(q, k, v, mask)  # (B, H, S, head_dim)
         out = out.transpose(1, 2).reshape(b, s, self.n_heads * self.head_dim)
         return self.o_proj(out)
+
+    def _observe_max_logits(self, q: Tensor, k: Tensor, mask: Tensor | None) -> None:
+        """F9 observer: record each head's max pre-softmax logit (the QK-Clip signal).
+
+        Intent: the per-head S_max that ``apply_qk_clip`` (optim.py) reads post-step, and the
+        number the F1-run falsifier watches (qk_norm must hold it < ~30). Invariant: pure
+        measurement — runs under ``no_grad`` so it builds no graph, consumes no RNG, and never
+        touches the differentiable path (the OFF path is byte-identical: this method is not even
+        called). Cost when ON: recomputes QKᵀ, ~doubling the score FLOPs — a measurement tool,
+        not a free probe (the shared ``scaled_dot_product_attention`` stays untouched by design;
+        the fused paged-decode kernel path never materializes logits, so it is not observed).
+
+        Interview question: why observe the *pre-softmax* max? — softmax is shift-invariant, so
+        post-softmax probabilities hide the absolute logit scale; it is the absolute scale that
+        overflows bf16 and that QK-Clip bounds in weight space.
+        """
+        with torch.no_grad():
+            scores = q @ k.transpose(-2, -1) / math.sqrt(self.head_dim)
+            if mask is not None:
+                scores = scores.masked_fill(~mask, float("-inf"))
+            head_max = scores.amax(dim=(0, 2, 3)).float()  # (n_heads,) over batch × q × k
+            self.last_max_logits = head_max
+            self.max_logits_running = (
+                head_max
+                if self.max_logits_running is None
+                else torch.maximum(self.max_logits_running, head_max)
+            )
 
 
 class TransformerBlock(nn.Module):
