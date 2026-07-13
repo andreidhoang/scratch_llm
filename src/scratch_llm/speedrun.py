@@ -30,6 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
+from scratch_llm.chat import CHAT_SPECIAL_TOKENS
 from scratch_llm.data.shards import load_dataset_tokens, load_tokenizer
 from scratch_llm.eval import ReportCard, build_report_card
 from scratch_llm.model import ModelConfig, TransformerLM
@@ -74,6 +75,10 @@ class SpeedrunConfig:
     resume: bool = False
     midtrain_steps: int = 0
     sft_steps: int = 0
+    # A3: True ⇒ the tokenizer stage trains the BPE with CHAT_SPECIAL_TOKENS (each special
+    # becomes a single id inside vocab_size — required by midtrain/SFT/chat, A4–A6).
+    # False (default) is byte-identical to the pre-A3 path: no specials anywhere.
+    chat: bool = False
 
 
 @dataclass
@@ -119,16 +124,23 @@ def _load_corpus(cfg: SpeedrunConfig) -> str:
     return _BUILTIN_CORPUS * reps
 
 
-def _train_tokenizer(text: str, vocab_size: int) -> Tokenizer:
-    """Train a byte-level BPE on the corpus (train_bpe reads a file, so stage the text)."""
+def _train_tokenizer(
+    text: str, vocab_size: int, special_tokens: list[str] | None = None
+) -> Tokenizer:
+    """Train a byte-level BPE on the corpus (train_bpe reads a file, so stage the text).
+
+    ``special_tokens`` (A3) is threaded through BOTH train_bpe (ids inside vocab_size) and
+    the Tokenizer constructor (encode maps each special to that single id) — the two halves
+    of the A3 kill criterion.
+    """
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as fh:
         fh.write(text)
         path = fh.name
     try:
-        vocab, merges = train_bpe(path, vocab_size)
+        vocab, merges = train_bpe(path, vocab_size, special_tokens)
     finally:
         Path(path).unlink(missing_ok=True)
-    return Tokenizer(vocab, merges)
+    return Tokenizer(vocab, merges, special_tokens)
 
 
 # -----------------------------------------------------------------------------------------------
@@ -166,7 +178,8 @@ def stage_tokenizer(cfg: SpeedrunConfig) -> tuple[Tokenizer, np.ndarray, list[in
         tokenizer = Tokenizer.load(tok_path)
         name = "tokenizer[resumed]"
     else:
-        tokenizer = _train_tokenizer(text, cfg.vocab_size)
+        specials = CHAT_SPECIAL_TOKENS if cfg.chat else None
+        tokenizer = _train_tokenizer(text, cfg.vocab_size, specials)
         if tok_path is not None:
             tokenizer.save(tok_path)
         name = "tokenizer"
