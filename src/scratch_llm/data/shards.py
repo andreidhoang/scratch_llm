@@ -290,6 +290,17 @@ def main() -> None:
     p.add_argument("--n-docs", type=int, default=64, help="FineWeb-EDU docs to download.")
     p.add_argument("--corpus", default=None, help="Local text file (blank-line-separated docs).")
     p.add_argument("--docs-per-shard", type=int, default=None)
+    p.add_argument(
+        "--decontaminate",
+        action="store_true",
+        help="A0 gate: strip train docs that 13-gram-overlap the eval sets before sharding.",
+    )
+    p.add_argument(
+        "--eval-file",
+        action="append",
+        default=[],
+        help="Extra eval-text file (one item per line) to guard against; repeatable.",
+    )
     args = p.parse_args()
 
     if args.corpus is not None:
@@ -297,7 +308,25 @@ def main() -> None:
         docs = [d for d in text.split("\n\n") if d.strip()]
     else:
         docs = download_fineweb_slice(n_docs=args.n_docs)
-    metas = build_dataset(docs, args.out, args.vocab_size, args.docs_per_shard)
+
+    doc_filter = None
+    if args.decontaminate:
+        from scratch_llm.data.decontaminate import (
+            build_eval_ngrams,
+            decontam_doc_filter,
+            default_eval_texts,
+        )
+
+        eval_ngrams = build_eval_ngrams(default_eval_texts(args.eval_file))
+        doc_filter = decontam_doc_filter(eval_ngrams)
+        kept = [d for d in docs if doc_filter(d)]
+        print(
+            f"A0 decontamination: kept {len(kept)}/{len(docs)} docs ({len(docs) - len(kept)} dropped)"
+        )
+
+    metas = build_dataset(
+        docs, args.out, args.vocab_size, args.docs_per_shard, doc_filter=doc_filter
+    )
     total = sum(m.n_tokens for m in metas)
     print(
         f"{len(metas)} shard(s), {total:,} tokens ({metas[0].dtype}), {len(docs)} docs → {args.out}"
