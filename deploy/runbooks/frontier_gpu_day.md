@@ -90,12 +90,20 @@ The pending headline. The sweep→race→ledger driver was CPU-smoke-verified en
 re-verified after the 2026-07-16 review fixes).
 
 ```bash
-python bench/optimizer_race.py \
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python bench/optimizer_race.py \
   --data-dir data/fineweb_edu --depth 8 --tokens 7e8 \
-  --batch-size 32 --context-length 1024 --amp bf16 --device cuda \
+  --batch-size 16 --context-length 1024 --amp bf16 --device cuda \
   --sweep-lrs 1e-4,2e-4,3e-4,6e-4,1e-3 --sweep-frac 0.2 \
   --out results/f1_race.json
 ```
+
+> **Batch amendment (2026-07-17, measured on the box):** `--batch-size 32` **OOMs at the first
+> backward even under SDPA** — the CE/logits transients at V=32768 demand ~26 GB against the card's
+> **23.42 GiB usable** (24 GB nominal; earlier "25 GB" was wrong). `--batch-size 16` measured
+> **18,246 MiB peak, 98% util**. Iso-FLOP is untouched (both arms share the config; D unchanged;
+> the sweep re-tunes LR at the real batch). Calibrated on a 202-step probe: baseline
+> **0.283 s/step** (57.9K tok/s) · Muon **0.310 s/step** → predicted wall ≈ **10.4 h**
+> (sweep 3.4 h + baseline 3.4 h + Muon 3.7 h) at 42,725 steps/arm, eval_every 854.
 - **Defaults carry the registered regime (2026-07-16) — state, don't assume:** the driver builds the
   model with **qk_norm ON** (the F9-registered regime; the opt-out is `--no-qk-norm` — do NOT pass
   it, the pre-registered falsifier "S_max < 30 *under qk_norm*" is conditioned on it) and

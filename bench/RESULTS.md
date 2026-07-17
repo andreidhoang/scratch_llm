@@ -996,3 +996,24 @@ move**; the original pre-registration text above stands unedited.
   row instead of a crashed day, and a KILL is a result.
 
 Next: the GPU day per `deploy/runbooks/frontier_gpu_day.md` (amended today to match).
+
+### Measured — F1 launch calibration + GPU-day gate (2026-07-17, sm120 box; RACE IN FLIGHT)
+
+The launch sequence executed per the amended runbook; every number below is measured on the box
+(RTX PRO 4000 Blackwell, **23.42 GiB usable** — 24 GB nominal; the "25 GB" in older docs was wrong).
+
+| item | predicted (pre-reg) | measured |
+|---|---|---|
+| corpus (parquet bulk path, A1-XL) | ≥7e8 tokens, 3.0–5.0 B/tok | **42 shards · 700,773,167 tokens · 665,600 docs · 4.54 B/tok · 0 docs filtered (A0)**; download 4.01 GiB ≈ 1 min; build sub-hour end-to-end at 16 workers |
+| epochs guard | ≈1.0, pass ≤1.5 | **1.0036** — passed |
+| GPU suite gate | green | **green on the F1 path**; 4× Triton **FA2-backward** FAIL: kernel requests 132,096 B smem vs sm120 limit **101,376 B** (first measured run of the 07-13 FA2-bwd; perf-front fix = reduce BLOCK/num_stages; F1 unaffected — runs SDPA) |
+| B=32 memory (the review's ~14 GB peak estimate) | fits | **OOM at first backward** — ~26 GB demanded (retained 13.1 GB was right; CE/logits backward transients at V=32768 were under-counted). Estimate falsified; SDPA still removed the ~30 GB eager attention wall |
+| **B=16 amendment** (pre-run; iso-FLOP untouched — both arms share config, D unchanged, sweep re-tunes LR) | fits w/ margin | **18,246 MiB peak · 98% util**, steady across smoke + probe + race |
+| probe s/step (202 steps/arm, eval_every 100) | — | baseline **0.283 s/step** (57.9K tok/s) · muon **0.310 s/step** |
+| full-race wall (42,725 steps/arm + 5×20% sweep) | **≈10.4 h** (3.4 sweep + 3.4 baseline + 3.7 muon) | pending |
+| NS-overhead criterion | **pre-registered EXPECTATION: reads ~8–11% → prints its KILL branch** — smoke 8.2%, probe 10.2%. This is *implementation* wall-cost (pure-Python per-matrix NS + 112 challenger-only profiler syncs/step; Moonlight fused = 1–3%), orthogonal to the token-efficiency falsifier measured on loss-vs-tokens curves. Reconcile the verdict string against this note, not against silence | pending |
+| loss-at-init oracle, live at launch | ≈ log V = 10.397 | **10.378 @ step 10**, 9.60 by step 50 ✓ |
+
+Launched 2026-07-17 ~07:5x ICT in `tmux:f1race` on the box, `--out results/f1_race.json`
+(incremental per-stage persistence: started→sweep_done→baseline_arm_done→…→complete). Box cost
+≈ $0.28/h ⇒ ≈ **$3 total**. The F1/F9 verdict rows land here when the run completes.
