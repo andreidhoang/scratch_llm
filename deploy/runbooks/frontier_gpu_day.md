@@ -86,6 +86,12 @@ python -m scratch_llm.data.shards \
 
 ## Step 2 — F1 iso-FLOP Muon vs tuned-AdamW (+ F9 ride-along) (~4–10 h `[INFERENCE]`)
 
+> **⚠ DESCOPED 2026-07-17 (user decision — `bench/RESULTS.md` §Decision):** the race was launched,
+> verified healthy, and killed at 3.8% — the d20 optimizer is **ADOPTED** (Muon+AdamW, external
+> evidence: nanochat leaderboard / Karpathy's own Muon-era isoflop fits / Moonlight / K2) rather
+> than measured in-house; GPU effort redirects to the 8×H100 d20 gate. This step remains valid as
+> an optional idle-time run; the LR sweep folds into the P5 d12 dress rehearsal instead.
+
 The pending headline. The sweep→race→ledger driver was CPU-smoke-verified end-to-end (2026-07-13;
 re-verified after the 2026-07-16 review fixes).
 

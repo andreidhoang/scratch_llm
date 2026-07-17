@@ -1017,3 +1017,35 @@ The launch sequence executed per the amended runbook; every number below is meas
 Launched 2026-07-17 ~07:5x ICT in `tmux:f1race` on the box, `--out results/f1_race.json`
 (incremental per-stage persistence: started→sweep_done→baseline_arm_done→…→complete). Box cost
 ≈ $0.28/h ⇒ ≈ **$3 total**. The F1/F9 verdict rows land here when the run completes.
+
+### Decision — F1-run DESCOPED mid-flight; Muon+AdamW ADOPTED for the d20 (user decision, 2026-07-17)
+
+The race was killed at step 4,880 / 128,175 (3.8%, sweep arm 1; loss 10.38 → 4.90 — the run itself
+was healthy) and the box stopped. Rationale — **FOP-7 (reuse before re-deriving) beats FOP-2
+re-measurement here**:
+
+- **The A/B's information value collapsed because the decision space collapsed.** The d20 was never
+  going to ship on plain AdamW against the 2025–26 evidence stack: every nanochat leaderboard record
+  since Jan-2026 trains Muon-class, and Karpathy's own isoflop fits at exactly d20–d26 scale were
+  done WITH Muon; modded-nanogpt's single largest win is Muon (independently reproduced: 39.8% wall
+  cut at 124M); Moonlight's controlled comparisons; K2 at 15.5T tokens with MuonClip, zero spikes.
+  The race's expected outcome merely confirms published numbers at ~10.5 GPU-h + a calendar day; a
+  KILL outcome would more likely indicate a bug in OUR Muon than overturn the literature — and the
+  P5 d12 dress rehearsal's loss-band tripwire catches that failure mode for a fraction of the cost.
+- **Claims label changes accordingly:** the d20 optimizer is **[ADOPTED]** (external evidence,
+  cited), not **[MEASURED]** in-house. The tuned-baseline A/B harness stays shipped + smoke-verified
+  (the deflation-aware methodology is the artifact); the run can execute on idle GPU time later.
+- **What we do NOT adopt: nanochat's LR constants.** Their HEAD optimizer is
+  Muon+MuonEq+PolarExpress+Muon⁺-renorm+NorMuon+cautious-WD with per-group LRs (emb 0.3 / unemb
+  0.008 / matrix 0.02 / scalar 0.5), √(B/B_ref) batch scaling, (d_model/768)^-0.5 AdamW scaling,
+  warmup→constant→warmdown — a different variant family from our vanilla-Muon + Moonlight RMS-match
+  (0.2·√max(A,B)) single-global-LR + cosine design; the constants do not transfer 1:1. The one
+  global LR gets tuned by our existing sweep machinery **inside the P5 d12 rehearsal**.
+- **Banked from the aborted launch (nothing wasted):** the 700,773,167-token decontaminated corpus
+  persists on the stopped box; the measured B=16 memory envelope (18,246 MiB @ 98% util); s/step
+  calibration (0.283 / 0.310); the live loss-at-init oracle (10.378 ≈ log V); and the hardened
+  launch path (epochs guard, incremental persistence, divergence containment) — all carry to the
+  d20 unchanged.
+
+**Next → all effort on the d20 gate:** A7 optimizer-embedded ZeRO-2 wiring + P3 CORE suite → A8
+runbook → P5 d12 rehearsal on 1×H100 (LR sweep folded in) → the 8×H100 d20 run.
