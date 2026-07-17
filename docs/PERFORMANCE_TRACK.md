@@ -20,6 +20,11 @@
 > (predictions, DoD, kill criteria). What stays live here is the **reference layer**: the thesis
 > (§0), the 2026 findings (§2), the subtract-list (§4), and the honesty constants (§5 — cited by
 > `bench/RESULTS.md`). §1 and §3 are retired below with their resolutions.
+>
+> **Frontier layer refreshed (2026-07-14).** The findings in §2/§2.1/§6 now have a fresher,
+> primary-source-verified successor: [`../performance/KERNEL_ROADMAP_2026.md`](../performance/KERNEL_ROADMAP_2026.md)
+> — §1 (frontier delta incl. corrections to the 07-09 pass) + §2 (verified hiring bar) + §3 (Vizuara
+> curriculum dissection). **Where they conflict, the roadmap wins.** This doc stays the thesis layer (§0/§5).
 
 ---
 

@@ -37,7 +37,9 @@
 >   flash attn · A5 R0–R4+§4.3 quant · A6 TP/1F1B/EP-MoE/MFU (gloo). Design notes A1–A7, H100/B200/8×H200
 >   runbooks + compile-verified ISA kernels (`performance/rental/kernels/`) + WGMMA PTX artifact done.
 >   Mastery roadmap: [`docs/learning/roadmap/`](docs/learning/roadmap/README.md). Only the 3 rental DAYS
->   remain (hardware-gated). Node pointer `performance/PERF_PLAN.md`. Zone: `performance/`,
+>   remain (hardware-gated). Node pointer `performance/PERF_PLAN.md`. **Kernel-lane operating spec:
+>   [`performance/KERNEL_ROADMAP_2026.md`](performance/KERNEL_ROADMAP_2026.md)** (2026-07-14 — verified
+>   frontier delta, P0 quarry protocol `/kquarry`, P1+ phases gated per `../../JOB_SPRINT/MASTER_PLAN_2026-07-12.md`). Zone: `performance/`,
 >   `src/scratch_llm/{serving,kernels,quant}/`, `mla.py`, `utils/{tp_mlp,pipeline_schedule,ep_moe,mfu}.py`,
 >   perf sections of `bench/RESULTS.md`, `docs/learning/roadmap/`.
 > - **Main-track front** — the CS336 A2→A5 finish, plan =

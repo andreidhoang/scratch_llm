@@ -102,6 +102,25 @@ LINCHPIN realized: the static buffer + serve() harness from R3b is the substrate
   measures against (bench/continuous.py is the standing workload).
 ```
 
+> **⚠ 2026-07-14 roadmap consolidation — orient HERE for the kernel lane.** The kernel lane now runs on
+> **[`KERNEL_ROADMAP_2026.md`](KERNEL_ROADMAP_2026.md)** (user-requested; five-stream primary-source
+> verification). It **supersedes the 07-09 note below where they conflict** — headline deltas: FA4
+> confirmed (arXiv 2603.05451, code public, ≈1.6 PF/71% B200) **but decode-on-Hopper regresses vs FA3
+> (no SplitKV)**; FlashQLA is **TileLang**, not CuTe-DSL; V4-Flash = **284B** (shipped 2026-04-24, arXiv
+> 2606.19348); CUTLASS at **4.5.2**, CuTe-DSL near-GA, **PyTorch 2.13 ships a CuTeDSL Inductor backend**;
+> **DELTA's fp8/nvfp4 recurrent-decode niche re-verified OPEN (2026-07-14)**. Phase map (resequenced 2026-07-15,
+> mastery-first — the human re-types the core from blank before any rental; the lane runs a daily
+> 4–5 h block, JOB_SPRINT §8.1): **P0 quarry** (30–45', opens each block) → **P0.5 Rebuild Ladder
+> L0–L8 ≈ Jul 15–Aug 1** (`/rebuild` into `mastery/src`, vs existing oracles + ledger, diff-defend
+> vs the agent versions) → **P1 = H100 day ≈ Aug 1–2** (human hand-writes the WGMMA upgrade from
+> their own L5 GEMM) → **P2 = B200 day ≈ Aug 6–8 (CuTe-DSL + tcgen05 + NVFP4 + FA4 bench)** →
+> **P3 = DELTA from ≈ Aug 12** (niche re-check at open; human-typed by construction) → **P4 =
+> extraction/upstream PRs (Sep)** (M-AI → background/Sep). Flagship-first guardrail: a slipped CRL
+> day preempts kernel deep work, never the quarry rep. `mastery/src/**` is human-only. Verdicts: embed (no separate project) · skip the $3k Vizuara
+> workshop · learn-mode for kernel reps. **Maintenance contract:** phase opens/closes → update Current
+> Node here + tick roadmap §7; daily reps → mastery ledger only; **re-verify roadmap §1 + the niche-open
+> check at every phase boundary** (a lab can close the DELTA niche any week). No further kernel planning docs.
+
 > **⚠ 2026-07-09 frontier re-verification (read before the rental days).** A perf/kernel/serving/hiring
 > deep-research pass (`wf_f3af3987-949`, primary-source-verified) re-pointed the highest-value work —
 > verdict in `docs/PERFORMANCE_TRACK.md` §2.1 + §6. Load-bearing deltas for the remaining rungs: **(1)**

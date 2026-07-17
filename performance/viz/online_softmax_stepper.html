@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Online softmax → FA4 lazy rescale — interactive stepper</title>
+<style>
+:root{--bg:#faf9f6;--card:#fff;--ink:#1a1a18;--mut:#6b6a64;--line:#e3e1d8;--teal:#0f6e56;--tealbg:#e1f5ee;--pur:#534ab7;--purbg:#eeedfe;--amb:#854f0b;--ambbg:#faeeda;--red:#a32d2d;--redbg:#fcebeb;--blu:#185fa5;--blubg:#e6f1fb}
+@media(prefers-color-scheme:dark){:root{--bg:#161615;--card:#1f1f1d;--ink:#eceae2;--mut:#98968d;--line:#33322e;--teal:#5dcaa5;--tealbg:#0c2e24;--pur:#afa9ec;--purbg:#211d45;--amb:#fac775;--ambbg:#3a2a10;--red:#f09595;--redbg:#3a1414;--blu:#85b7eb;--blubg:#0e2740}}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);max-width:880px;margin:0 auto;padding:28px 20px 70px;line-height:1.5}
+h1{font-size:20px;font-weight:600;margin:0 0 4px}
+.sub{color:var(--mut);font-size:13px;margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:0 0 12px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;text-align:center;min-width:64px;background:var(--card)}
+.chip b{display:block;font-size:14px}
+.chip.done{opacity:.45}
+.chip.cur{border-color:var(--pur);background:var(--purbg)}
+.state{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.st{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.st span{font-size:11px;color:var(--mut);display:block}
+.st b{font-size:16px;font-weight:600}
+button{font:inherit;font-size:13px;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.primary{background:var(--pur);border-color:var(--pur);color:#fff}
+button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.pill{font-size:11px;padding:2px 9px;border-radius:10px;font-weight:600}
+.skip{background:var(--tealbg);color:var(--teal)} .resc{background:var(--ambbg);color:var(--amb)}
+#log{font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.7;max-height:190px;overflow-y:auto}
+#predict{background:var(--blubg);color:var(--blu);border-radius:10px;padding:9px 12px;font-size:13px}
+.bar{height:8px;border-radius:4px;background:var(--line);position:relative;margin-top:4px}
+.bar div{height:8px;border-radius:4px;background:var(--amb)}
+input[type=range]{accent-color:var(--pur);vertical-align:middle}
+small{color:var(--mut)}
+.warn{color:var(--red);font-weight:600}
+code{background:var(--line);border-radius:4px;padding:0 5px;font-size:12px}
+</style>
+</head>
+<body>
+<h1>Online softmax → FA4 lazy rescale</h1>
+<p class="sub">Viz #1 of the kernel viz library (roadmap §6.5). Stream 8 scores in tiles of 2, watch the running max <code>m</code>, denominator <code>l</code>, and accumulator <code>O</code>. Then flip on FA4's trick: skip the rescale when the max barely moves. Predict before every step.</p>
+
+<div class="card">
+  <div class="chips" id="chips"></div>
+  <div class="row">
+    <button class="primary" id="step">Step tile</button>
+    <button id="reset">Reset</button>
+    <button id="shuffle">Shuffle scores</button>
+    <label style="font-size:13px;margin-left:8px"><input type="checkbox" id="lazy"> FA4 lazy rescale</label>
+    <span style="font-size:13px">τ <input type="range" id="tau" min="0" max="10" step="0.5" value="1.5" style="width:110px"> <b id="tauv">1.5</b></span>
+  </div>
+  <div id="predict">Predict: tile 1 = scores shown in purple. What will <code>m</code> be after this tile — and is a rescale needed?</div>
+</div>
+
+<div class="card">
+  <div class="state">
+    <div class="st"><span>reference max m</span><b id="m">−∞</b></div>
+    <div class="st"><span>denominator l</span><b id="l">0</b></div>
+    <div class="st"><span>accumulator O</span><b id="O">0</b></div>
+    <div class="st"><span>output O / l</span><b id="out">—</b></div>
+    <div class="st"><span>rescales done</span><b id="rd">0</b></div>
+    <div class="st"><span>rescales skipped</span><b id="rs" style="color:var(--teal)">0</b></div>
+  </div>
+  <div style="margin-top:10px;font-size:12px">largest intermediate exp value: <b id="maxp">0</b> <span id="fpwarn"></span>
+    <div class="bar"><div id="pbar" style="width:0%"></div></div>
+    <small>log-scale vs the fp16 ceiling 65504 — laziness is algebraically exact, its real price is dynamic range</small>
+  </div>
+</div>
+
+<div class="card"><div id="log"><small>step log appears here…</small></div></div>
+
+<div class="card" style="font-size:13px">
+  <b>The invariant</b> — every stored <code>p = exp(s − m_ref)</code>, and <code>O</code> and <code>l</code> always share the same <code>m_ref</code>, so <code>O/l</code> equals true softmax·V no matter when you rescale. Rescaling by <code>c = exp(m_old − m_new)</code> just re-bases both.<br><br>
+  <b>Why FA4 cares</b> — in the real kernel <code>O</code> is a whole tile row: each skipped rescale saves a vector multiply per row. Blackwell's tensor cores got so fast that these softmax-side ops became the bottleneck — FA4 only re-bases when the max jump exceeds τ, cutting rescales ~10×. Cost: intermediates grow up to <code>e^τ</code>, pressuring fp16/bf16 range — push τ to 10 and watch the bar.<br><br>
+  <b>Check yourself</b> — (1) why is the final error vs exact softmax ~1e-16 even with skips? (2) what breaks first if τ→∞ in fp16? (3) where does causal masking enter? Then run <code>/feynman online softmax</code>.
+  <span id="err" style="display:block;margin-top:8px"></span>
+</div>
+
+<script>
+const N=8,B=2;let s=[],v=[],i=0,m=-Infinity,l=0,O=0,rd=0,rs=0,maxp=0,log=[];
+const $=id=>document.getElementById(id);
+function rnd(){s=[...Array(N)].map(()=>Math.round((Math.random()*10-4)*10)/10);v=[...Array(N)].map(()=>Math.round((Math.random()*4-2)*10)/10)}
+function exact(){const mm=Math.max(...s),e=s.map(x=>Math.exp(x-mm)),Z=e.reduce((a,b)=>a+b,0);return e.reduce((a,ei,k)=>a+ei*v[k],0)/Z}
+function fmt(x){return x===-Infinity?"−∞":(Math.abs(x)>=1000?x.toExponential(2):(+x.toFixed(4)).toString())}
+function draw(){
+  $("chips").innerHTML=s.map((sc,k)=>{const t=Math.floor(k/B),cur=t===i&&i<N/B,done=t<i;
+    return `<div class="chip ${done?"done":""} ${cur?"cur":""}"><b>${sc}</b><small>v=${v[k]}</small></div>`}).join("");
+  $("m").textContent=fmt(m);$("l").textContent=fmt(l);$("O").textContent=fmt(O);
+  $("out").textContent=l>0?fmt(O/l):"—";$("rd").textContent=rd;$("rs").textContent=rs;
+  $("maxp").textContent=fmt(maxp);
+  const frac=maxp>0?Math.min(1,Math.log(maxp+1)/Math.log(65504)):0;
+  $("pbar").style.width=(frac*100).toFixed(1)+"%";
+  $("fpwarn").innerHTML=maxp>65504?'<span class="warn">— fp16 would have overflowed!</span>':(maxp>6000?'<span class="warn">— nearing fp16 ceiling</span>':"");
+  $("log").innerHTML=log.length?log.map(x=>x).join("<br>"):"<small>step log appears here…</small>";
+  $("log").scrollTop=1e6;
+  const done=i>=N/B;$("step").disabled=done;
+  $("predict").innerHTML=done
+    ?`Done. Streamed O/l = <b>${fmt(O/l)}</b> · exact softmax·V = <b>${fmt(exact())}</b> · |Δ| = <b>${(Math.abs(O/l-exact())).toExponential(1)}</b>. Now explain WHY the skips didn't change the answer.`
+    :`Predict: tile ${i+1} has scores {${s[i*B]}, ${s[i*B+1]}}. Current m = ${fmt(m)}${$("lazy").checked?", τ = "+$("tau").value:""}. Rescale or skip? What is m after?`;
+  $("err").textContent=done?"":"";
+}
+function step(){
+  if(i>=N/B)return;
+  const a=s[i*B],b=s[i*B+1],mt=Math.max(a,b),lazy=$("lazy").checked,tau=+$("tau").value;
+  let note,ref;
+  if(l===0){ref=mt;m=mt;note=`init m_ref=${fmt(mt)}`}
+  else{
+    const jump=mt-m;
+    if(lazy?(jump<=tau):(jump<=0)){ref=m;if(jump>0){rs++;note=`jump ${fmt(jump)} ≤ τ → <span class="pill skip">SKIP rescale</span> (c=1, exp may exceed 1)`}else{note=`max unchanged → no rescale needed`}}
+    else{const c=Math.exp(m-mt);l*=c;O*=c;rd++;ref=mt;m=mt;note=`jump ${fmt(jump)} → <span class="pill resc">RESCALE</span> c=exp(${fmt(-jump)})=${fmt(c)}; l,O ×c`}
+  }
+  const pa=Math.exp(a-ref),pb=Math.exp(b-ref);
+  maxp=Math.max(maxp,pa,pb);
+  l+=pa+pb;O+=pa*v[i*B]+pb*v[i*B+1];
+  log.push(`<b>tile ${i+1}</b> {${a}, ${b}} — ${note}; p=(${fmt(pa)}, ${fmt(pb)}) → l=${fmt(l)}, O=${fmt(O)}`);
+  i++;draw();
+}
+function reset(){i=0;m=-Infinity;l=0;O=0;rd=0;rs=0;maxp=0;log=[];draw()}
+$("step").onclick=step;$("reset").onclick=reset;
+$("shuffle").onclick=()=>{rnd();reset()};
+$("lazy").onchange=reset;
+$("tau").oninput=e=>{$("tauv").textContent=e.target.value;reset()};
+rnd();reset();
+</script>
+</body>
+</html>
