@@ -94,14 +94,16 @@ production-RE skill and can contribute a real, cited result.
 | Dense decoder (RMSNorm-fp32 · RoPE · SwiGLU · GQA · opt-in QK-norm · **tied** emb by default) | `src/scratch_llm/model.py` | Real, tested. No logit softcap, no LM z-loss, no MTP head. |
 | MLA (weight-absorption identity) | `src/scratch_llm/mla.py` | **Toy** — 1 layer, not wired to attention/KV cache; float64 identity only. |
 | MoE (DeepSeek fine-grained + shared + aux-loss-free bias γ=1e-3 + seq aux + z-loss) | `src/scratch_llm/moe.py` | Integrated + unit-tested; **never trained on real data**. |
-| Optimizer | `optim.py` / `train.py:118` | **AdamW only** (β₂=0.95, decoupled WD, cosine). **No Muon, no param groups.** |
+| Optimizer | `optim.py` / `train.py:118` | AdamW (β₂=0.95, decoupled WD, cosine) **+ Muon + CombinedOptimizer** (`optim.py:170,318`) shipped and wired into the F1 race harness (`eval/optimizer_race.py`); the default dense-decoder `train.py:118` path is still AdamW-only pending F1's verdict. |
 | Training loop | `train.py:136` | **plain fp32, no autocast/compile**; memmap batches; no real-corpus run. |
 | Serving stack | `serving/` | Real + measured, but against random-weight toys (confounded — `RESULTS.md:383`). |
 | RL (SFT/EI/GRPO/Dr.GRPO/DPO + r1_zero grader + envs) | `algos/`,`rewards/`,`envs/` | Built + toy-CPU; **no real-model "aha" on record**. |
 
-**Deltas nanochat has that we lack:** Muon optimizer; **untied** embeddings (separate
-`embedding_lr`/`unembedding_lr`); an integrated `speedrun.sh`; a **report card** (DCLM CORE +
-`val_bpb` + ARC/MMLU/GSM8K/HumanEval); a midtraining stage + tool-use + chat UI.
+**Deltas nanochat has that we lack:** ~~Muon optimizer~~ (shipped `optim.py:170,318`, live in the F1
+race harness — the *default* dense-decoder path (`train.py:118`) stays AdamW-only until F1 verdicts
+it in); **untied** embeddings (separate `embedding_lr`/`unembedding_lr`) outside the F1 harness (which
+already forces `tie_embeddings=False`, `speedrun.py:120`); an integrated `speedrun.sh`; a **report
+card** (DCLM CORE + `val_bpb` + ARC/MMLU/GSM8K/HumanEval); a midtraining stage + tool-use + chat UI.
 
 ## §2 — Model-size tiers (Karpathy-style)
 

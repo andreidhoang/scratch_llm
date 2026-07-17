@@ -30,9 +30,17 @@ work is to (a) close the loop and (b) turn our existing frontier *toys* into *me
    produce a trained, evaluated, chat-capable model.
 
 2. **Model tiers (user-directed): straight to the $100 d20.** Headline artifact = nanochat-grade
-   **d20 (~561M, ~11–12B tokens, 8×H100, ~$48–100)**, target CORE ≈ GPT-2 (~0.256). A **free nano
-   pre-flight** (depth ~4) runs the whole pipeline first to protect the paid run. Ablation *science*
-   runs at 30–300M on the standing sm120 card.
+   **d20 (measured 480.4M at vocab 32768, D=20N≈9.6B tokens, 8×H100, pretrain ~$58–79)**, pre-registered
+   **CORE band 0.19–0.22**, presented as a CORE-vs-FLOPs point against nanochat's published curve.
+   > ⚠ **Corrected 2026-07-16 (deep-research audit, user-approved).** The original line here read
+   > "~561M … target CORE ≈ GPT-2 (~0.256)" — both numbers were wrong. (a) The original nanochat d20's
+   > CORE was **0.2219**; 0.2565 is **GPT-2 XL's** CORE as measured by nanochat (GPT-2-grade cost ~$300/d26
+   > in Oct-2025) — targeting 0.256 would score a *successful* replication as a 0.035-CORE failure.
+   > (b) At our vocab 2¹⁵ the d20 is **480.4M** (561M held only at nanochat's old 2¹⁶ vocab), so ratio-20
+   > gives C≈2.77e19 = **27% less compute** than the anchor's 3.77e19 — a same-depth run must predict
+   > *below* 0.2219. A **free nano pre-flight** (depth ~4) runs the whole pipeline first, and a
+   > **$10–15 d12 dress rehearsal on 1×H100** validates recipe/compile-on-sm90/checkpoint-resume/CORE
+   > harness before the 8× rental. Ablation *science* runs at 30–300M on the standing sm120 card.
 
 3. **A ranked, pre-registered ablation program** (`FRONTIER_2026_ABLATIONS.md` §3), 80/20 =
    **F1 MuonAdamW · F2 MTP draft head · F3 de-confound serving · F4 bf16+compile**, then F5 MLA-real,

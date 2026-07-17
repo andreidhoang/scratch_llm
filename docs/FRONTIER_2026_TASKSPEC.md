@@ -16,7 +16,7 @@
 > **Reference oracle available:** the venv vendors `transformers/models/{deepseek_v2,deepseek_v3,
 > deepseek_v32,glm4_moe,nanochat,qwen3}` — read these as implementation oracles (re-own, don't copy).
 
-<!-- Next-node: F1-run GPU DAY on the sm120 box — harness ✅ 2026-07-12 + F9 observer ✅ 2026-07-13: run `python bench/optimizer_race.py --data-dir <shards> --depth 8 --tokens 7e8 --amp bf16` (bf16 EAGER, never +compile on sm120); F3 spec-acceptance + F9 max-logit read off the same trained ckpt/run. Build-next on CPU (batch 2): A5 ✅ + A6 ✅ 2026-07-13 (chat-SFT + REPL — the loop now TALKS via chat template) → NEXT: F7a aha → F2a MTP → A7 DDP wiring → A4 midtrain (spec now complete) → F10.2/F8.2 wiring → F11. Shipped 2026-07-13: A0 · A3 · F3-harness · F8.1 · F9 · F10.1 · A5 · A6. · UPDATE this line when a rung ships -->
+<!-- Next-node: F1-run GPU DAY on the sm120 box — harness ✅ 2026-07-12 + F9 observer ✅ 2026-07-13: run `python bench/optimizer_race.py --data-dir <shards> --depth 8 --tokens 7e8 --amp bf16` (bf16 EAGER, never +compile on sm120); F3 spec-acceptance + F9 max-logit read off the same trained ckpt/run. Build-next on CPU (batch 2): A5 ✅ + A6 ✅ 2026-07-13 (chat-SFT + REPL — the loop now TALKS via chat template) → NEXT: F7a aha → F2a MTP → A7 (re-specced: optimizer-embedded ZeRO-2, NOT DDP-wrapper — see §A) → A4 midtrain (spec now complete) → F10.2/F8.2 wiring → F11. Shipped 2026-07-13: A0 · A3 · F3-harness · F8.1 · F9 · F10.1 · A5 · A6. ⚠ 2026-07-16 d20 PLAN REFACTOR (deep-research, user-approved): d20 = 480.4M measured @ vocab 32768 (561M stale) · anchor CORE 0.2219 (0.2565 = GPT-2 XL, old target mis-anchored) · D = ratio-20 = 9.6B tok · d20 gate expanded with P1–P6 prerequisites (P1 flash-attn TRAIN path = memory blocker; P2 10B streamer = calendar critical path; P3 CORE suite; P4 fused-optim+LR-transfer; P5 d12 dress rehearsal 1×H100; P6 nccl gate + $90 abort) — pre-registration in bench/RESULTS.md §d20. · UPDATE this line when a rung ships -->
 
 > ▶ **START HERE (fresh session).** The loop is **CLOSED** (F1 Muon · train-wiring/F4 · eval report
 > card · speedrun spine shipped, GPU-verified talking sample). **A1 real-corpus shards ✅ 2026-07-09**
@@ -73,7 +73,7 @@ the frontier ablation study (the differentiating research). `[S/M/L]` = effort.
 | 18 | **F8.1 / F8.2** DSA sparse attn | B | M/L | — | lightning indexer + top-k gather + KL warm-up (**PROMOTED to core — §10; scarce 2026 signal**) |
 | 19 | **F10.1 / F10.2** hybrid linear attn 🆕 | B | M/L | (F5 seam) | Gated-DeltaNet block (chunkwise==recurrent==ref) → `attn_schedule` 3:1 iso-param quality/KV ablation — **the 2026 attn frontier; model-side twin of DELTA GDN-2** |
 | 20 | **F11** agentic / tool-use RL 🆕 | B | L | — | multi-turn `ToolEnv`(VerifiableEnv) + masked multi-turn rollout + format-only reward-hack control — **the #1 stated 2026 lab priority** |
-| — | **A7** distributed d20 pretrain | A | L | A2 | wire `utils/{ddp,fsdp,zero1}` into `train()` — 561M needs data-parallel on 8×H100 |
+| — | **A7** distributed d20 pretrain | A | L | A2 | optimizer-embedded ZeRO-2 (reduce_scatter → owner-update → all_gather; nanochat's verified shape) — the 480M d20 needs data-parallel on 8×H100 |
 | — | **A8** d20 rental runbook + guardrails | A | M | A2,A7 | resume/off-box-sync + $/token cap + divergence kill-switch + repro manifest |
 | — | **A9** public release surface | A | S | A6 | model card + reproducible weights/tokenizer/config/transcript bundle |
 
@@ -84,9 +84,31 @@ the frontier ablation study (the differentiating research). `[S/M/L]` = effort.
 > *random-reward debunk control* (length-growth is a GRPO-bias artifact, not the "aha"); F1's kill band is
 > **recalibrated** to the tuned-baseline 1.1–1.4× (see the F1-run DoD note + `bench/RESULTS.md`).
 
-**The d20 gate:** everything through A6 + the ablations you choose to *bake into the single d20
-pretrain* (F2a MTP is the one worth baking; F1-run picks the optimizer) + A7/A8 must be green before
-the $100 8×H100 run. F5/F6/F7/F8/F9/F10/F11 run at 30–300M on the **standing sm120 box** independently.
+**The d20 gate (expanded 2026-07-16 — deep-research audit, user-approved):** everything through A6 +
+the ablations you choose to *bake into the single d20 pretrain* (F2a MTP is the one worth baking;
+F1-run picks the optimizer) + A7/A8 **+ six audited prerequisites (P1–P6)** must be green before the
+$100 8×H100 run:
+- **P1 · flash/SDPA attention in the TRAINING path** — `model.py:160-170` materializes fp32 QKᵀ; at
+  device-batch 32 × ctx 2048 × 20 layers that is ~107 GB of retained activations > 80 GB HBM: the run
+  **cannot physically execute** without it. Force `SDPBackend.CUDNN_ATTENTION` or install FA3 —
+  PyTorch SDPA does NOT auto-select the cuDNN backend on H100.
+- **P2 · the ~10B-token shard streamer** (§D) — **THE calendar critical path**: zero shards on disk
+  today; the download path pages 100 rows/request; `build_dataset` is RAM-bound. Tokenize OFF-node,
+  stage ~20 GB uint16 shards before the $24/hr meter runs.
+- **P3 · the CORE 22-task suite** — `eval/report_card.py` is aggregation-only (zero task loaders).
+  Build + validate against a public HF checkpoint, then run `--decontaminate` against those sets.
+- **P4 · fused/compiled optimizer step + LR-transfer machinery** — the pure-Python per-param
+  AdamW/Muon loops can exceed the entire comm budget; wire √(B/B_ref) LR scaling +
+  warmup→constant→warmdown. Our Muon ≠ nanochat's Muon (no RMS-match/Polar Express): their LRs do
+  **not** transfer 1:1 — a divergence at hour 2 costs ~$50.
+- **P5 · a $10–15 d12 dress rehearsal on 1×H100** — real loader, 1–2 B tokens, compile-on-sm90 test
+  (the bf16+compile NaN is an sm120 fact, untested on Hopper), checkpoint kill/resume, CORE harness,
+  loss curve vs nanochat's published d12.
+- **P6 · node-quality + abort guardrails** — nccl-tests busbw ≥ 350 GB/s gate before committing the
+  node; pre-registered abort at **$90 cumulative** (→ downsize to d16).
+
+Midtrain (A4) is **descoped from the paid run** until built (`speedrun.py` raises
+`NotImplementedError`). F5/F6/F7/F8/F9/F10/F11 run at 30–300M on the **standing sm120 box** independently.
 
 ---
 
@@ -150,9 +172,31 @@ the $100 8×H100 run. F5/F6/F7/F8/F9/F10/F11 run at 30–300M on the **standing 
 - **DoD:** `reply('hi')` returns str + grows history 0→2; SFT'd nano model reproduces the trained reply and **stops at eot** (len < max_tokens); returned text has no leaked specials; batched replies == per-turn greedy. **Kill:** never emits `<\|eot\|>` (turn terminator not learned or `stop_ids` unplumbed).
 - **Zone:** consumes perf-owned `serving/` via public functions only.
 
-### A7 · Distributed d20 pretrain `[L]` *(added by critic)* — deps A2
-- **Goal:** `train()` is single-process; `utils/{ddp,fsdp,zero1}.py` exist but are never called from the loop. A 561M d20 on 8×H100 needs a data-parallel wrapper. Wire DDP/FSDP into `train()` behind a flag; validate gloo-equivalence on CPU + a 2-GPU smoke.
-- *Needs a deep spec (outline only). Reuses the CS336-A2 distributed modules the perf front built.*
+### A7 · Distributed d20 pretrain `[L]` *(re-specced 2026-07-16 — deep-research verdict, user-approved)* — deps A2
+- **Goal:** `train()` is single-process; the 480M d20 on 8×H100 needs data parallelism. Build
+  **nanochat's actual verified shape** (HEAD `92d63d4`, `optim.py:205-207`: *"nanochat does not use
+  DDP"*): **optimizer-embedded ZeRO-2** — `reduce_scatter` grads → owner rank steps **whole stacked
+  same-shape matrices** (Muon's Newton–Schulz needs whole matrices, so sharding granularity is the
+  *matrix*, never the element — the constraint that makes classic element-wise ZeRO-1 incompatible)
+  → `all_gather` params, async-overlapped (nanochat's 3-phase pattern). **NOT** a DDP wrapper +
+  separate ZeRO-1: that shape is ~1.5× grad traffic, and `ShardedOptimizer(optimizer_cls)` cannot
+  wrap `CombinedOptimizer` anyway. Existing `utils/{ddp,fsdp,zero1}.py` stay as CS336-A2 curriculum
+  artifacts, not the production path.
+- **Correctness conditions (each becomes a test):** (1) **per-rank data sharding** — `get_batch`
+  draws from global `np.random` today: an 8-rank launch trains on IDENTICAL batches (silent 8× data
+  loss, the run "completes" and loss looks plausible); (2) NaN/inf detection **all-reduced** across
+  ranks (a divergence one rank sees must stop all eight); (3) rank-0 guards on
+  logging/checkpoint/eval; (4) grad-clip global norm computed by distributed reduction over the
+  sharded grads.
+- **First-principles budget (pre-registered):** 480.4M × 2 B bf16 grads = 0.96 GB → ring traffic
+  2(k−1)/k·payload ≈ 4–7 ms vs ~0.5 s step ⇒ **comm < 1.5% wall, 8-GPU scaling ≥ 97%**. TP/PP/FSDP
+  rejected on the roofline: DP moves ~3.5 B/param/step vs 6·B_gpu FLOPs/param/step of compute —
+  ~51× headroom over the 989 TF / 450 GB·s machine balance at B_gpu = 65,536 tokens; TP adds 4
+  unoverlapped activation all-reduces/layer while shrinking GEMMs 8×; 1F1B bubble ≥ 6.5% even at
+  m=100 microbatches; FSDP all-gathers params to solve a memory problem that doesn't exist
+  (~6–9 GB state vs 80 GB).
+- **DoD:** gloo CPU equivalence (loss band vs single-process at the same global batch) + a 2-GPU
+  NCCL smoke; a test asserting ranks draw **different** batches.
 
 ### A8 · d20 rental runbook + guardrails `[M]` *(added by critic)* — deps A2,A7
 - **Goal:** `deploy/runbooks/d20_speedrun_8xH100.md` — provision → stage decontaminated shards → launch distributed pretrain → periodic off-box checkpoint sync → teardown. Plus: a **$/token projection** against the $100 cap, a **loss-divergence kill-switch** (the `train.py` NaN guard + a slope check), a **reproducibility manifest** (global seed, deterministic shard order, config + git-SHA + torch/CUDA version), and **recipe re-validation on H100/sm90** (the bf16+compile NaN is an sm120 dev-box fact — re-test the required bf16/compile recipe on the rental arch *before* the paid run).
@@ -259,8 +303,11 @@ the $100 8×H100 run. F5/F6/F7/F8/F9/F10/F11 run at 30–300M on the **standing 
 
 1. **The loop closes on REAL data, reproducibly:** real BPE (chat specials trained in) → chained
    pretrain(MuonAdamW) → midtrain → SFT on **decontaminated** FineWeb-EDU shards → eval → chat.
-2. **The $100 d20 (8×H100, ~561M) beats a PRE-REGISTERED report-card bar** (> nano **and** > a stated
-   small-model CORE target — not just the random baseline) **and** holds a coherent multi-turn chat.
+2. **The $100 d20 (8×H100, measured 480.4M @ vocab 32768) beats a PRE-REGISTERED report-card bar**
+   (> nano **and** the pre-registered CORE band **0.19–0.22** vs the original-nanochat-d20 anchor
+   **0.2219** at C=3.77e19 — ours is C≈2.77e19 at ratio-20/9.6B tokens, so the honest artifact is the
+   **CORE-vs-FLOPs point on nanochat's published curve**, never a depth-matched headline; per-token
+   loss is not comparable across vocabs — compare bits-per-byte) **and** holds a coherent multi-turn chat.
 3. **The rental is safe + bounded:** preemption-resumable with periodic off-box-synced checkpoints, a
    documented token budget + $/token projection under $100, a loss-divergence kill-switch, a
    provisioning→teardown runbook, and the bf16/compile recipe re-validated on the H100 arch.

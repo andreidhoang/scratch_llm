@@ -12,7 +12,9 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > "aha" · F8 DSA · F9 logit-guard · **F10 hybrid linear attention · F11 agentic/tool-use RL**). Runs
 > **in parallel** with perf + DELTA. Spec + DAG:
 > [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md); ledger `bench/RESULTS.md` §Frontier
-> ablations. Headline artifact = **nanochat d20** (~561M, ~$100, 8×H100), target CORE ≈ GPT-2.
+> ablations. Headline artifact = **nanochat d20** (measured **480.4M** @ vocab 32768, ~$100, 8×H100),
+> pre-registered CORE **0.19–0.22** vs the original-d20 anchor **0.2219** (0.2565 = GPT-2 XL's CORE;
+> the old "target ≈ GPT-2" line was mis-anchored — corrected 2026-07-16, ADR-0018).
 > **🔁 Re-verified vs the mid-2026 frontier (2026-07-09, `ABLATIONS.md` §10 + `PERFORMANCE_TRACK.md`
 > §2.1/§6):** F1 Muon deflated → recalibrate to a tuned-baseline 1.1–1.4× band; F7 reframed
 > "reproduce"→"debunk the aha via a random-reward control"; F4 stretch FP8→NVFP4; F8 promoted to core;

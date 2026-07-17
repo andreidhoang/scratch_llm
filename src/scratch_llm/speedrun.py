@@ -17,7 +17,8 @@ composes end-to-end in seconds on CPU **before** a $100 d20 rental (ADR-0018 §5
 Run it: ``python -m scratch_llm.speedrun --nano`` (or ``scripts/speedrun.sh``).
 
 Model sizes (docs/FRONTIER_2026_ABLATIONS.md §2): ``--depth 20`` ⇒ d_model 1280 / 10 heads /
-~561M params — the nanochat d20 headline; ``--nano`` ⇒ depth 4 in seconds.
+480.4M params measured at vocab 32768 (the oft-quoted 561M holds only at nanochat's old 2^16
+vocab) — the d20 headline; ``--nano`` ⇒ depth 4 in seconds.
 """
 
 from __future__ import annotations
@@ -51,7 +52,9 @@ _BUILTIN_CORPUS = (
 @dataclass
 class SpeedrunConfig:
     depth: int = 20
-    vocab_size: int = 65536  # nanochat's 2^16; the nano pre-flight overrides it small
+    vocab_size: int = 32768  # nanochat's current 2^15 (commit ccf4b7f9, 2026-01-07; was 2^16).
+    # Only active on the corpus_path (non-shard) path — the nano pre-flight overrides it small,
+    # and the shard-backed path (data_dir set) ignores it entirely; see data_dir's docstring below.
     context_length: int = 1024
     train_steps: int = 1000
     batch_size: int = 32
@@ -423,7 +426,9 @@ def main() -> None:
         "--nano", action="store_true", help="Phase-0 pre-flight (depth 4, seconds on CPU)."
     )
     p.add_argument("--depth", type=int, default=20)
-    p.add_argument("--vocab", type=int, default=65536)
+    p.add_argument(
+        "--vocab", type=int, default=32768
+    )  # nanochat's current 2^15 (see SpeedrunConfig)
     p.add_argument("--context", type=int, default=1024)
     p.add_argument("--steps", type=int, default=1000)
     p.add_argument("--batch", type=int, default=32)
