@@ -614,6 +614,21 @@ Predict-before-run (FOP-2/3): each rung's falsifiable number + kill criterion is
 loss-per-FLOP while reusing AdamW's LR band. Muon on 2D block matrices only; the **weight-tied
 embed/head tensor** (`model.py:917`) + all 1-D params stay on AdamW.
 
+**Why D:N=20 (Chinchilla-textbook), not nanochat's practical D:N=8.** `--depth 8 --tokens 7e8`
+targets N≈35M/D≈700M/C≈1.5e17 (`docs/FRONTIER_2026_TASKSPEC.md:169`) at D:N=20, deliberately *not*
+nanochat's own D:N=8 (`ccf4b7f9`, `docs/FRONTIER_2026_ABLATIONS.md` §2). This is an intentional
+divergence, not a missed adoption: F1 is an **optimizer** ablation (does Muon beat AdamW at fixed
+C), and nanochat's D:N=8 is itself a *training-horizon* choice (deliberately undertrained relative
+to its own fitted compute-optimum, to hit a fixed CORE-score bar under a dollar budget) — reusing
+it here would confound the optimizer signal with a horizon effect. D:N=20 is the neutral,
+textbook-compute-optimal reference frame, which is the right frame for isolating "which optimizer
+reaches a given loss with fewer tokens at fixed FLOPs." N≈35M/D≈700M is a **pre-registered
+prediction**, not a hardcoded assumption — `bench/optimizer_race.py` auto-detects `vocab_size` from
+the real shard sidecars and measures `n_params` from the instantiated model at run time
+(`eval/optimizer_race.py:303`), so the actual N/D/C will be logged as `[FACT]` once the real
+tokenizer/shards exist; C isn't load-bearing for the race verdict either way, since both arms share
+identical N/D/seed by construction (`run_race`).
+
 | rung | metric | predicted (pre-reg) | KILL if | measured |
 |---|---|---|---|---|
 | F1 NS orthogonality | σ spectrum of the update after 5 steps | all ∈ [0.7, 1.3] | any σ ∉ [0.5, 1.5] | **⚠ over-claim FALSIFIED → corrected.** NS *compresses* σ into a band ~[0.68,1.14], never inflates (σ_max<1.35), spread collapses (q90/q10<2 vs κ≫1 input). "all ∈[0.7,1.3]" + "median≈1" are false at 5 steps: a worst-case **square Gaussian** has near-0 σ (min≈0.08) the iteration can't lift, and median≈0.77. Inherent to few-step NS, **immaterial to Muon** (needs only the update *direction*). `tests/test_optim.py` asserts the corrected invariants. |
@@ -635,6 +650,13 @@ embed/head tensor** (`model.py:917`) + all 1-D params stay on AdamW.
 > the whole point of `2509.02046`). KILL unchanged (<5% vs the *tuned* baseline). The *methodology*
 > (tuned-baseline iso-FLOP) is now the artifact, not the headline number. Original bar kept above for
 > provenance.
+
+> **⚠ Second pre-run amendment — 2026-07-16 (F1 still PENDING).** GPU-readiness review (39 agents,
+> 9 confirmed findings, fixed same-day): measured **N = 59,253,248** at depth 8 / vocab 32768 ⇒
+> **C = 6ND ≈ 2.49e17** at D=7e8 (the registered "N≈35M" assumed a smaller vocab); the race runs
+> **qk_norm=True + SDPA attention** by default (the F9-registered regime + the OOM fix). Kill
+> criteria unchanged. Findings table + full recalibration: §*Pre-run amendment — F1 recalibration +
+> GPU-readiness review (2026-07-16)* at the end of this file.
 
 **Verdict (F1 unit level — 2026-07-04, `optim.py` + 10 tests green).** `Muon` (NS5 + Nesterov +
 Moonlight RMS-match) and `split_muon_adamw_params` are built and green. Two pre-registered
@@ -723,7 +745,9 @@ exists to build (ADR-0018 §5, Phase 0). Nano run on the sm120 Blackwell (depth 
 | sample (prompt "the quick brown…") | **coherent continuation** — *"fox jumps over the lazy dog. a language model learns to predict the next token… attention is all you need; the transformer reads the whole context at once. we own every layer from the byte"* |
 
 **Verdict.** The component museum now runs the loop: BPE → MuonAdamW pretrain → `val_bpb` report card
-→ a talking sample, one `--depth` knob (depth 20 ⇒ d_model 1280 / 10 heads / ~561M = the nanochat
+→ a talking sample, one `--depth` knob (depth 20 ⇒ d_model 1280 / 10 heads / **480.4M measured at
+vocab 32768** — the "~561M" quoted here previously holds only at nanochat's old 2¹⁶ vocab; corrected
+2026-07-16 = the nanochat
 d20 headline). The nano pre-flight (`--nano`, CPU, ~1 min) is the cheap gate before the $100 d20
 rental. Report-card harness (`eval/`): `val_bpb` + MC (ARC/MMLU) + generative (GSM8K/HumanEval) +
 CORE-style aggregate, 8 tests. Next: F1 iso-FLOP on the real loop, then F2 MTP.
@@ -885,3 +909,90 @@ dense-gather reference with real cross-rank traffic; the MFU calculator reproduc
 46.2%/57.8% from C=6ND. **Measured numbers are rental-gated** (busbw at line rate, MFU at 16/32/64 GPUs,
 the ~18× NVLink→IB cliff — the 8×H200 serving day + optional Phase-5 multi-node). A6 R0/R1 (topology +
 TP micro) execute inside that day; these primitives + comms_calc/memory_math are the arrive-prepared code.
+
+---
+
+## Frontier ablations — Pre-registration: the $100 d20 run (2026-07-16, deep-research refactor, user-approved)
+
+**Provenance.** 8-agent research workflow (5 researchers + 3 adversarial lenses): nanochat verified at
+LIVE HEAD `92d63d4` (2026-07-03), our repo audited at HEAD `1e7dbc6` with **measured** param counts,
+scaling-law + pricing literature re-verified, all arithmetic independently re-checked. Two factual
+errors in our own plan docs found and fixed the same day (ADR-0018 / TASKSPEC / STATUS / speedrun.py):
+the d20 is **480.4M** at vocab 32768 (not 561M — that figure holds only at nanochat's old 2¹⁶ vocab),
+and the original nanochat d20's CORE was **0.2219** (0.2565 is **GPT-2 XL's** CORE, which nanochat
+measured on the OpenAI checkpoint; GPT-2-grade cost ~$300/d26 in Oct-2025).
+
+**Decisions locked (user, 2026-07-16).** (1) Full plan refactor adopted. (2) A7 = **optimizer-embedded
+ZeRO-2** (nanochat's actual shape: reduce_scatter grads → owner steps whole stacked matrices →
+all_gather params; Muon's Newton–Schulz forces matrix-granular sharding) — NOT a DDP wrapper + ZeRO-1.
+(3) **D = ratio-20 ⇒ 9.6B tokens** (C≈2.77e19, 27% below the anchor's 3.77e19) — anchor-comparability
+inside a shallow isoflop basin (ratio 8↔20 ≈ 0.017 nats ≈ thousandths of CORE per the Epoch-refit law +
+Gadre mapping; Karpathy's own Muon-era fits moved 8→10.5→12, so the ratio choice is third-order).
+The comparison artifact is the **CORE-vs-FLOPs point on nanochat's published curve** + bits-per-byte
+(never per-token loss — not comparable across vocabs; never a depth-matched headline).
+A **mini-isoflop calibration was considered and REFUTED** pre-spend (Monte-Carlo of the exact pipeline
+through `scaling/isoflop.py`: 90% CI on the extrapolated ratio = [2.1, 324] — argmin on a
+shallower-than-noise minimum, 0.6 OOM span extrapolated 2.2 OOM, embedding-fraction confound at
+15–60M). Its budget goes to the **d12 dress rehearsal (P5)** instead.
+
+| pre-registered falsifier | predicted | KILL / abort | measured |
+|---|---|---|---|
+| pretrain MFU (bf16, run-level, 6ND w/ embeddings, N=480.4M) | **33–40%** (anchor: nanochat d20 = 34.4% run-level) | <28% sustained after P1/P4 land | — |
+| step time @ global batch 524,288 tok (6·480.4M·524288 = 1.51e18 FLOPs) | **0.48–0.58 s** | >0.70 s | — |
+| DP comm overhead (0.96 GB bf16 grads, RS+AG overlapped) | **<1.5% wall** | >3% | — |
+| 8-GPU scaling efficiency (AFTER per-rank data sharding verified) | **≥97%** | <93% | — |
+| pretrain wall / cost (C=2.77e19 @ $24/h node) | **2.4–3.3 h / $58–79** | abort at **$90 cumulative** → downsize d16 | — |
+| CORE (22-task DCLM suite, decontaminated) vs anchor 0.2219 @ 3.77e19 | **0.19–0.22** (we buy 73% of anchor C with 86% of its N) | <0.15 (stack bug, not sizing) | — |
+| val bits-per-byte (vocab-independent honesty metric) | within band of nanochat d20 interpolated to C≈2.77e19 | — | — |
+
+**Not in the paid run:** midtrain (unbuilt — `speedrun.py` raises `NotImplementedError`), FP8 (only
+MLP-up/lm_head are wide enough at d_model 1280 per arXiv 2501.12084; modded-nanogpt's FP8 head nets
+~5% e2e — a later ablation rung), any TP/PP/FSDP (roofline: DP has ~51× headroom over machine balance
+at B_gpu=65,536; TP adds 4 unoverlapped activation all-reduces/layer while shrinking GEMMs 8×).
+**Gate:** TASKSPEC "d20 gate" P1–P6 (flash-attn training path · 10B streamer · CORE suite ·
+fused optimizer + LR-transfer · $10–15 d12 dress rehearsal on 1×H100 · nccl-tests ≥350 GB/s + $90 abort).
+
+---
+
+## Pre-run amendment — F1 recalibration + GPU-readiness review (2026-07-16)
+
+**Provenance.** A **39-agent adversarial GPU-readiness review** of the F1 GPU-day stack (driver ·
+race harness · model path · data path · runbook · this ledger) confirmed **9 findings** on
+2026-07-16; all were fixed the same day and CPU-smoke-verified (driver e2e on a tiny corpus, crash
+/ divergence / guard paths exercised) — the falsifier of record remains the GPU run. F1 is still
+PENDING, so everything here is a **pre-run amendment in the 07-09 style, not a post-hoc goalpost
+move**; the original pre-registration text above stands unedited.
+
+**Findings (sev | where | what | fix):**
+
+| sev | where | what | fix |
+|---|---|---|---|
+| high | `model.py` eager attention (+ runbook claim) | the F1 config does NOT fit in 25 GB under eager attention — measured **~30 GB peak** at depth 8 / vocab 32768 / batch 32 / ctx 1024 (saved-tensors accounting: each layer retains fp32 `(B,H,S,S)` scores for backward); the runbook claimed "fits with room to spare" | fused-SDPA training path (`ModelConfig.use_sdpa`, never materializes S×S; cache paths fall back to eager) + driver `--attention` default `sdpa`; runbook corrected |
+| high | runbook step 1 (data) | the pre-committed `--n-docs 6000` rows-API build measured **≈4.8M tokens** ⇒ the 7e8 budget = ~146 epochs — memorization, not optimizer signal (voided science) | parquet bulk path in `data/shards.py` (`--fineweb-parquet --target-tokens 7e8`, `--dry-run` plan estimate, resumable size-checked downloads, streaming tokenize → uint16 shards) |
+| high | `bench/optimizer_race.py` | no epoch accounting — the driver would silently burn 5–7 h measuring memorization on an undersized corpus | epochs guard: prints `epochs = D / corpus`, ABORTS above `--max-epochs` (default 1.5; explicit override for smoke runs) |
+| high | `bench/optimizer_race.py` | `--out` written once at the end — a crash at hour 6 loses every finished stage (and `results/` didn't exist: the pre-committed command would fail AFTER the run) | incremental atomic persistence (tmp + `os.replace` after each stage: sweep → baseline arm → challenger arm → final; `status` names the newest stage on disk) + `--out`-parent mkdir at startup (fail-fast) |
+| high | `eval/optimizer_race.py` | a diverged challenger raised out of `run_race` — the pre-registered divergence KILL crashed the day instead of recording it | divergence containment: `ArmResult.diverged` is DATA; the per-arm hook persists each finished arm (a diverged baseline hits disk BEFORE the raise); a diverged challenger returns a recorded KILL row |
+| med | `bench/optimizer_race.py` | the race built the model with `qk_norm=False` while F9's registered falsifier ("S_max < 30 **under qk_norm**") is conditioned on it — the ride-along would have measured the wrong regime | `--qk-norm` default ON (`--no-qk-norm` opt-out); `qk_norm` + `attention` ledgered in the JSON race row |
+| med | `bench/optimizer_race.py` verdict + wall clocks | the pre-registered NS-overhead>3% KILL had no branch in the verdict logic; and `muon_wall_s` carries a per-NS-call sync fence (profiler) yet sat silently comparable to `baseline_wall_s` | full pre-registered ternary in `verdict_string` (divergence ≻ <5%-saving ≻ NS>3%, ⚠ tag from 1%), unit-tested pure; `muon_wall_perturbed_by_profiler` flag recorded in the row |
+| med | `model.py` F9 observer | `track_attn_logits` observed EVAL forwards too — `_val_loss` runs fp32, mixing a different precision regime into the reported S_max | observer gated on `self.training` (training forwards only; backend-independent — it recomputes QKᵀ itself, so it observes identically under eager/SDPA/Triton) |
+| low | `train.py` docstrings | claimed checkpoints let a run "resume exactly" — false: the round-trip is model+optimizer+step only, NO RNG state, NO start-step (`train()` always restarts at step 0 with a fresh warmup and replays the same seeded batch stream) | docstrings corrected to the real contract (state round-trip / warm-start; true resume-at-step = A2/A8 §D scope) |
+
+**RECALIBRATION (pre-run, honest — the 07-09 amendment's twin; F1 has not run):**
+
+- **N measured, not assumed:** instantiating `model_config_for_depth(8, 32768, 1024)` gives
+  **N = 59,253,248** (d_model 512 · 8 layers; the tied 32768×512 embed/head alone is 16,777,216).
+  The registered "N≈35M" (`TASKSPEC:169`) assumed a smaller vocab. At D = 7e8 the compute is
+  therefore **C = 6ND ≈ 2.49e17** (was ~1.5e17), and the realized ratio is **D:N ≈ 11.8, not the
+  registered 20** — the "Why D:N=20" frame in the 07-04 pre-registration overstates the ratio at
+  this vocab. The verdict is unaffected: both arms share identical N, D, seed by construction, and
+  C is bookkeeping, not the falsifier — but the ledger row will report the measured N/D/C.
+- **Registered regime now explicit in the driver defaults:** the race runs **qk_norm=True** (the
+  regime F9's falsifier is conditioned on) and **SDPA attention** (`--attention sdpa`; the eager
+  reference path measured ~30 GB > 25 GB at this config). Both are recorded per-run in the JSON.
+- **Kill criteria UNCHANGED:** Muon in the **1.1–1.4× band** vs the independently LR-tuned AdamW
+  baseline (or ≥0.02 nats lower at iso-FLOP); **KILL** at <5% saving vs the tuned baseline, OR
+  divergence at the reused LR, OR NS overhead >3% — all three branches are now *recordable
+  outcomes* (`verdict_string` + per-stage persistence): a diverged challenger persists as a KILL
+  row instead of a crashed day, and a KILL is a result.
+
+Next: the GPU day per `deploy/runbooks/frontier_gpu_day.md` (amended today to match).

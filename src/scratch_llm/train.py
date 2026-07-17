@@ -1,10 +1,13 @@
 """Data loading, checkpointing, and the training loop — the plumbing that turns the
 model + optimizer into a trained policy, and (crucially) the same plumbing an RL run
-reuses to resume from a checkpoint.
+reuses to warm-start from a checkpoint.
 
 L1 substrate (A1). ``get_batch`` reads (input, next-token) windows from a flat token
 array (``np.memmap`` so a corpus larger than RAM never loads fully); ``save/load_checkpoint``
-round-trips model + optimizer + step so a run resumes exactly.
+round-trip model + optimizer + step — a STATE round-trip, not an exact resume: no RNG
+state and no start-step are restored, so a restarted ``train()`` always begins at step 0
+with a fresh warmup and replays the same seeded batch stream (true resume-at-step is
+A2/A8 §D scope).
 
 Correctness invariants (tested in tests/test_train.py):
 - **Next-token alignment:** ``targets`` is ``inputs`` shifted by one position.
@@ -75,8 +78,9 @@ def save_checkpoint(
     ``optimizer=None`` writes a **stage-boundary** snapshot (model+config+step only): the
     pinned stage-transition policy — each speedrun stage starts a FRESH optimizer with its
     own LR warmup, because resuming Adam/Muon moments across an ``adamw↔muon_adamw`` switch
-    is undefined. Intra-run resume (same stage, same optimizer) keeps optimizer state via
-    the ``checkpoint_every`` path in ``train()``.
+    is undefined. Intra-run snapshots (same stage, same optimizer) keep optimizer state via
+    the ``checkpoint_every`` path in ``train()`` — a warm-start, not an exact resume (no
+    RNG/start-step restore; see the module docstring).
     """
     cfg = getattr(model, "cfg", None)
     torch.save(
@@ -221,8 +225,9 @@ def train(
     list, receives the built optimizer so callers can read instruments (Muon NS counters) after
     the run — the loop's return type stays unchanged.
 
-    Same plumbing an RL fine-tune resumes from: cosine LR per step, global-ℓ₂ grad clip,
-    periodic checkpointing.
+    Same plumbing an RL fine-tune warm-starts from: cosine LR per step, global-ℓ₂ grad clip,
+    periodic checkpointing (state snapshots only — a reload starts again at step 0 with a
+    fresh warmup; see the module docstring).
 
     ``cfg.seed`` reseeds the data-sampling RNG here so batches are deterministic. For
     *end-to-end* reproducibility, seed before constructing ``model`` too — weight init

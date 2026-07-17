@@ -71,8 +71,16 @@ class ModelConfig:
     )
     moe: MoEConfig | None = None  # None ⇒ dense SwiGLU (the default); else opt-in MoE
     use_triton_attention: bool = False
+    # Fused-SDPA training path (the F1-OOM fix): route the no-cache forward through
+    # torch.nn.functional.scaled_dot_product_attention(is_causal=True). Invariant: numerics-
+    # equivalent to the eager path within dtype tolerance, and never materializes the
+    # (B, H, S, S) scores the eager path retains (two fp32 copies per layer) for backward.
+    # Cache paths (prefill/decode) fall back to eager. OFF (default) is byte-identical.
+    use_sdpa: bool = False
     # F9 observer (QK-Clip, Kimi-K2 arXiv:2507.20534): record each head's max pre-softmax logit
-    # per forward on MultiHeadSelfAttention. OFF (default) is byte-identical — zero extra ops.
+    # per forward on MultiHeadSelfAttention. TRAINING forwards only (module.training) — val/eval
+    # forwards run a different precision regime (train.py::_val_loss is fp32) and must not mix
+    # into the reported S_max. OFF (default) is byte-identical — zero extra ops.
     track_attn_logits: bool = False
 
     def __post_init__(self) -> None:
@@ -332,7 +340,7 @@ class MultiHeadSelfAttention(nn.Module):
                 k_pos = torch.arange(total, device=x.device).unsqueeze(0)  # (1, total)
                 mask = k_pos <= q_pos  # (s, total) bool, True = attend
 
-            if self.cfg.track_attn_logits:
+            if self.cfg.track_attn_logits and self.training:
                 self._observe_max_logits(q, k, mask)
 
             if self.cfg.use_triton_attention and q.is_cuda and row_mask is None:
@@ -342,6 +350,12 @@ class MultiHeadSelfAttention(nn.Module):
 
                 is_causal = s > 1
                 out = TritonFlashAttention.apply(q, k, v, is_causal)
+            elif self.cfg.use_sdpa and cache is None:
+                # Fused SDPA covers exactly the no-cache (training) forward: cache=None ⇒ the
+                # mask is pure causal over equal q/k lengths, which is_causal=True encodes
+                # without materializing (B, H, S, S) scores. Cache paths (prefill/decode) fall
+                # through to eager below — the same fall-through style as the Triton branch.
+                out = torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True)
             else:
                 out = scaled_dot_product_attention(q, k, v, mask)  # (B, H, S, head_dim)
         out = out.transpose(1, 2).reshape(b, s, self.n_heads * self.head_dim)
@@ -354,7 +368,10 @@ class MultiHeadSelfAttention(nn.Module):
         number the F1-run falsifier watches (qk_norm must hold it < ~30). Invariant: pure
         measurement — runs under ``no_grad`` so it builds no graph, consumes no RNG, and never
         touches the differentiable path (the OFF path is byte-identical: this method is not even
-        called). Cost when ON: recomputes QKᵀ, ~doubling the score FLOPs — a measurement tool,
+        called). Called on TRAINING forwards only (``self.training``): eval forwards (train.py's
+        fp32 ``_val_loss``) must not mix their regime into S_max. Backend-independent: it
+        recomputes QKᵀ itself, so it observes identically under eager, ``use_sdpa``, and Triton.
+        Cost when ON: recomputes QKᵀ, ~doubling the score FLOPs — a measurement tool,
         not a free probe (the shared ``scaled_dot_product_attention`` stays untouched by design;
         the fused paged-decode kernel path never materializes logits, so it is not observed).
 

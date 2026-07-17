@@ -14,6 +14,12 @@ Key invariants:
   (``train._val_loss`` — no RNG), so curve deltas are optimizer signal, not eval noise.
 - **Pure metrics:** ``tokens_to_match`` / ``token_saving_fraction`` / ``nats_delta_at_budget``
   are curve-level functions with loud validation — unit-testable without any training.
+- **Divergence is data, not a crash:** ``run_arm`` contains train()'s non-finite-loss
+  RuntimeError as ``ArmResult.diverged=True`` (divergence at the reused LR is itself a
+  pre-registered KILL outcome — it must be *recordable*, never lose the run). ``sweep_lr``
+  excludes diverged arms from the argmin; ``run_race`` raises on a diverged baseline (the
+  tuned LR came from the sweep — divergence means the sweep lied) and returns ``None`` metrics
+  on a diverged challenger. The strict curve validation still guards every non-diverged path.
 
 Interview question this answers: "design an optimizer A/B that survives review — what do you hold
 constant, what do you tune, and what number do you report?" (Hold C and the data stream; tune the
@@ -25,7 +31,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -122,6 +128,10 @@ class ArmResult:
     # logit (None unless the model was built with ModelConfig.track_attn_logits=True). The F1 GPU
     # run reads its F9 falsifier (S_max < 30 under qk_norm ⇒ QK-Clip γ≡1 sub-1B) from this field.
     max_attn_logit: float | None = None
+    # Divergence containment: True when train() raised its non-finite-loss RuntimeError. A
+    # diverged arm's val_curve is the raw partial signal (it may hold NaN points recorded after
+    # the weights went bad) and train_history is empty — never feed either to the pure metrics.
+    diverged: bool = False
 
     @property
     def ns_overhead(self) -> float:
@@ -146,6 +156,12 @@ def run_arm(
     same value for data sampling — so two arms with the same seed share both the initial weights
     and the exact training-batch stream; only the optimizer (and its LR) differs. ``min_lr`` is
     rescaled to keep the cosine schedule's max/min *ratio* fixed while sweeping ``max_lr``.
+
+    Divergence containment: train()'s non-finite-loss RuntimeError (and ONLY that — anything
+    else re-raises) returns as ``diverged=True`` with the partial ``val_curve`` collected up to
+    the failing step and an empty ``train_history`` (train() owns its history; the raise
+    discards it). The NS counters and the F9 max-logit observer are still read — the optimizer
+    lands in ``optimizer_out`` before the loop starts and the model outlives the raise.
     """
     if train_cfg.eval_every <= 0:
         raise ValueError(
@@ -170,15 +186,24 @@ def run_arm(
     seed_everything(cfg.seed)
     model = TransformerLM(model_cfg)
     optimizer_out: list[object] = []
+    history: list[tuple[int, float]] = []
+    diverged = False
     t0 = time.perf_counter()
-    history = train(
-        cfg,
-        train_data,
-        model,
-        val_data=val_data,
-        eval_hook=_hook,
-        optimizer_out=optimizer_out,  # type: ignore[arg-type]
-    )
+    try:
+        history = train(
+            cfg,
+            train_data,
+            model,
+            val_data=val_data,
+            eval_hook=_hook,
+            optimizer_out=optimizer_out,  # type: ignore[arg-type]
+        )
+    except RuntimeError as err:
+        # Narrow match on train()'s fail-loud divergence signal: a diverged arm is DATA (the
+        # pre-registered KILL outcome must be recordable); any other RuntimeError is a real crash.
+        if "non-finite loss" not in str(err):
+            raise
+        diverged = True
     wall = time.perf_counter() - t0
 
     ns_seconds, ns_calls = 0.0, 0
@@ -209,6 +234,7 @@ def run_arm(
         ns_seconds=ns_seconds,
         ns_calls=ns_calls,
         max_attn_logit=max_attn_logit,
+        diverged=diverged,
     )
 
 
@@ -233,6 +259,11 @@ def sweep_lr(
 
     The 2509.02046 lesson: a Muon "win" over an untuned AdamW is a fake win. Run this sweep at a
     shortened horizon (the caller shrinks ``max_steps``), then race at the winner's LR.
+
+    Diverged arms stay in ``arms`` (a diverged LR is sweep signal worth ledgering) but are
+    excluded from the argmin — as is any arm whose final val is non-finite (divergence the
+    train-loss check missed between log steps). Every LR diverging raises: there is no tunable
+    baseline, and racing against one would be the exact fake-win 2509.02046 warns about.
     """
     if len(lrs) == 0:
         raise ValueError("sweep_lr needs at least one learning rate")
@@ -248,13 +279,30 @@ def sweep_lr(
         )
         for lr in lrs
     ]
-    best = min(arms, key=lambda arm: (arm.val_curve[-1][1], arm.lr))
+    finishers = [
+        arm
+        for arm in arms
+        if not arm.diverged and arm.val_curve and math.isfinite(arm.val_curve[-1][1])
+    ]
+    if not finishers:
+        raise RuntimeError(
+            f"sweep_lr: every LR in {[f'{lr:g}' for lr in lrs]} diverged — no tunable baseline "
+            "exists at this horizon; re-sweep on a lower LR grid before racing"
+        )
+    best = min(finishers, key=lambda arm: (arm.val_curve[-1][1], arm.lr))
     return SweepResult(arms=arms, best_lr=best.lr)
 
 
 @dataclass
 class RaceResult:
-    """The full iso-FLOP verdict: both arms, the shared budget, and the pre-registered metrics."""
+    """The full iso-FLOP verdict: both arms, the shared budget, and the pre-registered metrics.
+
+    All three metric fields are ``None`` when the challenger diverged (``challenger.diverged``)
+    — a diverged curve has no honest crossing or endpoint delta, and the caller records the
+    pre-registered KILL (divergence at the reused LR) instead of a number. ``tokens_to_match``
+    and ``token_saving`` are additionally ``None`` for a healthy challenger that never reaches
+    the baseline's final loss; ``nats_delta`` is always a float on the non-diverged path.
+    """
 
     baseline: ArmResult
     challenger: ArmResult
@@ -263,7 +311,7 @@ class RaceResult:
     compute_flops: float
     tokens_to_match: float | None
     token_saving: float | None
-    nats_delta: float
+    nats_delta: float | None
 
 
 def run_race(
@@ -277,9 +325,19 @@ def run_race(
     baseline_optimizer: str = "adamw",
     challenger_optimizer: str = "muon_adamw",
     profile_ns: bool = True,
+    arm_hook: Callable[[str, ArmResult], None] | None = None,
 ) -> RaceResult:
     """Race challenger vs baseline at identical N, D, seed, and data stream — only the optimizer
-    (and its independently chosen LR) differs. Returns every pre-registered F1 metric."""
+    (and its independently chosen LR) differs. Returns every pre-registered F1 metric.
+
+    ``arm_hook(role, arm)`` (role ∈ {"baseline", "challenger"}) fires the moment each arm
+    finishes — the driver's incremental-persistence seam: a 5–7 h race must never hold its only
+    copy of a completed arm in memory. The hook fires for a diverged baseline too (so the
+    evidence hits disk) BEFORE this raises: a diverging baseline means the sweep that chose its
+    LR lied (different horizon or data reshuffle) — the race is void and unrecoverable. A
+    diverged *challenger* is the pre-registered KILL: the race returns with all three metric
+    fields ``None`` so the caller can record it.
+    """
     baseline = run_arm(
         model_cfg,
         train_cfg,
@@ -289,6 +347,14 @@ def run_race(
         max_lr=baseline_lr,
         label=f"{baseline_optimizer}-baseline",
     )
+    if arm_hook is not None:
+        arm_hook("baseline", baseline)
+    if baseline.diverged:
+        raise RuntimeError(
+            f"baseline ({baseline.label}, lr={baseline.lr:g}) diverged — its LR was the sweep "
+            "winner, so the sweep lied (horizon or data mismatch); the race is void, re-sweep "
+            "before racing"
+        )
     challenger = run_arm(
         model_cfg,
         train_cfg,
@@ -299,18 +365,26 @@ def run_race(
         label=f"{challenger_optimizer}-challenger",
         profile_ns=profile_ns,
     )
+    if arm_hook is not None:
+        arm_hook("challenger", challenger)
     seed_everything(train_cfg.seed)  # param COUNT is init-independent; reseed only for hygiene
     n_params = sum(p.numel() for p in TransformerLM(model_cfg).parameters())
     total_tokens = train_cfg.max_steps * train_cfg.batch_size * train_cfg.context_length
+    if challenger.diverged:
+        matched, saving, nats = None, None, None
+    else:
+        matched = tokens_to_match(baseline.val_curve, challenger.val_curve)
+        saving = token_saving_fraction(baseline.val_curve, challenger.val_curve)
+        nats = nats_delta_at_budget(baseline.val_curve, challenger.val_curve)
     return RaceResult(
         baseline=baseline,
         challenger=challenger,
         n_params=n_params,
         total_tokens=total_tokens,
         compute_flops=compute_from_params_tokens(n_params, total_tokens),
-        tokens_to_match=tokens_to_match(baseline.val_curve, challenger.val_curve),
-        token_saving=token_saving_fraction(baseline.val_curve, challenger.val_curve),
-        nats_delta=nats_delta_at_budget(baseline.val_curve, challenger.val_curve),
+        tokens_to_match=matched,
+        token_saving=saving,
+        nats_delta=nats,
     )
 
 

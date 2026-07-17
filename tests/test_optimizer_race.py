@@ -9,15 +9,27 @@ Executable spec for the pending F1 headline (Muon vs LR-tuned AdamW at fixed C=6
 - **NS instrument:** ``Muon(profile_ns=True)`` accumulates Newton–Schulz wall time; OFF costs zero.
 - **Race mechanism:** both arms share seed/init/data; the driver returns comparable curves at the
   same token budget (the iso-FLOP contract) deterministically.
+- **Divergence containment:** a non-finite-loss arm returns ``diverged=True`` instead of killing
+  the run; ``sweep_lr`` excludes it from the argmin; ``run_race`` raises on a diverged baseline
+  (the sweep lied) and Nones the metrics on a diverged challenger (the pre-registered KILL).
+- **CLI driver (bench/optimizer_race.py):** incremental atomic persistence (every finished stage
+  is on disk under ``status``), the epochs guard, the qk-norm/attention flags, and the full
+  pre-registered PASS/KILL ternary (``verdict_string``) — all exercised on a tiny CPU corpus.
 """
 
 from __future__ import annotations
 
+import importlib.util
+import json
+import sys
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
+from scratch_llm.data.shards import tokenize_to_shard
 from scratch_llm.eval.optimizer_race import (
     nats_delta_at_budget,
     run_arm,
@@ -30,6 +42,13 @@ from scratch_llm.model import ModelConfig, TransformerLM
 from scratch_llm.optim import Muon
 from scratch_llm.train import TrainConfig, train
 from scratch_llm.utils.seeding import seed_everything
+
+# bench/ is not a package — load the CLI driver by path (same interpreter, no subprocess).
+_BENCH_DRIVER = Path(__file__).resolve().parents[1] / "bench" / "optimizer_race.py"
+_spec = importlib.util.spec_from_file_location("bench_optimizer_race", _BENCH_DRIVER)
+assert _spec is not None and _spec.loader is not None
+bench_race = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(bench_race)
 
 # ---------------------------------------------------------------------------------------------
 # Pure metrics
@@ -223,6 +242,7 @@ def test_run_race_iso_flop_contract() -> None:
     if race.tokens_to_match is not None:
         assert 0 < race.tokens_to_match <= race.total_tokens
         assert race.token_saving is not None
+    assert race.nats_delta is not None  # None only on a diverged challenger — this one is healthy
     assert np.isfinite(race.nats_delta)
     # Muon arm carries the NS instrument when asked.
     assert race.challenger.ns_seconds >= 0.0
@@ -254,3 +274,285 @@ def test_sweep_lr_picks_argmin_final_val_loss() -> None:
     assert sweep.best_lr == min(finals, key=lambda lr: finals[lr])
     # An LR of 1e-9 cannot learn anything in 10 steps; 3e-3 must beat it on this corpus.
     assert sweep.best_lr == 3e-3
+
+
+# ---------------------------------------------------------------------------------------------
+# Divergence containment — a non-finite arm is DATA (the pre-registered KILL), not a crash
+# ---------------------------------------------------------------------------------------------
+
+
+def test_run_arm_contains_divergence() -> None:
+    """lr=1e9 explodes to a non-finite loss within steps; run_arm returns instead of raising."""
+    data = _structured_corpus()
+    val = _structured_corpus(512)
+    cfg = TrainConfig(
+        max_steps=8, batch_size=4, context_length=16, seed=9, eval_every=2, log_every=1
+    )
+    arm = run_arm(_tiny_cfg(), cfg, data, val, optimizer="adamw", max_lr=1e9, label="boom")
+    assert arm.diverged is True
+    assert arm.train_history == []  # train() owns its history; the raise discards it
+    assert arm.wall_seconds > 0.0
+
+
+def test_run_arm_reraises_foreign_runtime_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only train()'s non-finite-loss signal is contained — any other RuntimeError is a crash."""
+    import scratch_llm.eval.optimizer_race as race_mod
+
+    def _boom(*args: object, **kwargs: object) -> list[tuple[int, float]]:
+        raise RuntimeError("CUDA error: device-side assert triggered")
+
+    monkeypatch.setattr(race_mod, "train", _boom)
+    cfg = TrainConfig(max_steps=4, batch_size=4, context_length=16, eval_every=2)
+    with pytest.raises(RuntimeError, match="device-side assert"):
+        run_arm(
+            _tiny_cfg(),
+            cfg,
+            _structured_corpus(),
+            _structured_corpus(512),
+            optimizer="adamw",
+            max_lr=3e-3,
+            label="crash",
+        )
+
+
+def test_sweep_lr_excludes_diverged_arm() -> None:
+    data = _structured_corpus(4096)
+    val = _structured_corpus(512)
+    cfg = TrainConfig(
+        max_steps=10, batch_size=4, context_length=16, seed=9, eval_every=5, log_every=1
+    )
+    sweep = sweep_lr(_tiny_cfg(), cfg, data, val, lrs=[3e-3, 1e9])
+    by_lr = {arm.lr: arm for arm in sweep.arms}
+    assert by_lr[1e9].diverged is True
+    assert by_lr[3e-3].diverged is False
+    assert len(sweep.arms) == 2  # the diverged arm is ledgered, only the argmin excludes it
+    assert sweep.best_lr == 3e-3
+
+
+def test_sweep_lr_all_diverged_raises() -> None:
+    cfg = TrainConfig(
+        max_steps=6, batch_size=4, context_length=16, seed=9, eval_every=3, log_every=1
+    )
+    with pytest.raises(RuntimeError, match="every LR"):
+        sweep_lr(
+            _tiny_cfg(), cfg, _structured_corpus(4096), _structured_corpus(512), lrs=[1e9, 2e9]
+        )
+
+
+def test_run_race_baseline_divergence_raises() -> None:
+    """A diverging tuned baseline means the sweep lied — unrecoverable, never a silent KILL."""
+    cfg = TrainConfig(
+        max_steps=8, batch_size=4, context_length=16, seed=5, eval_every=4, log_every=1
+    )
+    with pytest.raises(RuntimeError, match="sweep lied"):
+        run_race(
+            _tiny_cfg(),
+            cfg,
+            _structured_corpus(4096),
+            _structured_corpus(512),
+            baseline_lr=1e9,
+            challenger_lr=3e-3,
+        )
+
+
+def test_run_race_diverged_challenger_nones_metrics_and_fires_hooks() -> None:
+    roles: list[tuple[str, bool]] = []
+    cfg = TrainConfig(
+        max_steps=8, batch_size=4, context_length=16, seed=5, eval_every=4, log_every=1
+    )
+    race = run_race(
+        _tiny_cfg(),
+        cfg,
+        _structured_corpus(4096),
+        _structured_corpus(512),
+        baseline_lr=3e-3,
+        challenger_lr=1e9,
+        arm_hook=lambda role, arm: roles.append((role, arm.diverged)),
+    )
+    assert roles == [("baseline", False), ("challenger", True)]  # per-arm persistence seam fired
+    assert race.challenger.diverged is True
+    assert race.tokens_to_match is None
+    assert race.token_saving is None
+    assert race.nats_delta is None  # the driver records the pre-registered KILL, not a number
+
+
+# ---------------------------------------------------------------------------------------------
+# The CLI driver (bench/optimizer_race.py) — persistence, guards, flags, verdict
+# ---------------------------------------------------------------------------------------------
+
+
+class _ByteEncoder:
+    """Trivial TokenEncoder for shard fixtures: byte % 31 (eot_id=31 ⇒ detected vocab 32)."""
+
+    def encode(self, text: str) -> list[int]:
+        return [b % 31 for b in text.encode("ascii")]
+
+
+def _tiny_shards(tmp_path: Path, n_chars: int = 6000) -> Path:
+    data_dir = tmp_path / "shards"
+    data_dir.mkdir()
+    doc = ("abcdefghijklmnopqrstuvwxyz0123 " * (n_chars // 31 + 1))[:n_chars]
+    tokenize_to_shard([doc], _ByteEncoder(), eot_id=31, out_path=data_dir / "shard_000.bin")
+    return data_dir
+
+
+def _driver_argv(data_dir: Path, out: Path, *extra: str) -> list[str]:
+    # depth 1 ⇒ d_model 64, 1 head; 64 tokens/step ⇒ --tokens 1024 is a 16-step race arm,
+    # long enough for the log_every=10 divergence check to trip at lr=1e9.
+    return [
+        "optimizer_race.py",
+        "--data-dir",
+        str(data_dir),
+        "--depth",
+        "1",
+        "--batch-size",
+        "4",
+        "--context-length",
+        "16",
+        "--eval-batches",
+        "4",
+        "--amp",
+        "none",
+        "--device",
+        "cpu",
+        "--out",
+        str(out),
+        *extra,
+    ]
+
+
+def test_driver_sweep_excludes_diverged_arm_and_completes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = _tiny_shards(tmp_path)
+    out = tmp_path / "f1.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        _driver_argv(
+            data_dir, out, "--tokens", "1024", "--sweep-lrs", "3e-3,1e9", "--sweep-frac", "1.0"
+        ),
+    )
+    bench_race.main()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "complete"  # the JSON advanced through every stage
+    rows = {row["lr"]: row for row in payload["sweep"]}
+    assert rows[1e9]["diverged"] is True
+    assert rows[3e-3]["diverged"] is False
+    assert payload["baseline_lr"] == 3e-3  # the diverged LR never wins the sweep
+
+
+def test_driver_diverged_challenger_records_kill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One diverged challenger arm must yield a clean exit + a recorded KILL, never a crash."""
+    data_dir = _tiny_shards(tmp_path)
+    out = tmp_path / "no" / "such" / "dir" / "f1.json"  # parents must be created, not assumed
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        _driver_argv(
+            data_dir, out, "--tokens", "1024", "--baseline-lr", "3e-3", "--muon-lr", "1e9"
+        ),
+    )
+    bench_race.main()  # returns cleanly — exit 0
+    assert "KILL (divergence at reused LR)" in capsys.readouterr().out
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "complete"
+    race = payload["race"]
+    assert race["diverged"] is True
+    assert race["tokens_to_match"] is None
+    assert race["token_saving_fraction"] is None
+    assert race["nats_delta"] is None
+    assert race["muon_wall_perturbed_by_profiler"] is True
+    assert race["epochs"] == payload["epochs"]
+    assert payload["epochs"] < 1.5  # the pass side of the epochs guard, at the default cap
+    assert payload["baseline_arm"]["diverged"] is False
+    assert payload["challenger_arm"]["diverged"] is True
+
+
+def test_driver_baseline_divergence_persists_stage_then_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The crash contract: the newest completed stage is on disk when run_race raises."""
+    data_dir = _tiny_shards(tmp_path)
+    out = tmp_path / "f1.json"
+    monkeypatch.setattr(
+        sys, "argv", _driver_argv(data_dir, out, "--tokens", "1024", "--baseline-lr", "1e9")
+    )
+    with pytest.raises(RuntimeError, match="sweep lied"):
+        bench_race.main()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "baseline_arm_done"
+    assert payload["baseline_arm"]["diverged"] is True
+    assert "race" not in payload
+
+
+def test_driver_epochs_guard_trips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_dir = _tiny_shards(tmp_path)
+    out = tmp_path / "f1.json"
+    # ~5.9k-token train split at --tokens 64000 ≈ 10.8 epochs ≫ the default 1.5 cap.
+    monkeypatch.setattr(sys, "argv", _driver_argv(data_dir, out, "--tokens", "64000"))
+    with pytest.raises(SystemExit, match="max-epochs"):
+        bench_race.main()
+    assert "epochs = D / corpus" in capsys.readouterr().out  # the number is ALWAYS printed
+    assert not out.exists()  # aborted before any compute was spent or stage persisted
+
+
+def test_driver_epochs_guard_passes_at_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # train split = 1001 − 65(val) = 936 tokens; --tokens 1404 = exactly 1.5 epochs ⇒ allowed
+    # (the guard is strict >), and the race runs to completion.
+    data_dir = _tiny_shards(tmp_path, n_chars=1000)
+    out = tmp_path / "f1.json"
+    monkeypatch.setattr(
+        sys, "argv", _driver_argv(data_dir, out, "--tokens", "1404", "--baseline-lr", "3e-3")
+    )
+    bench_race.main()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "complete"
+    assert payload["epochs"] == pytest.approx(1.5)
+
+
+def test_verdict_string_covers_the_preregistered_ternary() -> None:
+    v = bench_race.verdict_string
+    # KILL: divergence at the reused LR (metrics are None by construction).
+    assert v(diverged=True, saving=None, nats_delta=None, ns_overhead=0.0) == (
+        "KILL (divergence at reused LR)"
+    )
+    # KILL: saving <5% (or never matched) without the ≥0.02-nats rescue.
+    assert v(diverged=False, saving=0.04, nats_delta=-0.001, ns_overhead=0.0) == "KILL"
+    assert v(diverged=False, saving=None, nats_delta=-0.001, ns_overhead=0.0) == "KILL"
+    # The nats rescue: ≥0.02 nats lower at iso-FLOP saves a sub-5% token saving.
+    assert v(diverged=False, saving=0.04, nats_delta=-0.05, ns_overhead=0.0) == "PASS"
+    # KILL: NS overhead >3% — explicit, never a PASS-with-warn (the old ternary's bug).
+    assert v(diverged=False, saving=0.2, nats_delta=-0.1, ns_overhead=0.031) == (
+        "KILL (NS overhead >3%)"
+    )
+    # PASS band: warn tag from the 1% analytic bound up to the 3% KILL.
+    assert v(diverged=False, saving=0.2, nats_delta=-0.1, ns_overhead=0.02) == (
+        "PASS (NS overhead ⚠)"
+    )
+    assert v(diverged=False, saving=0.2, nats_delta=-0.1, ns_overhead=0.005) == "PASS"
+
+
+def test_model_cfg_flags_reach_config() -> None:
+    """--no-qk-norm / --attention must reach ModelConfig — F9 is conditioned on qk_norm=True."""
+    parser = bench_race.build_parser()
+
+    defaults = parser.parse_args(["--data-dir", "unused"])
+    cfg = bench_race.model_cfg_from_args(defaults, vocab_size=32)
+    assert cfg.qk_norm is True  # ON by default: the pre-registered F9 falsifier requires it
+    assert cfg.use_sdpa is True
+    assert cfg.track_attn_logits is True
+
+    flipped = parser.parse_args(
+        ["--data-dir", "unused", "--no-qk-norm", "--attention", "eager", "--no-track-logits"]
+    )
+    cfg = bench_race.model_cfg_from_args(flipped, vocab_size=32)
+    assert cfg.qk_norm is False
+    assert cfg.use_sdpa is False
+    assert cfg.track_attn_logits is False

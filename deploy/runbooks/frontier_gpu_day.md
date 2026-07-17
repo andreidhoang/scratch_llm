@@ -2,18 +2,28 @@
 
 **What this is.** Every GPU-executable task of the close-the-loop / frontier front, sequenced so a
 single GPU session is *pure execution* — no code is written on the box. All the code, tests, drivers
-and CLIs referenced here are already shipped + green on `main` (2026-07-13). This runbook is the
-"press play" list: each step has the exact command, the pre-registered predicted number, the
-pass/kill gate, and a rough wall-clock.
+and CLIs referenced here are shipped + green (2026-07-13, re-audited + fixed 2026-07-16 — the
+39-agent GPU-readiness review, 9 confirmed findings; table in `bench/RESULTS.md` §*Pre-run
+amendment — F1 recalibration + GPU-readiness review*). This runbook is the "press play" list: each
+step has the exact command, the pre-registered predicted number, the pass/kill gate, and a rough
+wall-clock.
 
 **Where it runs.** The standing **sm120 box** (RTX PRO 4000 Blackwell, 25 GB) runs *all* of this —
-F1 at depth 8 (~50M) fits in 25 GB with room to spare, so **no rental is needed** for the frontier
-GPU day. (The separate $100 **d20** run — 561M on 8×H100 — and the perf datacenter days are their
-own rentals under [ADR-0012]; see `deploy/runbooks/A2_multigpu_nccl_bench.md` and the A5 runbooks.)
+**with the driver defaults as now shipped (`--attention sdpa`)**. Honesty correction (2026-07-16
+review): the OLD eager attention path measured **~30 GB peak** at the F1 config (depth 8 /
+vocab 32768 / batch 32 / ctx 1024 — saved-tensors accounting: each layer retains fp32
+`(B, H, S, S)` scores for backward) — it did **NOT** fit; this runbook's previous "fits in 25 GB
+with room to spare" was false. The now-default fused-SDPA path never materializes the S×S scores;
+predicted peak is well under 25 GB `[INFERENCE — watch nvidia-smi during the first sweep arm]`. So
+**no rental is needed** for the frontier GPU day, but only on the SDPA default — never pass
+`--attention eager` at this config. (The separate $100 **d20** run — 480.4M measured at vocab 32768,
+on 8×H100 — and the perf datacenter days are their own rentals under [ADR-0012]; see
+`deploy/runbooks/A2_multigpu_nccl_bench.md` and the A5 runbooks.)
 
 **Golden rule (sm120).** Run bf16 **eager**. `bf16 + torch.compile` NaNs on this box's
 torch-2.12 inductor (`bench/RESULTS.md` F4 — reproduces with plain AdamW, not our logic). `--compile`
-is the H100-tier path only.
+is the H100-tier path only. (`--attention sdpa` is orthogonal: a fused kernel *inside* eager
+execution, not `torch.compile` — the golden rule stands unchanged.)
 
 ---
 
@@ -30,25 +40,54 @@ red, stop — a broken kernel invalidates every number below.
 
 ---
 
-## Step 1 — build decontaminated real shards (A1 + A0) (5–15 min, network)
+## Step 1 — build the F1-scale shard corpus, decontaminated (A1 + A0) (CPU/network — run FIRST, or the night before)
+
+**Why the old command is gone (2026-07-16 review):** the rows-API build this step used to
+pre-commit (`--n-docs 6000`) measured **≈4.8M tokens** — the 7e8-token race budget over that corpus
+is **~146 epochs**: a memorization benchmark, not an optimizer signal (voided science; the driver's
+new epochs guard now ABORTS exactly this). F1 needs **≥ 7e8 tokens** — the parquet bulk path
+(`--fineweb-parquet`; needs the pyarrow extra: `uv pip install -e ".[data]"`).
+
+**Dry-run the download plan first** (prints file list + GiB + estimated tokens; downloads nothing):
 
 ```bash
 python -m scratch_llm.data.shards \
-  --out data/fineweb_edu --vocab-size 32768 --n-docs 6000 --decontaminate
+  --out data/fineweb_edu --fineweb-parquet --target-tokens 7e8 --dry-run
 ```
+
+- **Gate:** the plan's `est_tokens` must cover the 7e8 target (expect ~2.4 GiB of parquet at the
+  2.95 B/token estimate × 1.25 safety). An under-supplied plan fails loudly at the accounting stage
+  anyway — catch it here, before any bytes move.
+
+Then the real build:
+
+```bash
+python -m scratch_llm.data.shards \
+  --out data/fineweb_edu --vocab-size 32768 \
+  --fineweb-parquet --target-tokens 7e8 --num-workers 8 --decontaminate
+```
+
+- Streams hub parquet → BPE (trained on a 16 MiB capped sample; `--max-train-bytes` to raise) →
+  ~42 × 16.8M-token uint16 shards + `tokenizer.json` + sidecars, bounded RAM. Downloads are
+  resumable at file granularity (`.part` rename + size-checked cache) — a killed run re-uses what
+  it fetched.
 - `--decontaminate` = the A0 13-gram gate (strips train docs overlapping GSM/Countdown/report-card
   eval before BPE training). Add `--eval-file gsm8k_test.txt --eval-file mmlu.txt` to guard the real
   test splits (one item/line) — **do this if you will score MMLU/GSM8K**, else they leak.
-- **Kill:** the "A0 decontamination: kept X/Y" line shows >20% dropped ⇒ the eval set leaked into the
-  corpus slice — investigate before training.
-- Produces `data/fineweb_edu/{tokenizer.json, shard_*.bin, *.meta.json}`. For the d20's ~11B tokens
-  you need the multi-shard streamer (§D extension), not this endpoint — this slice is the F1-scale run.
+- **Kill:** the final accounting line (`… docs, … filtered → data/fineweb_edu`) shows >20% of docs
+  filtered ⇒ the eval set leaked into the corpus slice — investigate before training.
+- **Wall `[INFERENCE]`:** download minutes; BPE training tens of minutes at vocab 32768; the
+  pure-Python encode of ~2.7 GB text dominates — expect **hours** even at `--num-workers 8`. It
+  needs **no GPU**: run it before the GPU day (or overnight) so Step 2 starts on staged shards.
+- For the d20's ~10B tokens you still need the multi-shard *shuffled* streamer (§D extension / d20
+  gate P2), not this endpoint — this build is the F1-scale run.
 
 ---
 
-## Step 2 — F1 iso-FLOP Muon vs tuned-AdamW (+ F9 ride-along) (5–7 h)
+## Step 2 — F1 iso-FLOP Muon vs tuned-AdamW (+ F9 ride-along) (~4–10 h `[INFERENCE]`)
 
-The pending headline. The sweep→race→ledger driver was CPU-smoke-verified end-to-end (2026-07-13).
+The pending headline. The sweep→race→ledger driver was CPU-smoke-verified end-to-end (2026-07-13;
+re-verified after the 2026-07-16 review fixes).
 
 ```bash
 python bench/optimizer_race.py \
@@ -57,16 +96,45 @@ python bench/optimizer_race.py \
   --sweep-lrs 1e-4,2e-4,3e-4,6e-4,1e-3 --sweep-frac 0.2 \
   --out results/f1_race.json
 ```
+- **Defaults carry the registered regime (2026-07-16) — state, don't assume:** the driver builds the
+  model with **qk_norm ON** (the F9-registered regime; the opt-out is `--no-qk-norm` — do NOT pass
+  it, the pre-registered falsifier "S_max < 30 *under qk_norm*" is conditioned on it) and
+  **`--attention sdpa`** (the fused training path — the F1-OOM fix; `eager` is the reference path
+  that measured ~30 GB and does not fit this box). Both are ledgered per-run in the JSON row
+  (`qk_norm`, `attention`).
+- **No `mkdir results/` needed:** the driver creates `--out`'s parent at startup — an unwritable
+  path fails in second 1, not after the arms.
+- **Epochs guard:** the driver prints `epochs = D / corpus` and ABORTS above `--max-epochs`
+  (default 1.5). On the Step-1 corpus (≥7e8 tokens) this reads ≈1.0 and passes; if it aborts, the
+  corpus is undersized — rebuild Step 1, don't override the guard.
 - **Mandatory tuned baseline:** the driver runs the 5-point AdamW LR sweep at 20% horizon FIRST, picks
   argmin val CE, and only then races Muon at that LR (the 2509.02046 lesson — an untuned baseline is a
-  fake win). The sweep curves ship in `f1_race.json` for audit.
+  fake win). The sweep curves ship in `f1_race.json` for audit. Resume past a finished sweep with
+  `--baseline-lr <winner>`.
+- **Recalibrated scale (2026-07-16, pre-run):** measured **N = 59,253,248** at depth 8 / vocab 32768
+  (the registered "N≈35M" assumed a smaller vocab — the tied 32768×512 embed/head alone is 16.8M),
+  so C = 6ND ≈ **2.49e17** at D = 7e8 (realized D:N ≈ 11.8). Verdict unaffected — both arms share
+  identical N, D, seed by construction.
 - **Pre-registered predict (recalibrated 2026-07-09, `bench/RESULTS.md` F1):** Muon
-  `token_saving_fraction` in the **1.1–1.4× band** (≈15–25% at ~50M, shrinking with N) vs the *tuned*
-  AdamW, or ≥0.02 nats lower at iso-FLOP. NS overhead <1%.
-- **KILL:** saving <5% vs the tuned baseline, OR divergence at the reused LR, OR NS overhead >3%.
-- **F9 rides along for free:** `--track-logits` is ON by default, so the row prints the max per-head
+  `token_saving_fraction` in the **1.1–1.4× band** (≈15–25% at this N, shrinking with N) vs the
+  *tuned* AdamW, or ≥0.02 nats lower at iso-FLOP. NS overhead <1%.
+- **KILL:** saving <5% vs the tuned baseline, OR divergence at the reused LR, OR NS overhead >3% —
+  all three branches are wired into the printed verdict (`verdict_string`), and a KILL is a result.
+- **Crash/divergence containment (2026-07-16):** every completed stage — sweep, baseline arm,
+  challenger arm, final metrics — is atomically persisted to `--out` the moment it exists (`status`
+  in the JSON names the newest stage on disk), so a crash at hour 6 keeps everything finished; a
+  diverged Muon arm returns a **recorded KILL row** (persisted + printed), not a lost day. Note
+  `muon_wall_s` is NS-profiler-perturbed (`muon_wall_perturbed_by_profiler: true`) — never compare
+  it to `baseline_wall_s` directly.
+- **F9 rides along for free:** the max-attn-logit observer is ON by default (opt-out
+  `--no-track-logits`; it observes training forwards only), so the row prints the max per-head
   attention logit. **F9 predict:** with qk_norm, S_max < 30 at every step ⇒ QK-Clip γ≡1 (qk_norm
   suffices sub-1B). **F9 KILL:** sustained S_max > 30.
+- **Wall `[INFERENCE]` (pending the run):** total = 3 × 7e8 tokens (5 sweep runs @ 20% + 2 full
+  arms) ≈ 64k steps @ 32,768 tok/step. The review's honest recompute of the OLD eager path was
+  **5.5–19 h** (this runbook's previous "5–7 h" had no basis); SDPA cuts the attention-dominated
+  step — expect **~4–10 h**. Calibrate early: one sweep arm is 1/15 of the total, so measure its
+  wall and multiply by 15 before committing the day.
 - The CLI prints two paste-ready ledger rows (F1 iso-FLOP + F9 ride-along). Copy them into
   `bench/RESULTS.md` §Frontier ablations.
 
@@ -140,13 +208,13 @@ python bench/flash_bwd_roofline.py --seqs 512 1024 2048 4096 8192          # the
 | Step | Wall | Notes |
 |---|---|---|
 | 0 env + gpu suite | ~5 min | |
-| 1 shards | 5–15 min | network-bound |
-| 2 F1 race (+F9) | **5–7 h** | 5 sweep runs @ ~20 min + 2 full arms @ ~2 h |
+| 1 shards (parquet, ≥7e8 tok) | **hours `[INFERENCE]`** | CPU/network only — run before the GPU day (or overnight); pure-Python encode dominates |
+| 2 F1 race (+F9) | **~4–10 h `[INFERENCE]`** | SDPA default; old eager recompute was 5.5–19 h; calibrate = 15 × the first sweep arm |
 | 3 trained ckpt | 1–2 h | |
 | 4 F3 | ~10 min | |
 | 5 FA2 bwd | ~15 min | |
-| **total** | **~8–10 h** | one standing-box day; **$0 rental** at this scale |
+| **total (GPU day proper)** | **~6–13 h `[INFERENCE]`** | one standing-box day with shards staged in advance; **$0 rental** at this scale |
 
-**Not in this runbook (separate rentals, own runbooks):** the $100 d20 (561M, 8×H100 — needs A7
-distributed wiring first, still CPU-buildable), and the perf datacenter days (H100/B200/8×H200,
-[ADR-0012]). Those are gated on their own go/no-go.
+**Not in this runbook (separate rentals, own runbooks):** the $100 d20 (480.4M measured at vocab
+32768, 8×H100 — needs A7 distributed wiring first, still CPU-buildable), and the perf datacenter
+days (H100/B200/8×H200, [ADR-0012]). Those are gated on their own go/no-go.

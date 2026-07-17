@@ -39,6 +39,7 @@ data = [
     "fastwarc>=0.14",
     "resiliparse>=0.14",
     "fasttext>=0.9.3",
+    "pyarrow>=15",     # F1-data parquet bulk ingest (shards.py streaming path)
 ]
 # A3 plots + robust fits (`uv pip install -e ".[scaling]"`); core fitter is numpy-only.
 scaling = [

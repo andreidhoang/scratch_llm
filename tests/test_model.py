@@ -176,6 +176,19 @@ def test_qk_norm_bounds_query_magnitude() -> None:
     torch.testing.assert_close(rms100, rms1 * 100, rtol=1e-4, atol=0)
 
 
+def test_sdpa_loss_at_init_is_log_vocab() -> None:
+    # The fused-SDPA training path (use_sdpa=True, the F1-OOM fix) must preserve the
+    # uniform-prediction init: CE ≈ log(vocab). Backend equivalence lives in test_sdpa_backend.py.
+    torch.manual_seed(0)
+    cfg = _small_cfg(use_sdpa=True)
+    model = TransformerLM(cfg)
+    ids = torch.randint(0, cfg.vocab_size, (8, 32))
+    targets = torch.randint(0, cfg.vocab_size, (8, 32))
+    loss = cross_entropy(model(ids), targets).item()
+    expected = math.log(cfg.vocab_size)
+    assert abs(loss - expected) < 0.3, f"loss {loss:.3f} vs log V {expected:.3f}"
+
+
 def test_triton_attention_forward_backward() -> None:
     # Verify that model runs forward/backward with custom Triton FlashAttention on CUDA
     if not torch.cuda.is_available():
