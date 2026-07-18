@@ -27,8 +27,13 @@ from scratch_llm.optim import (
     gradient_clipping,
     split_muon_adamw_params,
 )
-from scratch_llm.train import TrainConfig, train
-from scratch_llm.utils.dist_train import DistMuonAdamW
+from scratch_llm.train import (
+    TrainConfig,
+    load_consolidated_checkpoint,
+    save_consolidated_checkpoint,
+    train,
+)
+from scratch_llm.utils.dist_train import DistMuonAdamW, assert_model_replicas_identical
 from scratch_llm.utils.seeding import seed_everything
 
 WORLD = 2
@@ -482,3 +487,324 @@ def test_lr_schedule_write_reaches_both_algo_groups() -> None:
         group["lr"] = 0.042
     assert all(g["lr"] == 0.042 for g in opt.param_groups)
     assert {g["algo"] for g in opt.param_groups} == {"muon", "adamw"}
+
+
+# ============================================================================================
+# A8 — consolidated distributed checkpoint: SAVE from N ranks → resume/reshard on any topology.
+# The A7 state_dict is rank-local shards (same-topology resume only); A8 all-gathers them into a
+# single un-sharded, topology-independent state you can resume at a different world size or
+# extract the model from for serving.
+# ============================================================================================
+
+_WARM_SEED = 21  # grad stream for the warmup half (pre-checkpoint)
+_CONT_SEED = 77  # grad stream for the continuation half (post-resume, shared by both trajectories)
+
+
+def _set_per_rank_grads(model: nn.Module, gen: torch.Generator, rank: int) -> None:
+    """Per-rank grads whose 2-rank AVERAGE (base + delta/2) is exactly representable (see
+    ``_exact_grad_pair``): rank r gets ``base + r·delta``."""
+    for p in model.parameters():
+        base, delta = _exact_grad_pair(p, gen)
+        p.grad = base + rank * delta
+
+
+# --------------------------------------------------------------------------------------------
+# (a) round-trip: consolidate → save bytes → load_consolidated → resharded continuation equals
+#     the uninterrupted continuation, BITWISE, on every rank — SAME topology (world 2 AND a
+#     non-power-of-2 world 3, which drives the Muon k_pad and AdamW row_pad un-pad paths).
+# --------------------------------------------------------------------------------------------
+
+
+def _roundtrip_worker(rank: int, world_size: int, port: int, ckpt_path: str) -> None:
+    _init_pg(rank, world_size, port)
+    try:
+
+        def build() -> tuple[TransformerLM, DistMuonAdamW]:
+            seed_everything(0)
+            m = TransformerLM(_model_cfg())  # identical init on every rank
+            a, b = split_muon_adamw_params(m)
+            return m, DistMuonAdamW(a, b, lr=0.02, max_l2_norm=1.0)
+
+        model, opt = build()
+        gwarm = torch.Generator().manual_seed(_WARM_SEED)
+        for _ in range(3):  # warmup so momentum / Adam moments are populated (not lazy-None)
+            _set_per_rank_grads(model, gwarm, rank)
+            opt.step()
+
+        # consolidate (every rank gathers) + write ONE file on rank 0, then a barrier so the file
+        # is on disk before any rank reads it — the production save/resume shape.
+        save_consolidated_checkpoint(model, opt, 3, ckpt_path)
+        dist.barrier()
+
+        # reference: keep stepping the ORIGINAL optimizer — the uninterrupted trajectory.
+        gcont = torch.Generator().manual_seed(_CONT_SEED)
+        for _ in range(3):
+            _set_per_rank_grads(model, gcont, rank)
+            opt.step()
+
+        # resumed: fresh model + optimizer, reshard the consolidated file back onto THIS rank,
+        # replay the SAME continuation grads.
+        model2, opt2 = build()
+        step = load_consolidated_checkpoint(ckpt_path, model2, opt2)
+        assert step == 3, f"rank {rank}: resumed step {step} != 3"
+        gcont2 = torch.Generator().manual_seed(_CONT_SEED)
+        for _ in range(3):
+            _set_per_rank_grads(model2, gcont2, rank)
+            opt2.step()
+
+        # SAME topology → the resharded state is bitwise-identical to the shard state it came
+        # from, and identical grads drive an identical collective schedule ⇒ bitwise trajectories.
+        ref = dict(model.named_parameters())
+        for name, p2 in model2.named_parameters():
+            assert torch.equal(p2, ref[name]), (
+                f"rank {rank}: resumed param {name} != uninterrupted trajectory (not bitwise)"
+            )
+    finally:
+        dist.destroy_process_group()
+
+
+def test_consolidated_roundtrip_reshards_bitwise_world2(tmp_path) -> None:
+    ckpt = str(tmp_path / "consolidated_w2.pt")
+    mp.spawn(  # pyright: ignore[reportPrivateImportUsage]
+        _roundtrip_worker, args=(2, _free_port(), ckpt), nprocs=2, join=True
+    )
+
+
+def test_consolidated_roundtrip_reshards_bitwise_world3_nonpow2(tmp_path) -> None:
+    ckpt = str(tmp_path / "consolidated_w3.pt")
+    mp.spawn(  # pyright: ignore[reportPrivateImportUsage]
+        _roundtrip_worker, args=(3, _free_port(), ckpt), nprocs=3, join=True
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# (b) topology-independence: a state saved on world 2 resumes on WORLD 1 and its continuation
+#     matches a native world-1 trajectory — proving the consolidated format carries no sharding.
+# --------------------------------------------------------------------------------------------
+
+
+def _w2_save_worker(rank: int, world_size: int, port: int, ckpt_path: str, warmup: int) -> None:
+    _init_pg(rank, world_size, port)
+    try:
+        seed_everything(0)
+        model = TransformerLM(_model_cfg())
+        muon_p, adamw_p = split_muon_adamw_params(model)
+        opt = DistMuonAdamW(muon_p, adamw_p, lr=0.02, max_l2_norm=0.0)  # no clip: clean cross-topo
+        gwarm = torch.Generator().manual_seed(_WARM_SEED)
+        for _ in range(warmup):
+            _set_per_rank_grads(model, gwarm, rank)  # avg over 2 ranks == base + delta/2
+            opt.step()
+        save_consolidated_checkpoint(model, opt, warmup, ckpt_path)  # rank 0 writes
+    finally:
+        dist.destroy_process_group()
+
+
+def test_world2_consolidated_resumes_at_world1(tmp_path) -> None:
+    ckpt = str(tmp_path / "w2_to_w1.pt")
+    warmup, cont = 3, 3
+    # phase 1: 2-rank warmup on per-rank grads → consolidate → file.
+    mp.spawn(  # pyright: ignore[reportPrivateImportUsage]
+        _w2_save_worker, args=(2, _free_port(), ckpt, warmup), nprocs=2, join=True
+    )
+
+    # phase 2 (main process, NO process group ⇒ world size 1): resume the consolidated file and
+    # continue on the AVERAGED grad stream (base + delta/2 == the 2-rank average of the warmup).
+    seed_everything(0)
+    model_r = TransformerLM(_model_cfg())
+    a, b = split_muon_adamw_params(model_r)
+    opt_r = DistMuonAdamW(a, b, lr=0.02, max_l2_norm=0.0)
+    assert opt_r.world_size == 1 and opt_r.rank == 0
+    step = load_consolidated_checkpoint(ckpt, model_r, opt_r)
+    assert step == warmup
+    gcont = torch.Generator().manual_seed(_CONT_SEED)
+    for _ in range(cont):
+        for p in model_r.parameters():
+            base, delta = _exact_grad_pair(p, gcont)
+            p.grad = base + delta / 2
+        opt_r.step()
+
+    # native world-1 reference: the SAME warmup+continuation on averaged grads, uninterrupted.
+    seed_everything(0)
+    model_ref = TransformerLM(_model_cfg())
+    a2, b2 = split_muon_adamw_params(model_ref)
+    opt_ref = DistMuonAdamW(a2, b2, lr=0.02, max_l2_norm=0.0)
+    gw = torch.Generator().manual_seed(_WARM_SEED)
+    for _ in range(warmup):
+        for p in model_ref.parameters():
+            base, delta = _exact_grad_pair(p, gw)
+            p.grad = base + delta / 2
+        opt_ref.step()
+    gc = torch.Generator().manual_seed(_CONT_SEED)
+    for _ in range(cont):
+        for p in model_ref.parameters():
+            base, delta = _exact_grad_pair(p, gc)
+            p.grad = base + delta / 2
+        opt_ref.step()
+
+    # cross-topology: the AVG reduction order differs from a native single-tensor mean, so the
+    # match is tight-but-not-bitwise (the same 1e-6 band the A7 oracle uses).
+    ref = dict(model_ref.named_parameters())
+    for name, p in model_r.named_parameters():
+        torch.testing.assert_close(p, ref[name], atol=1e-6, rtol=1e-6, msg=f"{name} drifted")
+
+
+# --------------------------------------------------------------------------------------------
+# (c) the replica-identity guard fires (on EVERY rank, no hang) on an injected desync — and is a
+#     no-op on genuinely-identical replicas.
+# --------------------------------------------------------------------------------------------
+
+
+def _replica_guard_worker(rank: int, world_size: int, port: int) -> None:
+    _init_pg(rank, world_size, port)
+    try:
+        seed_everything(0)
+        model = TransformerLM(_model_cfg())  # identical init on every rank
+        assert_model_replicas_identical(model)  # positive: identical replicas ⇒ no raise
+
+        if rank == 1:  # inject a divergence on ONE rank
+            with torch.no_grad():
+                next(iter(model.parameters())).add_(1.0)
+
+        raised = False
+        try:
+            assert_model_replicas_identical(model)
+        except RuntimeError as err:
+            assert "diverged" in str(err), f"rank {rank}: wrong error {err}"
+            raised = True
+        assert raised, f"rank {rank}: replica-identity guard did NOT fire on the injected desync"
+    finally:
+        dist.destroy_process_group()
+
+
+def test_replica_identity_guard_fires_on_desync() -> None:
+    ctx = mp.spawn(  # pyright: ignore[reportPrivateImportUsage]
+        _replica_guard_worker, args=(WORLD, _free_port()), nprocs=WORLD, join=False
+    )
+    assert ctx is not None
+    # poll with a deadline: a collective guard must make BOTH ranks raise together — a hang here
+    # would mean one rank raised alone and left the other blocked in the all_gather.
+    deadline = time.monotonic() + 120
+    while not ctx.join(timeout=5):
+        if time.monotonic() > deadline:
+            for proc in ctx.processes:
+                if proc is not None:
+                    proc.terminate()
+            raise AssertionError("replica-identity guard hung instead of raising on all ranks")
+
+
+# --------------------------------------------------------------------------------------------
+# (d) un-pad correctness: with K not divisible by world (Muon) AND dim0 not divisible by world
+#     (AdamW), the consolidated FULL state has exactly K matrices / dim0 rows and its VALUES equal
+#     the single-process optimizer's un-padded state.
+# --------------------------------------------------------------------------------------------
+
+
+def _unpad_worker(rank: int, world_size: int, port: int) -> None:
+    _init_pg(rank, world_size, port)
+    try:
+        # world 3: K=5 Muon matrices → k_pad=6 (1 pad slot); big dim0=7 → rows_pad=9 (2 pad rows).
+        torch.manual_seed(0)
+        mats = [nn.Parameter(torch.randn(4, 6)) for _ in range(5)]
+        big = nn.Parameter(torch.randn(7, 200))  # 1400 ≥ SMALL_PARAM_NUMEL ⇒ row-sharded
+        ref_mats = [nn.Parameter(m.detach().clone()) for m in mats]
+        ref_big = nn.Parameter(big.detach().clone())
+
+        opt = DistMuonAdamW(mats, [big], lr=0.02, muon_momentum=0.95, weight_decay=0.1)
+        ref_muon = Muon(ref_mats, lr=0.02, momentum=0.95, weight_decay=0.1)  # matched defaults
+        ref_adamw = AdamW([ref_big], lr=0.02, betas=(0.9, 0.95), weight_decay=0.1)
+
+        # per-rank grad base + r·delta ⇒ mean over W ranks = base + ((W-1)/2)·delta (for W=3 → +δ).
+        avg_coeff = (world_size - 1) / 2
+        gen = torch.Generator().manual_seed(9)
+        for _ in range(2):
+            for p, pr in zip(mats + [big], ref_mats + [ref_big], strict=True):
+                base, delta = _exact_grad_pair(p, gen)
+                p.grad = base + rank * delta
+                pr.grad = (
+                    base + avg_coeff * delta
+                )  # the averaged grad the single-process oracle sees
+            opt.step()
+            ref_muon.step()
+            ref_adamw.step()
+
+        consolidated = opt.consolidated_state_dict()  # collective — every rank participates
+        if rank == 0:
+            assert consolidated is not None
+            group = consolidated["muon_momentum"][0]
+            assert group is not None and len(group) == 5, "un-pad dropped the wrong Muon count"
+            for i, mref in enumerate(ref_mats):
+                buf = ref_muon.state[mref]["momentum_buffer"]
+                torch.testing.assert_close(
+                    group[i], buf, atol=1e-6, rtol=1e-6, msg=f"muon momentum matrix {i}"
+                )
+            mv = consolidated["adamw_rows"][0]
+            assert mv is not None and mv["m"].shape[0] == 7 and mv["v"].shape[0] == 7, (
+                "un-pad kept pad rows in the consolidated AdamW moments"
+            )
+            st = ref_adamw.state[ref_big]
+            torch.testing.assert_close(mv["m"], st["m"], atol=1e-6, rtol=1e-6, msg="adamw m")
+            torch.testing.assert_close(mv["v"], st["v"], atol=1e-6, rtol=1e-6, msg="adamw v")
+        else:
+            assert consolidated is None, "non-zero rank must return None from consolidation"
+    finally:
+        dist.destroy_process_group()
+
+
+def test_consolidated_unpad_matches_single_process_world3() -> None:
+    mp.spawn(  # pyright: ignore[reportPrivateImportUsage]
+        _unpad_worker, args=(3, _free_port()), nprocs=3, join=True
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# train() wiring: a distributed run with checkpoint_every writes ONE consolidated file (rank 0)
+# that load_consolidated_checkpoint can resume — and the single-process save path is untouched.
+# --------------------------------------------------------------------------------------------
+
+
+def _train_consolidated_ckpt_worker(rank: int, world_size: int, port: int, ckpt_path: str) -> None:
+    _init_pg(rank, world_size, port)
+    try:
+        seed_everything(7)
+        model = TransformerLM(_model_cfg())
+        data = np.tile(np.arange(16, dtype=np.int64), 400)
+        cfg = TrainConfig(
+            max_steps=5,
+            batch_size=4,
+            context_length=8,
+            max_lr=1e-3,
+            seed=7,
+            optimizer="muon_adamw",
+            checkpoint_every=2,
+            checkpoint_path=ckpt_path,
+            log_every=1,
+        )
+        train(cfg, data, model)  # checkpoints at steps 2 and 4 (rank 0 writes; all ranks gather)
+
+        if rank == 0:
+            state = torch.load(ckpt_path, weights_only=False)
+            assert state["format"] == "consolidated"
+            assert state["world_size"] == world_size
+            assert state["optim_consolidated"] is not None
+            assert state["model_config"] is not None
+        dist.barrier()
+
+        # resume the consolidated file onto a fresh same-topology optimizer, take one more step.
+        seed_everything(7)
+        model2 = TransformerLM(_model_cfg())
+        a, b = split_muon_adamw_params(model2)
+        opt2 = DistMuonAdamW(a, b, lr=1e-3, max_l2_norm=1.0)
+        step = load_consolidated_checkpoint(ckpt_path, model2, opt2)
+        assert step == 4, f"rank {rank}: resumed at step {step}, expected 4"
+        for p in model2.parameters():
+            p.grad = torch.zeros_like(p)
+        opt2.step()  # must not raise — the resharded state is a valid live optimizer
+    finally:
+        dist.destroy_process_group()
+
+
+def test_train_writes_resumable_consolidated_checkpoint(tmp_path) -> None:
+    ckpt = str(tmp_path / "train_consolidated.pt")
+    mp.spawn(  # pyright: ignore[reportPrivateImportUsage]
+        _train_consolidated_ckpt_worker, args=(WORLD, _free_port(), ckpt), nprocs=WORLD, join=True
+    )

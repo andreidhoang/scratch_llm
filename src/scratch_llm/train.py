@@ -39,7 +39,10 @@ from scratch_llm.optim import (
     gradient_clipping,
     split_muon_adamw_params,
 )
-from scratch_llm.utils.dist_train import DistMuonAdamW
+from scratch_llm.utils.dist_train import (
+    DistMuonAdamW,
+    assert_model_replicas_identical,
+)
 from scratch_llm.utils.seeding import seed_everything
 
 
@@ -142,6 +145,64 @@ def build_model_from_checkpoint(
     model = TransformerLM(cfg)
     model.load_state_dict(ckpt["model"])
     return model, int(ckpt["step"])
+
+
+def save_consolidated_checkpoint(
+    model: torch.nn.Module,
+    optimizer: DistMuonAdamW,
+    step: int,
+    out: str | Path,
+) -> None:
+    """A8 distributed checkpoint — the topology-INDEPENDENT counterpart of
+    :func:`save_checkpoint`. Unlike the rank-local shards :meth:`DistMuonAdamW.state_dict` writes
+    (same-topology resume only), this consolidates the optimizer's ZeRO-2 shards into one
+    un-sharded state that resumes on ANY world size and from which the model can be extracted for
+    serving.
+
+    **Collective — every rank must call it.** :func:`assert_model_replicas_identical` and
+    :meth:`DistMuonAdamW.consolidated_state_dict` both run ``all_gather``s that all ranks
+    participate in; only rank 0 then writes the file (model = rank 0's replica, verified identical;
+    optimizer = the consolidated dict; plus ``step``, ``model_config``, and the saving
+    ``world_size``). Resume with :func:`load_consolidated_checkpoint`.
+    """
+    assert_model_replicas_identical(model)  # collective; fails loud on a replica desync
+    consolidated = optimizer.consolidated_state_dict()  # collective; rank 0 gets the dict
+    if dist.is_available() and dist.is_initialized() and dist.get_rank() != 0:
+        return
+    cfg = getattr(model, "cfg", None)
+    torch.save(
+        {
+            "model": model.state_dict(),
+            "optim_consolidated": consolidated,
+            "step": step,
+            "model_config": asdict(cfg) if isinstance(cfg, ModelConfig) else None,
+            "world_size": optimizer.world_size,
+            "format": "consolidated",
+        },
+        out,
+    )
+
+
+def load_consolidated_checkpoint(
+    src: str | Path,
+    model: torch.nn.Module,
+    optimizer: DistMuonAdamW | None = None,
+    map_location: str = "cpu",
+) -> int:
+    """Resume from a :func:`save_consolidated_checkpoint` file: restore the model and re-shard the
+    consolidated optimizer state onto ``optimizer``'s CURRENT topology (works at any world size —
+    the format is topology-independent). Returns the saved step. Pure per-rank slicing, no
+    collectives (see :meth:`DistMuonAdamW.load_consolidated`)."""
+    ckpt = torch.load(src, map_location=map_location, weights_only=False)
+    model.load_state_dict(ckpt["model"])
+    if optimizer is not None:
+        if ckpt.get("optim_consolidated") is None:
+            raise ValueError(
+                f"{src} carries no consolidated optimizer state: load the model with "
+                "optimizer=None (serving), or point at a save_consolidated_checkpoint file."
+            )
+        optimizer.load_consolidated(ckpt["optim_consolidated"])
+    return int(ckpt["step"])
 
 
 @dataclass
@@ -393,15 +454,24 @@ def train(
                 step,
                 _val_loss(model, val_data, cfg.context_length, cfg.eval_batches, cfg.device),
             )
-        if (
-            rank == 0  # replicas are identical — rank 0's save is the run's save; note the
-            # optimizer payload is rank 0's LOCAL shard (DistMuonAdamW.state_dict; full-gather
-            # consolidation is A8 scope)
-            and cfg.checkpoint_every
+        checkpoint_now = bool(
+            cfg.checkpoint_every
             and cfg.checkpoint_path
             and step > 0
             and step % cfg.checkpoint_every == 0
-        ):
+        )
+        # ``checkpoint_now`` is a function of cfg + step only, so every rank agrees — the
+        # distributed branch's consolidation collectives stay in lockstep.
+        if checkpoint_now and distributed:
+            # A8: ALL ranks participate in the replica-identity check + the ZeRO-2 consolidation
+            # gathers; rank 0 writes ONE topology-independent file (resumable on any world size).
+            assert isinstance(optimizer, DistMuonAdamW)
+            assert cfg.checkpoint_path is not None
+            save_consolidated_checkpoint(model, optimizer, step, cfg.checkpoint_path)
+        elif checkpoint_now and rank == 0:
+            # Single-process path — byte-identical to before A8 (replicas are trivially identical;
+            # rank 0's save is the run's save).
+            assert cfg.checkpoint_path is not None
             save_checkpoint(model, optimizer, step, cfg.checkpoint_path)
 
     return history
@@ -412,6 +482,8 @@ __all__ = [
     "build_model_from_checkpoint",
     "get_batch",
     "load_checkpoint",
+    "load_consolidated_checkpoint",
     "save_checkpoint",
+    "save_consolidated_checkpoint",
     "train",
 ]

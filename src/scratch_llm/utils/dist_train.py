@@ -40,7 +40,7 @@ from typing import Any
 
 import torch
 import torch.distributed as dist
-from torch import Tensor
+from torch import Tensor, nn
 
 from scratch_llm.optim import (
     _zeropower_via_newtonschulz5,
@@ -390,9 +390,9 @@ class DistMuonAdamW(torch.optim.Optimizer):
         owned rows, the replicated small-param moments, and the shared step count.
 
         Distributed optimizer state is rank-local by design — a resume needs the same
-        (world_size, rank) layout, validated in :meth:`load_state_dict`. A consolidated
-        full-gather save (single-file resume on any world size) is A8 runbook scope: TODO,
-        deliberately not built here."""
+        (world_size, rank) layout, validated in :meth:`load_state_dict`. For a single-file,
+        topology-INDEPENDENT save (resume on any world size, or extract the model for serving)
+        use :meth:`consolidated_state_dict` / :meth:`load_consolidated` (A8)."""
         return {
             "t": self._t,
             "world_size": self.world_size,
@@ -418,7 +418,8 @@ class DistMuonAdamW(torch.optim.Optimizer):
             raise ValueError(
                 "DistMuonAdamW state is rank-local: restore it on the same (world_size, rank) "
                 f"it was saved from — saved ({state_dict['world_size']}, {state_dict['rank']}), "
-                f"this process ({self.world_size}, {self.rank}). Consolidated resume is A8 scope."
+                f"this process ({self.world_size}, {self.rank}). To resume on a different world "
+                "size, save with consolidated_state_dict and load with load_consolidated."
             )
         self._t = int(state_dict["t"])
         for shard, bufs in zip(self._muon_shards, state_dict["muon_momentum"], strict=True):
@@ -430,5 +431,173 @@ class DistMuonAdamW(torch.optim.Optimizer):
         self._small_m = [None if mv is None else mv["m"].clone() for mv in small]
         self._small_v = [None if mv is None else mv["v"].clone() for mv in small]
 
+    # ------------------------------------------------------ consolidated checkpoint (A8)
 
-__all__ = ["SMALL_PARAM_NUMEL", "DistMuonAdamW"]
+    @torch.no_grad()
+    def consolidated_state_dict(self) -> dict[str, Any] | None:
+        """The FULL, un-sharded, topology-INDEPENDENT optimizer state — the format you ship a
+        model in or resume on a different world size (the rank-local :meth:`state_dict` above is
+        only good for a same-topology resume). Every rank runs the SAME ``all_gather``s in the
+        SAME order (collective-correct — no rank-0-only collective); rank 0 assembles and returns
+        the dict, every other rank returns ``None`` after participating in the gathers.
+
+        Layout (all state grouped exactly like ``self._muon_shards`` / ``self._row_shards`` /
+        ``self._adamw_small`` — those groupings are derived from parameter ORDER + SHAPE only, so
+        they are identical on every world size, which is what makes the format topology-free):
+
+        - ``muon_momentum[j]`` — ``None`` (uninitialised) or a list of ``K_j`` full ``(A, B)``
+          SGD-momentum buffers, one per WHOLE matrix of shape-group ``j``, in registration order.
+          The ``all_gather`` reunites the matrix-granular ZeRO-2 shards and the tail zero-pad
+          slots (global index ≥ ``K_j``) are dropped — the un-pad.
+        - ``adamw_rows[i]`` — ``None`` or ``{"m", "v"}`` holding the i-th large param's FULL
+          ``(dim0, …)`` moments; the dim-0 shards are gathered and the zero-pad rows
+          (global row ≥ ``dim0``) dropped.
+        - ``adamw_small[i]`` — ``None`` or ``{"m", "v"}``; small params are replicated (identical
+          on every rank), so rank 0's local copy is authoritative — no collective needed.
+        - ``t`` — the shared AdamW bias-correction step count.
+
+        Mapping onto a single-process ``CombinedOptimizer([Muon(muon_params), AdamW(adamw_params)])``
+        (documented so the format is not opaque; the round-trip is *proven* via a world-size-1
+        :meth:`load_consolidated` in the tests): group ``muon_params`` by shape in first-occurrence
+        order (exactly ``split_muon_adamw_params`` → ``by_shape`` order) — the k-th param of group j
+        takes ``Muon.state[p]["momentum_buffer"] = muon_momentum[j][k]``; the large adamw params (in
+        order) take ``adamw_rows[i]["m"/"v"]`` as their ``m``/``v`` and the small ones
+        ``adamw_small[i]``; every adamw param's ``state["step"] = t``.
+        """
+        # ``self._t`` is identical across ranks (every rank steps together), so gating the gathers
+        # on it keeps every rank's collective schedule in lockstep. Before the first step nothing
+        # is initialised (momentum/moments are lazy) → an all-``None`` consolidated dict.
+        has_state = self._t > 0
+        is0 = self.rank == 0
+
+        muon_full: list[list[Tensor] | None] = []
+        for shard in self._muon_shards:
+            if not has_state:
+                muon_full.append(None)
+                continue
+            ref = shard.params[0]
+            mine = torch.zeros((shard.chunk, *ref.shape), dtype=ref.dtype, device=ref.device)
+            if shard.momentum:  # empty list on ranks that own only pad slots → contribute zeros
+                for buf, g in zip(shard.momentum, shard.owned, strict=True):
+                    mine[g - self.rank * shard.chunk].copy_(buf)
+            full = torch.empty((shard.k_pad, *ref.shape), dtype=ref.dtype, device=ref.device)
+            self._all_gather(full, mine)  # collective — every rank
+            muon_full.append([full[g].clone() for g in range(len(shard.params))] if is0 else None)
+
+        rows_full: list[dict[str, Tensor] | None] = []
+        for rshard in self._row_shards:
+            if not has_state:
+                rows_full.append(None)
+                continue
+            p = rshard.param
+            tail = p.shape[1:]
+            m_mine = torch.zeros((rshard.chunk_rows, *tail), dtype=p.dtype, device=p.device)
+            v_mine = torch.zeros((rshard.chunk_rows, *tail), dtype=p.dtype, device=p.device)
+            if rshard.n_rows and rshard.m is not None and rshard.v is not None:
+                m_mine[: rshard.n_rows].copy_(rshard.m)
+                v_mine[: rshard.n_rows].copy_(rshard.v)
+            m_full = torch.empty((rshard.rows_pad, *tail), dtype=p.dtype, device=p.device)
+            v_full = torch.empty((rshard.rows_pad, *tail), dtype=p.dtype, device=p.device)
+            self._all_gather(m_full, m_mine)  # collective — every rank
+            self._all_gather(v_full, v_mine)
+            rows_full.append(
+                {"m": m_full[: p.shape[0]].clone(), "v": v_full[: p.shape[0]].clone()}
+                if is0
+                else None
+            )
+
+        if not is0:
+            return None
+        return {
+            "format": "consolidated",
+            "t": self._t,
+            "world_size": self.world_size,  # the SAVING topology — informational only
+            "muon_momentum": muon_full,
+            "adamw_rows": rows_full,
+            "adamw_small": [
+                {"m": m.clone(), "v": v.clone()} if m is not None and v is not None else None
+                for m, v in zip(self._small_m, self._small_v, strict=True)
+            ],
+        }
+
+    def load_consolidated(
+        self,
+        state: dict[str, Any],
+        world_size: int | None = None,
+        rank: int | None = None,
+    ) -> None:
+        """Re-shard a :meth:`consolidated_state_dict` back onto THIS process's topology — pure
+        local slicing, NO collectives (each rank keeps only the matrices / rows it owns). A d20
+        saved on 8 ranks resumes on 8; the same consolidated file resumes at world size 1 (owned =
+        everything) so the full model params can be extracted for serving. ``world_size``/``rank``,
+        if given, are asserted to match this optimizer's own topology (a guard against loading a
+        shard plan built for a different layout — the reshard target is always ``self``).
+
+        Inverse of the save's un-pad: the consolidated tensors carry exactly ``K`` matrices /
+        ``dim0`` rows, and this rank re-selects its owned slice (Muon: ``shard.owned`` matrices;
+        AdamW: rows ``[row0, row0 + n_rows)``); pad-only ranks get ``None`` state, exactly as a
+        fresh :meth:`step` would leave them.
+        """
+        if world_size is not None and world_size != self.world_size:
+            raise ValueError(
+                f"load_consolidated reshards onto THIS optimizer's topology (world_size "
+                f"{self.world_size}); got world_size={world_size}"
+            )
+        if rank is not None and rank != self.rank:
+            raise ValueError(
+                f"load_consolidated reshards onto THIS optimizer's rank ({self.rank}); "
+                f"got rank={rank}"
+            )
+        if state.get("format") != "consolidated":
+            raise ValueError(
+                "load_consolidated expects a consolidated_state_dict (format='consolidated'); "
+                "for a rank-local shard resume use load_state_dict"
+            )
+        self._t = int(state["t"])
+        for shard, group_mom in zip(self._muon_shards, state["muon_momentum"], strict=True):
+            if group_mom is None:
+                shard.momentum = None
+            else:
+                shard.momentum = [group_mom[g].clone() for g in shard.owned]
+        for rshard, mv in zip(self._row_shards, state["adamw_rows"], strict=True):
+            if mv is None or rshard.n_rows == 0:
+                rshard.m = None
+                rshard.v = None
+            else:
+                r0, r1 = rshard.row0, rshard.row0 + rshard.n_rows
+                rshard.m = mv["m"][r0:r1].clone()
+                rshard.v = mv["v"][r0:r1].clone()
+        small = state["adamw_small"]
+        self._small_m = [None if mv is None else mv["m"].clone() for mv in small]
+        self._small_v = [None if mv is None else mv["v"].clone() for mv in small]
+
+
+@torch.no_grad()
+def assert_model_replicas_identical(model: nn.Module) -> None:
+    """Collectively verify every rank holds byte-identical model weights — the guard to run
+    BEFORE a consolidated save, whose model payload is rank 0's ``state_dict`` alone. Each
+    parameter is ``all_gather``-ed and rank r compared to rank 0; a mismatch raises the SAME
+    error on EVERY rank (all ranks call the same ``all_gather``s and see the same gathered
+    tensors, so they raise together at the same parameter — no lone raiser, no hang). A no-op
+    without an initialised process group (single-process replicas are trivially identical).
+
+    Catches a silent replica desync (a broken ``all_gather`` in :meth:`DistMuonAdamW.step`, a
+    stray per-rank weight write) at save time, rather than shipping a subtly wrong model."""
+    if not (dist.is_available() and dist.is_initialized()):
+        return
+    world_size = dist.get_world_size()
+    if world_size == 1:
+        return
+    for name, p in model.named_parameters():
+        gathered = [torch.empty_like(p) for _ in range(world_size)]
+        dist.all_gather(gathered, p.data.contiguous())
+        for r in range(1, world_size):
+            if not torch.equal(gathered[0], gathered[r]):
+                raise RuntimeError(
+                    f"model replicas diverged at parameter {name!r}: rank {r} disagrees with "
+                    "rank 0 — refusing a consolidated save whose model state is rank 0's alone "
+                    "(a desync bug; check the all_gather copy-back in DistMuonAdamW.step)"
+                )
+
+
+__all__ = ["SMALL_PARAM_NUMEL", "DistMuonAdamW", "assert_model_replicas_identical"]
