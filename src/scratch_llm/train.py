@@ -26,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from torch import Tensor
 
 from scratch_llm.model import ModelConfig, TransformerLM, cross_entropy
@@ -36,7 +37,9 @@ from scratch_llm.optim import (
     build_optimizer,
     cosine_lr,
     gradient_clipping,
+    split_muon_adamw_params,
 )
+from scratch_llm.utils.dist_train import DistMuonAdamW
 from scratch_llm.utils.seeding import seed_everything
 
 
@@ -232,6 +235,13 @@ def train(
     ``cfg.seed`` reseeds the data-sampling RNG here so batches are deterministic. For
     *end-to-end* reproducibility, seed before constructing ``model`` too — weight init
     happens before this call and is not covered by the reseed.
+
+    A7 — distributed mode (activated ONLY by an initialized ``torch.distributed`` process
+    group; single-process runs are byte-identical to before): params broadcast once from
+    rank 0, each rank samples a DIFFERENT batch stream (numpy RNG offset by rank), the
+    optimizer becomes :class:`~scratch_llm.utils.dist_train.DistMuonAdamW` (optimizer-embedded
+    ZeRO-2 — the grad clip moves inside its step), the NaN guard is collective (all ranks
+    raise together), and logging/eval/checkpointing are rank-0-only.
     """
     if cfg.amp_dtype not in (None, "bf16"):
         raise ValueError(
@@ -242,17 +252,67 @@ def train(
             "qk_clip=True requires ModelConfig.track_attn_logits=True — the clip reads the "
             "per-head max-logit observer; without it every step would be a silent no-op"
         )
+    distributed = dist.is_available() and dist.is_initialized()
+    rank = dist.get_rank() if distributed else 0
+    if distributed and model.cfg.moe is not None:
+        raise ValueError(
+            "distributed train() does not support MoE yet: moe_update_biases() nudges router "
+            "biases from per-rank token counts, which would silently desync the replicas"
+        )
+    if distributed and cfg.qk_clip:
+        raise ValueError(
+            "distributed train() does not support qk_clip yet: per-rank S_max observations "
+            "would rescale head weights differently on each rank, silently desyncing replicas"
+        )
     seed_everything(cfg.seed)
+    if distributed:
+        # Per-rank data sharding: seed_everything just synced numpy's RNG across ranks, so
+        # without this offset every rank would draw IDENTICAL batches — a silent world_size×
+        # data loss. Torch RNG stays synced (identical init); only the batch sampler diverges.
+        np.random.seed(cfg.seed + 1000 * rank + 1)
     model.to(cfg.device)
-    optimizer = build_optimizer(
-        model,
-        kind=cfg.optimizer,
-        lr=cfg.max_lr,
-        betas=cfg.betas,
-        weight_decay=cfg.weight_decay,
-        muon_momentum=cfg.muon_momentum,
-        muon_profile_ns=cfg.muon_profile_ns,
-    )
+    if distributed:
+        # Belt-and-suspenders identical init: seeding before construction already makes the
+        # replicas identical, but a caller that seeded ranks differently would silently
+        # diverge — rank 0's weights are the canonical start.
+        handles = [dist.broadcast(p.data, src=0, async_op=True) for p in model.parameters()]
+        for handle in handles:
+            assert handle is not None  # async_op=True always yields a Work handle
+            handle.wait()
+    optimizer: torch.optim.Optimizer | CombinedOptimizer
+    if distributed:
+        # nanochat's verified shape: NO DDP wrapper — grads reduce-scatter INTO the optimizer,
+        # owner ranks update, params all_gather back (utils/dist_train.py). The grad clip moves
+        # inside its step (clipping unreduced local grads would clip the wrong norm); Muon's
+        # profile_ns instrument is single-process-only and is not wired here.
+        if cfg.optimizer == "muon_adamw":
+            muon_params, adamw_params = split_muon_adamw_params(model)
+        elif cfg.optimizer == "adamw":
+            blocks, rest = split_muon_adamw_params(model)
+            muon_params, adamw_params = [], blocks + rest  # everything on the AdamW shard path
+        else:
+            raise ValueError(
+                f"unknown optimizer kind {cfg.optimizer!r} (expected 'adamw' or 'muon_adamw')"
+            )
+        optimizer = DistMuonAdamW(
+            muon_params,
+            adamw_params,
+            lr=cfg.max_lr,
+            betas=cfg.betas,
+            weight_decay=cfg.weight_decay,
+            muon_momentum=cfg.muon_momentum,
+            max_l2_norm=cfg.grad_clip,
+        )
+    else:
+        optimizer = build_optimizer(
+            model,
+            kind=cfg.optimizer,
+            lr=cfg.max_lr,
+            betas=cfg.betas,
+            weight_decay=cfg.weight_decay,
+            muon_momentum=cfg.muon_momentum,
+            muon_profile_ns=cfg.muon_profile_ns,
+        )
     if optimizer_out is not None:
         optimizer_out.append(optimizer)
     # torch.compile wraps the module; keep the ORIGINAL for .cfg / .moe_update_biases / checkpoint
@@ -283,7 +343,10 @@ def train(
             else:
                 loss = cross_entropy(forward_model(inputs), targets)
         loss.backward()
-        gradient_clipping(model.parameters(), cfg.grad_clip)
+        if not distributed:
+            # Distributed mode: the clip lives INSIDE DistMuonAdamW.step — the global norm is a
+            # property of the REDUCED (averaged) grads, so clipping local grads here is wrong.
+            gradient_clipping(model.parameters(), cfg.grad_clip)
         optimizer.step()
         if cfg.qk_clip:
             # F9 QK-Clip: rescale any head whose observed max logit exceeded τ this step. The
@@ -296,20 +359,32 @@ def train(
 
         if cfg.log_every and step % cfg.log_every == 0:
             loss_value = loss.item()  # the one host sync per log interval (R1 lesson)
-            if not math.isfinite(loss_value):
+            nonfinite = not math.isfinite(loss_value)
+            if distributed:
+                # Collective guard: a divergence one rank sees must stop ALL ranks together —
+                # a lone raiser would leave the others blocked in the next collective forever.
+                # Every rank hits this same log step, so the all_reduce is symmetric.
+                flag_device = cfg.device if dist.get_backend() == "nccl" else "cpu"
+                flag = torch.tensor([1.0 if nonfinite else 0.0], device=flag_device)
+                dist.all_reduce(flag, op=dist.ReduceOp.MAX)
+                nonfinite = bool(flag.item() > 0)
+            if nonfinite:
                 # Fail LOUD on divergence — never burn compute on a silently-NaN run (FRONTIER
                 # 'silent divergence' triage). Known trigger on this box: bf16 autocast + torch.compile
                 # together NaN on sm120 / torch-2.12 inductor (reproduces with plain AdamW); use
                 # bf16-eager or fp32-compile here — bf16+compile is the H100-rental path.
+                where = loss_value if not math.isfinite(loss_value) else "on another rank"
                 raise RuntimeError(
-                    f"non-finite loss ({loss_value}) at step {step}: training diverged. Check the LR, "
+                    f"non-finite loss ({where}) at step {step}: training diverged. Check the LR, "
                     "or avoid bf16 + torch.compile together on sm120 (an inductor codegen bug)."
                 )
             history.append((step, loss_value))
-            if cfg.verbose:
+            if cfg.verbose and rank == 0:
                 print(f"step {step:6d} | lr {lr:.2e} | loss {loss_value:.4f}")
         if (
-            cfg.eval_every
+            rank == 0  # val windows are deterministic — one rank's eval is authoritative, and
+            # _val_loss runs no collectives, so the guard cannot desync the ranks
+            and cfg.eval_every
             and val_data is not None
             and eval_hook is not None
             and (step % cfg.eval_every == 0 or step == cfg.max_steps - 1)
@@ -319,7 +394,10 @@ def train(
                 _val_loss(model, val_data, cfg.context_length, cfg.eval_batches, cfg.device),
             )
         if (
-            cfg.checkpoint_every
+            rank == 0  # replicas are identical — rank 0's save is the run's save; note the
+            # optimizer payload is rank 0's LOCAL shard (DistMuonAdamW.state_dict; full-gather
+            # consolidation is A8 scope)
+            and cfg.checkpoint_every
             and cfg.checkpoint_path
             and step > 0
             and step % cfg.checkpoint_every == 0

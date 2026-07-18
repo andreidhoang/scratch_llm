@@ -22,6 +22,34 @@ import torch
 from torch import Tensor, nn
 
 
+def adamw_update_(
+    p: Tensor,
+    grad: Tensor,
+    m: Tensor,
+    v: Tensor,
+    t: int,
+    *,
+    lr: float,
+    beta1: float,
+    beta2: float,
+    eps: float,
+    weight_decay: float,
+) -> None:
+    """One AdamW update, in place on ``(p, m, v)`` — the exact per-tensor math of
+    :meth:`AdamW.step`, exposed as a pure function so the A7 sharded optimizer
+    (``utils/dist_train.py``) can run the identical update on an owned slice. ``t`` is the
+    1-based step count for bias correction. The update is elementwise, so it is shard-safe:
+    updating a dim-0 slice with the slice's grad and moments equals updating the full tensor."""
+    m.mul_(beta1).add_(grad, alpha=1 - beta1)
+    v.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+
+    alpha_t = lr * math.sqrt(1 - beta2**t) / (1 - beta1**t)
+    p.addcdiv_(m, v.sqrt().add_(eps), value=-alpha_t)
+
+    if weight_decay != 0:
+        p.add_(p, alpha=-lr * weight_decay)
+
+
 class AdamW(torch.optim.Optimizer):
     """AdamW with **decoupled** weight decay (Loshchilov & Hutter 2019).
 
@@ -77,18 +105,19 @@ class AdamW(torch.optim.Optimizer):
                     state["m"] = torch.zeros_like(p)
                     state["v"] = torch.zeros_like(p)
 
-                m, v = state["m"], state["v"]
                 state["step"] += 1
-                t = state["step"]
-
-                m.mul_(beta1).add_(grad, alpha=1 - beta1)
-                v.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
-
-                alpha_t = lr * math.sqrt(1 - beta2**t) / (1 - beta1**t)
-                p.addcdiv_(m, v.sqrt().add_(eps), value=-alpha_t)
-
-                if weight_decay != 0:
-                    p.add_(p, alpha=-lr * weight_decay)
+                adamw_update_(
+                    p,
+                    grad,
+                    state["m"],
+                    state["v"],
+                    state["step"],
+                    lr=lr,
+                    beta1=beta1,
+                    beta2=beta2,
+                    eps=eps,
+                    weight_decay=weight_decay,
+                )
 
         return loss
 
@@ -165,6 +194,27 @@ def _zeropower_via_newtonschulz5(g: Tensor, steps: int = 5) -> Tensor:
     if transposed:
         x = x.T
     return x.to(g.dtype)
+
+
+def muon_momentum_(grad: Tensor, buf: Tensor, momentum: float, nesterov: bool) -> Tensor:
+    """Muon's SGD-momentum accumulation, in place on ``buf``; returns the effective gradient
+    fed to Newton–Schulz (the Nesterov look-ahead when ``nesterov``). Extracted unchanged from
+    :meth:`Muon.step` so the A7 sharded optimizer (``utils/dist_train.py``) runs the identical
+    math on the whole matrices it owns."""
+    buf.mul_(momentum).add_(grad)
+    return grad.add(buf, alpha=momentum) if nesterov else buf
+
+
+def muon_apply_(
+    p: Tensor, ortho: Tensor, *, lr: float, weight_decay: float, rms_scale: float
+) -> None:
+    """Muon's RMS-matched orthogonalized update with decoupled weight decay, in place on ``p``
+    (see :class:`Muon` for the derivation). Extracted unchanged from :meth:`Muon.step` for the
+    same shard-reuse reason as :func:`muon_momentum_`."""
+    scale = rms_scale * math.sqrt(max(p.shape[0], p.shape[1]))
+    if weight_decay != 0:
+        p.mul_(1 - lr * weight_decay)  # decoupled WD (uses current θ)
+    p.add_(ortho, alpha=-lr * scale)
 
 
 class Muon(torch.optim.Optimizer):
@@ -255,9 +305,7 @@ class Muon(torch.optim.Optimizer):
                 state = self.state[p]
                 if "momentum_buffer" not in state:
                     state["momentum_buffer"] = torch.zeros_like(p)
-                buf = state["momentum_buffer"]
-                buf.mul_(momentum).add_(grad)
-                g_eff = grad.add(buf, alpha=momentum) if nesterov else buf
+                g_eff = muon_momentum_(grad, state["momentum_buffer"], momentum, nesterov)
                 if self.profile_ns:
                     if p.is_cuda:
                         torch.cuda.synchronize()
@@ -269,10 +317,7 @@ class Muon(torch.optim.Optimizer):
                     self.ns_calls += 1
                 else:
                     ortho = _zeropower_via_newtonschulz5(g_eff, ns_steps)
-                scale = rms_scale * math.sqrt(max(p.shape[0], p.shape[1]))
-                if weight_decay != 0:
-                    p.mul_(1 - lr * weight_decay)  # decoupled WD (uses current θ)
-                p.add_(ortho, alpha=-lr * scale)
+                muon_apply_(p, ortho, lr=lr, weight_decay=weight_decay, rms_scale=rms_scale)
 
         return loss
 

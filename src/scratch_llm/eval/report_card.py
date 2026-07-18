@@ -4,7 +4,10 @@ Bundles the intrinsic metric (``val_bpb``) with the task families (multiple-choi
 one comparable artifact, plus a **CORE-style** aggregate. Honest naming: ``core_style_score`` is the
 DCLM-CORE *aggregation recipe* (random-baseline-centered mean accuracy) — it is the official CORE
 score only when fed the official CORE task suite; on an arbitrary task set it is a CORE-*style*
-number, not the leaderboard metric.
+number, not the leaderboard metric. The official 22-task suite now lives in
+:mod:`scratch_llm.eval.core_suite` (P3), which reuses this module's ``core_style_score`` for both
+per-task centering and the CORE mean — that path IS the leaderboard metric (recipe-verified against
+nanochat; see its docstring for the tokenizer caveat).
 """
 
 from __future__ import annotations
