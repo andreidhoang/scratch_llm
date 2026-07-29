@@ -76,6 +76,11 @@ class SpeedrunConfig:
     # of re-running it (the rental safety-net). midtrain/sft are the A4/A5 slots: 0 = skipped.
     work_dir: str | None = None
     resume: bool = False
+    # A8/d20 intra-stage safety-net: every N pretrain steps train() also writes an
+    # optimizer-STATE snapshot to work_dir/pretrain_ckpt.pt (the consolidated full-gather
+    # file under torch.distributed) — distinct from the optimizer-FREE stage-boundary
+    # pretrain.pt. Spot preemption loses the node without warning; 0 = never. Needs work_dir.
+    checkpoint_every: int = 0
     midtrain_steps: int = 0
     sft_steps: int = 0
     # A5: assistant-masked SFT over the chat template. sft_steps>0 requires chat=True (the
@@ -156,9 +161,9 @@ def _train_tokenizer(
 # A2 — the chained stage functions. Each stage is independently callable; stage boundaries
 # persist config-carrying, optimizer-FREE checkpoints into cfg.work_dir (the pinned
 # stage-transition policy: every stage builds a fresh optimizer with its own LR warmup —
-# resuming Adam/Muon moments across an adamw↔muon_adamw switch is undefined; intra-run resume
-# with optimizer state is train()'s separate checkpoint_every path). A4 midtrain / A5 SFT /
-# A6 chat hang off this spine.
+# resuming Adam/Muon moments across an adamw↔muon_adamw switch is undefined; intra-stage
+# optimizer-state snapshots are train()'s checkpoint_every path, threaded here via
+# SpeedrunConfig.checkpoint_every). A4 midtrain / A5 SFT / A6 chat hang off this spine.
 # -----------------------------------------------------------------------------------------------
 
 
@@ -207,6 +212,12 @@ def stage_pretrain(
         return model, "pretrain[resumed]"
 
     model = TransformerLM(model_config_for_depth(cfg.depth, vocab_size, cfg.context_length))
+    intra_ckpt = _work_path(cfg, "pretrain_ckpt.pt")
+    if cfg.checkpoint_every and intra_ckpt is None:
+        raise ValueError(
+            "checkpoint_every>0 needs work_dir — intra-stage snapshots (optimizer state, "
+            "the spot-preemption resume file) persist to work_dir/pretrain_ckpt.pt."
+        )
     train(
         TrainConfig(
             max_steps=cfg.train_steps,
@@ -219,6 +230,8 @@ def stage_pretrain(
             amp_dtype=cfg.amp_dtype,
             compile=cfg.compile,
             device=cfg.device,
+            checkpoint_every=cfg.checkpoint_every,
+            checkpoint_path=str(intra_ckpt) if intra_ckpt is not None else None,
         ),
         tokens,
         model,
@@ -457,6 +470,13 @@ def main() -> None:
         action="store_true",
         help="Rebuild finished stages from --work-dir artifacts instead of re-running them.",
     )
+    p.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=0,
+        help="Write an optimizer-state snapshot to --work-dir/pretrain_ckpt.pt every N "
+        "pretrain steps (the d20 spot-preemption safety-net; 0 = never).",
+    )
     args = p.parse_args()
 
     cfg = (
@@ -477,6 +497,7 @@ def main() -> None:
             data_dir=args.data_dir,
             work_dir=args.work_dir,
             resume=args.resume,
+            checkpoint_every=args.checkpoint_every,
         )
     )
     print(run_speedrun(cfg).summary())
