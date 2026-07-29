@@ -26,6 +26,13 @@ gpu = [
     "transformers>=4.44",
     "datasets>=2.20",
 ]
+# AOT kernel build — the rental-box frontier-kernel path (CMake + CUDA arch list).
+# `TORCH_CUDA_ARCH_LIST="9.0a;10.0a" pip install -e ".[gpu-aot]"` builds csrc/*.cu
+# into the `_scratch_llm_kernels` torch extension. CPU-only CI never installs this.
+gpu-aot = [
+    "torch>=2.4",
+    "ninja",
+]
 # `uv pip install -e ".[dev]"`
 dev = [
     "pytest>=8.0",
@@ -66,7 +73,7 @@ packages = ["src/scratch_llm"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests"]
+src = ["src", "tests", "bench"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
@@ -75,31 +82,51 @@ ignore = ["E501"]  # line length enforced softly; long math/comments allowed
 [tool.ruff.lint.per-file-ignores]
 # The Triton kernel import must follow `pytest.importorskip("triton")` (so the module skips on a
 # CPU box) — that intentionally breaks import-at-top (E402) and the import sorter (I001).
-"tests/test_flash_attention_triton.py" = ["E402", "I001"]
+# Kernel benches under bench/kernels/ resolve bench/ + src/ on sys.path at runtime (move-proof
+# `_harness.py` lookup), so their E402 (import-not-at-top) is intentional too.
+"tests/kernels/test_flash_attention_triton.py" = ["E402", "I001"]
+"tests/kernels/test_flash_attention_fa3.py" = ["E402", "I001"]
+"bench/kernels/**/*.py" = ["E402"]
 
 [tool.pyright]
 include = ["src", "tests"]
 # Triton kernels use the `kernel[grid](...)` launch syntax static checkers can't model, and run
-# only on a GPU box — type-checked there by execution, not here.
+# only on a GPU box — type-checked there by execution, not here. Same for JIT-loaded CUDA modules
+# (cpp_extension.load / load_inline return an opaque pybind handle). Paths mirror the
+# kernels/<family>/<backend>/ tree (ADR-0011); GPU benches under bench/kernels/ are excluded for
+# the same reason (Triton launch + sibling `_harness` import resolved at runtime, not statically).
 exclude = [
-    "src/scratch_llm/kernels/flash_attention_triton.py",
-    "src/scratch_llm/kernels/paged_decode_triton.py",
-    "src/scratch_llm/kernels/gemv_triton.py",
-    # A2/A3 kernels (Triton launch syntax + JIT-loaded CUDA modules): static checkers can't model
-    # `kernel[grid](..., num_warps=...)` or a cpp_extension.load() return — type-checked on the GPU
-    # box by execution (their gpu-marked tests), like the rest of this list.
-    "src/scratch_llm/kernels/softmax_triton.py",
-    "src/scratch_llm/kernels/norm_triton.py",
-    "src/scratch_llm/kernels/topk_triton.py",
-    "src/scratch_llm/kernels/gemm_triton.py",
-    "src/scratch_llm/kernels/gemm_smem_cuda.py",
-    "src/scratch_llm/kernels/wmma_gemm.py",
-    "src/scratch_llm/kernels/gemm_mma_sync.py",
-    "src/scratch_llm/kernels/matmul.py",
-    "src/scratch_llm/kernels/bench.py",
-    "src/scratch_llm/kernels/inference",
-    "tests/test_matmul.py",
-    "tests/test_flash_attention_triton.py",
+    # Triton @jit kernel bodies + launchers (attention, gemm/triton, norm, reduce)
+    "src/scratch_llm/kernels/attention/prefill/fa2.py",
+    "src/scratch_llm/kernels/attention/decode/paged.py",
+    "src/scratch_llm/kernels/attention/reference.py",
+    "src/scratch_llm/kernels/gemm/triton/tiled.py",
+    "src/scratch_llm/kernels/gemm/triton/gemv.py",
+    "src/scratch_llm/kernels/norm/normalize.py",
+    "src/scratch_llm/kernels/reduce/softmax.py",
+    "src/scratch_llm/kernels/reduce/topk.py",
+    # CUDA C++ JIT loaders (mma.sync / smem-tiled via cpp_extension.load; wmma via load_inline)
+    "src/scratch_llm/kernels/gemm/cuda/mma_sync.py",
+    "src/scratch_llm/kernels/gemm/cuda/smem_tiled.py",
+    "src/scratch_llm/kernels/gemm/wmma/gemm.py",
+    # Frontier CUDA C++ loaders (WGMMA/tcgen05/FA3 promoted; fp8/stream_k/persistent stubs).
+    # Same reason as mma.sync above: opaque pybind handles static checkers cannot model.
+    "src/scratch_llm/kernels/gemm/cuda/wgmma.py",
+    "src/scratch_llm/kernels/gemm/cuda/tcgen05.py",
+    "src/scratch_llm/kernels/gemm/cuda/fp8.py",
+    "src/scratch_llm/kernels/gemm/cuda/stream_k.py",
+    "src/scratch_llm/kernels/gemm/cuda/persistent.py",
+    "src/scratch_llm/kernels/attention/prefill/fa3.py",
+    # GPU benches: Triton launch + runtime sys.path resolution of bench/_harness.py
+    "bench/kernels",
+    # GPU tests that drive the above
+    "tests/kernels/test_flash_attention_triton.py",
+    "tests/kernels/test_flash_attention_fa3.py",
+    "tests/kernels/test_gemm_wgmma.py",
+    "tests/kernels/test_gemm_tcgen05.py",
+    "tests/kernels/test_gemm_fp8.py",
+    "tests/kernels/test_gemm_stream_k.py",
+    "tests/kernels/test_persistent_gemv.py",
 ]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"

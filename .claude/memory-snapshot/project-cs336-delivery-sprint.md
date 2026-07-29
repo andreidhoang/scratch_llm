@@ -33,7 +33,7 @@ wall-clock, stop gating builds on his hand-building.
 
 **How to apply:**
 - Never write in the perf agents' zone: `performance/`, `src/scratch_llm/serving/`,
-  `kernels/paged_decode_triton.py`, perf sections of `bench/RESULTS.md` (other agents own it,
+  `src/scratch_llm/kernels/attention/decode/paged.py`, perf sections of `bench/RESULTS.md` (other agents own it,
   possibly concurrently in the same checkout).
 - Shared files (CLAUDE.md, STATUS.md, pyproject.toml, bench/RESULTS.md): pull-rebase before
   commit, additive edits, never `git add -A`.

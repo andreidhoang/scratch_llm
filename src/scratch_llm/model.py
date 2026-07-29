@@ -294,7 +294,7 @@ class MultiHeadSelfAttention(nn.Module):
             if isinstance(cache, PagedKVCache) and cache.use_kernel:
                 # R4.1b: fused paged decode — reads blocks via the table; no gathered padded
                 # view, no materialized scores, no GQA repeat (the R3b padding tax removed).
-                from scratch_llm.kernels.paged_decode_triton import (
+                from scratch_llm.kernels.attention.dispatch import (
                     paged_decode_attention,  # pyright: ignore[reportAttributeAccessIssue]
                 )
 
@@ -344,7 +344,7 @@ class MultiHeadSelfAttention(nn.Module):
                 self._observe_max_logits(q, k, mask)
 
             if self.cfg.use_triton_attention and q.is_cuda and row_mask is None:
-                from scratch_llm.kernels.flash_attention_triton import (
+                from scratch_llm.kernels.attention.dispatch import (
                     TritonFlashAttention,  # pyright: ignore[reportAttributeAccessIssue]
                 )
 

@@ -1,6 +1,6 @@
 """Activation (gradient) checkpointing — the recompute-vs-store memory lever for training.
 
-A2 systems. The *same* trade as the FA2 backward (``kernels/flash_attention.py``), one level up:
+A2 systems. The *same* trade as the FA2 backward (``kernels/attention/prefill/fa2.py``), one level up:
 instead of recomputing the attention probability matrix, recompute whole ``TransformerBlock``
 internals in the backward pass so their activations need not be stored during the forward. Three
 modes span the trade:

@@ -38,13 +38,51 @@ jobs:
           uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Ruff (lint + import order)
-        run: ruff check src tests
+        run: ruff check src tests bench/kernels
 
       - name: Ruff (format check)
-        run: ruff format --check src tests
+        run: ruff format --check src tests bench/kernels
 
       - name: Pyright (types)
         run: pyright
 
       - name: Pytest (CPU gate — mirrors the commit hook)
         run: pytest -m "not gpu and not slow" --cov=scratch_llm
+
+  # Optional GPU-AOT build job — verifies the CMake / setup.py AOT build compiles
+  # for the rental frontier archs (sm_90a, sm_100a). Runs ONLY when the `gpu-aot`
+  # label is applied to a PR (or on a self-hosted GPU runner). continue-on-error so
+  # the CPU job stays green even if the GPU build environment is unavailable.
+  # This is the "did the csrc/ tree stay compile-clean?" guardrail.
+  gpu-aot-build:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'gpu-aot')
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CUDA toolkit (nvcc)
+        uses: Jimver/cuda-toolkit@v0.2.21
+        with:
+          cuda: '12.4.0'
+          method: network
+
+      - name: Install uv + Python
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python + venv
+        run: |
+          uv python install 3.11
+          uv venv --python 3.11
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+
+      - name: Install (gpu-aot extra — torch + ninja)
+        run: uv pip install -e ".[gpu-aot]"
+
+      - name: Build AOT extension for sm_90a (compile-only — no GPU to run)
+        run: |
+          TORCH_CUDA_ARCH_LIST="9.0a" python setup.py build_ext --inplace
+          python -c "from scratch_llm import _scratch_llm_kernels; print(dir(_scratch_llm_kernels))"

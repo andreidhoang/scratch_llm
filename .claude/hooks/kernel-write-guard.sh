@@ -29,7 +29,17 @@ if [ "$mode" = "delegate" ]; then
 fi
 
 case "$path" in
-  */src/scratch_llm/kernels/matmul.py | */src/scratch_llm/kernels/*_triton.py | *_kernel.py)
+  */src/scratch_llm/kernels/matmul.py | \
+  */src/scratch_llm/kernels/*_triton.py | \
+  */src/scratch_llm/kernels/*/prefill/* | \
+  */src/scratch_llm/kernels/*/decode/* | \
+  */src/scratch_llm/kernels/*/triton/* | \
+  */src/scratch_llm/kernels/*/cuda/* | \
+  */src/scratch_llm/kernels/*/wmma/* | \
+  */src/scratch_llm/kernels/norm/triton.py | \
+  */src/scratch_llm/kernels/reduce/* | \
+  */src/scratch_llm/kernels/common/online_softmax.py | \
+  *_kernel.py)
     echo "[MEAT BOUNDARY] $path is a kernel implementation — you reconstruct it from blank." >&2
     echo "Claude won't write it. Use /tutor for the mechanism, then write it in your own editor." >&2
     echo "(To lift this for full agent delegation, set .claude/execution-mode to 'delegate' — ADR-0013.)" >&2
