@@ -49,7 +49,22 @@
 > ⇒ tick ✅ + ngày + neo ở đó, advance `Learning-node:`. Đây là cái làm trải nghiệm học **liền mạch xuyên
 > session**.
 
-## 🧭 PRE-FLIGHT trước khi train GPU thật → [`CODEBASE_READING_ORDER.md`](CODEBASE_READING_ORDER.md)
+## 📚 BOOK CHAPTER MAP → [`BOOK_CHAPTER_MAP.md`](BOOK_CHAPTER_MAP.md)
+
+> **Khi đọc sách nào, chương nào, vì sao.** Bản đồ duy nhất gắn 3 cuốn sách (CUDA for DL · 5D
+> Parallelism · PPPM) vào đúng điểm chèn của curriculum. Mỗi chương: **READ** (gap thật) · **SKIM**
+> (delta nhỏ) · **SKIP** (đã owned sâu hơn trong code). Load file này trước mỗi drill/mock để biết
+> chương nào phải đọc TRƯỚC round đó.
+>
+> **Tóm tắt ưu tiên build (raw CUDA C++, PPPM):**
+> 1. `csrc/fundamentals/reduction_warp.cu` ← PPPM Ch10 — k_live Level 2 (URGENT)
+> 2. `csrc/fundamentals/tiled_transpose.cu` ← PPPM Ch5/6 — k_live Level 3
+> 3. `csrc/fandamentals/prefix_scan.cu` ← PPPM Ch11 — scan classic
+>
+> **Gap duy nhất 5D Parallelism:** Ch04 (Sequence/Context Parallelism + Ring Attention) — chèn
+> giữa S6 6.2 và 6.3.
+
+## 🧭 PRE-FLIGHT before train GPU thật → [`CODEBASE_READING_ORDER.md`](CODEBASE_READING_ORDER.md)
 
 > Cách một senior frontier-RE (hay Karpathy) **đọc cả codebase trước khi tiêu một GPU-hour**: đúng thứ
 > tự file (theo dòng chảy của tensor), mỗi file kèm oracle cần verify + anchor `file · symbol · line`.

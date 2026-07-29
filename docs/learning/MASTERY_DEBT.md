@@ -23,3 +23,22 @@
 | 13 | Triton FlashAttention-2 backward (recomputation, D-vector, atomic dQ, model wiring) | `kernels/flash_attention_triton.py` · `model.py` | Derive FlashAttention-2's backward pass, the D-vector optimization, and explain why dQ needs atomic operations. | — | ☐ |
 
 *(rows appended as modules ship — see `docs/EXECUTION_SPEC_CS336_FINISH.md` for the build DAG)*
+
+---
+
+## Raw CUDA C++ fundamentals (PPPM chapters — the Triton Trap gap)
+
+> **Vì sao mục này tồn tại.** Codebase kernel work là ~95% Triton (`.py` files). Triton tự động
+> hoá coalescing, tiling, bank-conflict avoidance, reduction — đúng là các skill mà NVIDIA k_live
+> yêu cầu viết **bằng tay trong CUDA C++**. Khoảng trống này là rủi ro cao nhất cho Lane-K.
+> Tham chiếu: [`BOOK_CHAPTER_MAP.md`](BOOK_CHAPTER_MAP.md) · k_live spec:
+> `JOB_SPRINT/challenges/nvidia/k_live/spec.md`.
+
+| # | Concept | Files (code + tests) | The interview question it answers | Source chapter | Lesson | Cleared |
+|---|---------|----------------------|-----------------------------------|---------------|--------|---------|
+| P1 | Warp shuffle reduction + block reduction + atomic (`__shfl_down_sync`) | `csrc/fundamentals/reduction_warp.cu` (TO BUILD) | k_live Level 2: write a reduction kernel using warp shuffle + shared memory + atomic | PPPM Ch10 | — | ☐ |
+| P2 | Parallel prefix sum / scan (Kogge-Stone intra-warp + block-level) | `csrc/fundamentals/prefix_scan.cu` (TO BUILD) | Write a parallel scan; when Kogge-Stone vs Blelloch? (MoE routing, stream compaction) | PPPM Ch11 | — | ☐ |
+| P3 | Tiled matrix transpose with bank-conflict-free SMEM | `csrc/fundamentals/tiled_transpose.cu` (TO BUILD) | k_live Level 3: tiled transpose, shared memory banking, coalescing | PPPM Ch5/6 | — | ☐ |
+| P4 | Tiled GEMM in CUDA-core (NOT tensor-core) | `csrc/fundamentals/tiled_gemm.cu` (TO BUILD) | k_live Level 4: SMEM double-buffer, register accumulation, occupancy tuning | PPPM Ch6/18 | — | ☐ |
+| P5 | SM architecture: warps, divergence, occupancy, latency hiding | (reading — no code) | k-arch: "explain warp execution model, divergence, occupancy" | PPPM Ch4 | — | ☐ |
+| P6 | Memory coalescing patterns + thread coarsening | (reading — no code) | k_live grading: "explain your memory access pattern" | PPPM Ch6 | — | ☐ |

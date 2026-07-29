@@ -61,7 +61,13 @@ Open these **before** you start building the assignment; run the `.py` ones alon
 - **L8** (pdf) parallelism basics → the DP/TP/PP comms algebra → ZeRO-1 → FSDP + the 100B one-pager.
 - **L10** (py) inference → the KV-cache incremental-decode path (`rollout/`, `sampling.py`).
 
-> **External CUDA text (kernels track).** *CUDA for Deep Learning* (in `interview_synthesis/`) is the primary hands-on CUDA source feeding A2's `kernels/` and the DELTA spike — chapter map: naive kernels → `kernels/` warm-up; transformer inference + optimizing kernels → the FA2/decode path; tensor cores + flash attention → `kernels/flash_attention*`; quantization → the FP8/INT4 labs; CUTLASS → the C2.5 real-kernel rung. Per-chapter loop = **predict → reconstruct from blank → compile → `ncu`/roofline → break → variant**; recurring rep = naive-matmul → cuBLAS.
+> **External CUDA texts (kernels track).** Three books feed A2's `kernels/` and the DELTA spike —
+> see `docs/learning/BOOK_CHAPTER_MAP.md` for the canonical chapter-by-chapter map:
+> - *CUDA for Deep Learning* (Manning MEAP v5, Arledge) — ch5–10 = A1–A6 (🔒 answer keys for `/rebuild` rungs; ch7.3+ WGMMA/TMA = only chapter still ahead).
+> - *PPPM* (Kirk/Hwu/El Hajj, 4th ed 2026) — Ch4/5/6/10/11 = raw CUDA C++ fundamentals that Triton abstracted away (🔥 the k_live gap — reduction, scan, tiled transpose, coalescing).
+> - *5D Parallelism for Large Model Training* — Ch04 = Ring Attention / Context Parallelism (the one genuine distributed-training gap).
+>
+> Per-chapter loop = **predict → reconstruct from blank → compile → `ncu`/roofline → break → variant**; recurring rep = naive-matmul → cuBLAS.
 
 ### A3 · Scaling — fit a curve, extrapolate under a FLOP budget ⬜
 **`L9 → L11`** *(then `L12` for eval discipline)*

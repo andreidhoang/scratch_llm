@@ -112,34 +112,66 @@ mức-decode ở **S1 Bài 1.0** (Stage 7, khi phục vụ). Không phải trùn
 ## Đồ thị phụ thuộc (vì sao đan xen)
 
 ```
-        M1 → M2 ───────────────► (op nóng hổi) ───► S3 → S4      ┐ compute
-              │  \                                    │           │ kernels
-              ▼   \                                   ▼           │
-        M3 → M4    \                             (roofline mindset)
-              │     \                                             │
-              ▼      ▼ (twin)                                     ▼
-        M5 ──────── S6                                    ┌──► M4 MFU
-         │                                                │
-         ▼                                                │
-        M6 → M7 → M8 ──(rollout seam)───────────┐         │
-                        │                       │ dùng    │
-                        ▼                       ▼ serving  │
-                       M9 (MLA,MTP) ──────► S1 → S2 → S5   │ serving
-                        │  MLA→S2.2.8  MTP→S2 spec-decode  │
-                        └──────────────► M10 (capstone) ◄──┘
+        M1 → M2 ───────────────► (op nóng hổi) ───► [PPPM Ch4/5/6/10/11] → S3 → S4   ┐ compute
+              │  \                                              ↑ raw CUDA C++      │ kernels
+              ▼   \                                             │ fundamentals       │
+        M3 → M4    \                                     (roofline mindset)          │
+              │     \                                                                   │
+              ▼      ▼ (twin)                                                           ▼
+        M5 ──────── S6 ← [5D Ch04 Ring Attn]                                     ┌──► M4 MFU
+         │              ↑ insert between 6.2 and 6.3                              │
+         ▼              │                                                         │
+        M6 → M7 → M8 ──(rollout seam)───────────┐                                 │
+                        │                       │ dùng                              │
+                        ▼                       ▼ serving                            │
+                       M9 (MLA,MTP) ──────► S1 → S2 → S5                            │ serving
+                        │  MLA→S2.2.8  MTP→S2 spec-decode                          │
+                        └──────────────► M10 (capstone) ◄──┘                        │
 ```
-Mũi tên = "phải hiểu trước". Hai mối đan then chốt: **M2→S3/S4** (op→kernel) và **M9→S1/S2** (arch→serving).
+Mũi tên = "phải hiểu trước". Ba mối đan then chốt: **[PPPM]→S3** (raw CUDA C++ fundamentals BEFORE
+Triton abstractions), **M2→S3/S4** (op→kernel), **M9→S1/S2** (arch→serving). Xem [`BOOK_CHAPTER_MAP.md`](BOOK_CHAPTER_MAP.md)
+cho chi tiết từng chương sách chèn ở đâu.
 
 ---
 
 ## Cách dùng — giao thức mastery (một Bài một lần)
 
 1. **Theo thứ tự chặng 1→8.** Trong mỗi série, đọc theo thứ tự Bài nội bộ của nó (M2: 2.1→2.6; S1: 1.0→1.7…).
-2. **Mỗi micro-concept = PRR loop** (mặc định — "Master understanding — the PRR loop" của [`../../CLAUDE.md`](../../CLAUDE.md)): **Predict COLD** (Navigator viết dự đoán TRƯỚC mọi giải thích) → **Run** code thật (in shape/số/token, test red→green) → **Reconcile** chỉ chỗ lệch (Driver 3 dòng, không monologue) → **Re-derive + tự VẼ** ví dụ mới → **cổng teach-back + modify-and-predict** → frontier. KHÔNG đọc wall-of-text; internalize = Navigator *generate/run/draw*, không phải đọc. Chunk nhỏ hơn một Bài.
+2. **Mỗi micro-concept = PRR loop** (mặc định — "Master understanding — the PRR loop" của [`../../CLAUDE.md`](../../CLAUDE.md)): **Bắt đầu bằng PROBLEM/GOAL (không bắt đầu bằng lý thuyết) → Predict COLD** (Navigator viết dự đoán TRƯỚC mọi giải thích) → **Run** code thật (in shape/số/token, test red→green) → **Reconcile** chỉ chỗ lệch (Driver 3 dòng, không monologue) → **Re-derive + tự VẼ** ví dụ mới → **cổng teach-back + modify-and-predict** → frontier. KHÔNG đọc wall-of-text; internalize = Navigator *generate/run/draw*, không phải đọc. **Sách chỉ mở khi kẹt** — đọc đúng section sửa lỗi, không đọc cả chương trước khi build. Chunk nhỏ hơn một Bài.
 3. **Cổng là thật:** chưa dạy lại được (trên ví dụ MỚI) thì chưa sang Bài sau. Qua cổng ⇒ tick ở study-queue [`INDEX.md`](INDEX.md). **Spaced callback:** mở session kế bằng 1 câu recall từ Bài ✅ trước.
 4. **Trung thực số (FOP-4):** "Neo" đã gắn nhãn — invariant đã đo / số thật trong `bench/RESULTS.md` / PREDICTION pre-registered. Nửa mô hình phần lớn built+toy-tested (run thật rental-gated); nửa tốc độ sm120 đã đo. Đừng tin một con số chưa gắn nhãn measured — và trong PRR, *chính con số đo được* là cái đối chiếu với prediction của bạn.
 
 ---
+
+## 📚 Sách & chương — đọc gì, ở đâu, vì sao → [`BOOK_CHAPTER_MAP.md`](BOOK_CHAPTER_MAP.md)
+
+Trước mỗi chặng, consult `BOOK_CHAPTER_MAP.md` để biết chương sách nào **PHẢI đọc** (gap thật),
+chương nào **SKIP** (đã owned sâu hơn trong code). Tóm tắt:
+
+| Chặng | Book/Chapter | Verdict | Khi nào |
+|---|---|---|---|
+| **2 (S3)** | **PPPM Ch4/5/6** — SM arch, SMEM tiling, coalescing | **READ** (raw CUDA C++ fundamentals that Triton abstracted away) | **Before S3 3.1** (Triton kernels) |
+| **2 (S3)** | **PPPM Ch10** — Reduction (`__shfl_down_sync`) | **READ + BUILD** `csrc/fundamentals/reduction_warp.cu` | **URGENT — k_live Level 2** |
+| **2 (S3)** | **PPPM Ch11** — Prefix Sum (Kogge-Stone scan) | **READ + BUILD** `csrc/fundamentals/prefix_scan.cu` | After Ch10 |
+| **2 (S3)** | PPPM Ch7 (halo pattern) · Ch9 (atomics) · Ch14 (stream compaction) · Ch15 (sparse/CSR) | **SKIM** — transfers to sliding-window attn, FA2 backward, KV eviction, MoE grouped GEMM | When relevant |
+| **2 (S3)** | CUDA for DL ch6 | 🔒 Answer key — Phase 2 `/rebuild` only | During P0.5 rebuild rungs |
+| **2 (S4)** | CUDA for DL ch7.3–7.5 (WGMMA/TMA) | ✅ Free reading (only book chapter still ahead of ledger) | Before P1 H100 day |
+| **2 (S4)** | CUDA for DL ch8 (FA) | 🔒 Answer key | During P0.5 rebuild |
+| **3 (S6)** | **5D Parallelism Ch04** — Sequence/Context Parallelism + Ring Attention | **READ ALL (70 min)** — the one genuine distributed gap | Between S6 6.2 and 6.3 |
+| **3 (S6)** | 5D Parallelism Ch03 "TP vs ZeRO for Inference" | **SKIM (13 min)** | After S6 6.1 |
+| **3 (S6)** | 5D Parallelism Ch05 "Megatron 3D" | **SKIM (14 min)** | After S6 6.2 |
+| **7 (S5)** | CUDA for DL ch9 (Quant) | 🔒 Answer key | During P0.5 rebuild |
+
+## 🔮 2026 Frontier Extensions → [`FRONTIER_2026_EXTENSION.md`](FRONTIER_2026_EXTENSION.md)
+
+89-Bài là **nền text-LLM**. Frontier 2026 mở rộng 4 hướng (Stage 9+, additive không thay thế):
+
+| Frontier | Là gì | Loại | Tier |
+|---|---|---|---|
+| **A: Multimodal** (M11/S7) | VLM (ViT+LLaVA), DiT diffusion, video, audio — kết nối trực tiếp M2 Transformer + S5 quant | 🔨 Build ViT; ⚪ know DiT | ★ 2026 differentiator |
+| **B: Reasoning AI** (S2.10) | Test-time compute, parallel sampling, search-at-inference, token budget | ⚪ know-it-discuss | ★ 2026 differentiator |
+| **C: Agentic Systems** (mock) | Multi-turn tool use, sandboxing, safety stack, agent eval | Mock round `a-agentic` | ★ Anthropic core |
+| **D: Physical AI** (mock) | GR00T VLA, Cosmos world models, sim-to-real, Jetson deployment | Mock round `k-physical` | ★ NVIDIA robotics |
 
 ## Neo tuyển dụng — mỗi chặng "ăn" gate phỏng vấn nào (join với [`FRONTIER_HIRING_MAP.md`](FRONTIER_HIRING_MAP.md))
 
