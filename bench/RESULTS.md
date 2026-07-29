@@ -562,8 +562,8 @@ INT4-KV visibly degrades (the stress test bites). §7 NVFP4-native-MMA throughpu
 
 The *why* of flash attention, made falsifiable. R0 = naive attention as three separate ops
 (S=QKᵀ/√d, P=softmax(S) causal, O=P@V) that materializes the full N×N score matrix; R1 = the
-single-row online-softmax recurrence in isolation. Modules: `src/scratch_llm/kernels/attention_naive.py`,
-`online_softmax.py`. Oracle-first: R0 vs `F.scaled_dot_product_attention` <1e-3 fp32; R1 vs a literal
+single-row online-softmax recurrence in isolation. Modules: `src/scratch_llm/kernels/attention/reference_naive.py`,
+`common/online_softmax.py`. Oracle-first: R0 vs `F.scaled_dot_product_attention` <1e-3 fp32; R1 vs a literal
 3-pass reference softmax <1e-6 fp64. 42 CPU tests (`not gpu` gate) + 1 gpu-marked peak-memory test.
 
 | date | rung | hardware | metric | predicted | measured | bound | root cause |

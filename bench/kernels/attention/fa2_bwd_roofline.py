@@ -1,6 +1,6 @@
 """A2.1 roofline (backward) — Triton FA2 fwd+bwd vs SDPA-flash fwd+bwd, on the machine's peaks.
 
-The FA2 *backward* (``kernels/flash_attention_triton.py`` ``TritonFlashAttention``) shipped
+The FA2 *backward* (``kernels/attention/prefill/fa2.py`` ``TritonFlashAttention``) shipped
 implemented-not-measured; FOP-3 says a kernel's DoD is a **profile**, not a green test. This is that
 profile. Same hardened methodology as ``bench/flash_roofline.py`` (its forward twin): gate on
 correctness first (a fast wrong kernel scores zero), time with CUDA events + L2 flush, report the
@@ -18,18 +18,25 @@ Work model (per (B,H), documented so the number is auditable):
   - fwd+bwd HBM traffic ≈ 3× the forward's ideal 4·B·H·N·d (bwd also streams O, dO, L and writes
     dQ, dK, dV) — a lower bound; atomics on dQ add real traffic this model does not credit.
 
-Run on the GPU box:  python bench/flash_bwd_roofline.py   (--help for shape/dtype overrides)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.attention.fa2_bwd_roofline   (--help for shape/dtype overrides)
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from _harness import Roofs, bench_ms, provenance_line, smi, spread_pct
 
-from scratch_llm.kernels.flash_attention_triton import TritonFlashAttention
+# bench/ on sys.path for the shared _harness (resolve upward to the dir holding _harness.py).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
+from _harness import Roofs, bench_ms, provenance_line, smi, spread_pct  # noqa: E402
+
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels.attention.prefill.fa2 import TritonFlashAttention  # noqa: E402
 
 try:
     from torch.nn.attention import SDPBackend, sdpa_kernel

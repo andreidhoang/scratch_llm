@@ -1,7 +1,7 @@
 """A4 Rungs 2+3 — MEASURE the existing Triton FA2 forward on THIS sm120 Blackwell card.
 
 This does NOT rebuild FA2. It benchmarks the shipped `flash_attention_triton_forward`
-(`kernels/flash_attention_triton.py`, the autotuned FA2 Algorithm-1 forward) against
+(`kernels/attention/prefill/fa2.py`, the autotuned FA2 Algorithm-1 forward) against
 `F.scaled_dot_product_attention` (SDPA, flash backend) on the standing RTX PRO 4000 Blackwell
 (sm120, 70 SMs), and reports the four things the A4 rung asks for:
 
@@ -27,19 +27,26 @@ Measurement methodology is the shared `_harness` (CUDA-event timing, per-rep L2 
 p20–p80 spread, peaks measured on THIS GPU). ncu is blocked in this unprivileged container, so the
 absolute anchor is %-of-measured-peak, not an SM-level profile (ncu-debt).
 
-Run on the GPU box:  python bench/flash_sm120.py   (--help for shape/dtype overrides)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.attention.fa2_sm120   (--help for shape/dtype overrides)
 """
 
 from __future__ import annotations
 
 import argparse
 import math
+import sys
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from _harness import Roofs, bench_ms, provenance_line, smi, spread_pct
 
-from scratch_llm.kernels.flash_attention_triton import flash_attention_triton_forward
+# bench/ on sys.path for the shared _harness (resolve upward to the dir holding _harness.py).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
+from _harness import Roofs, bench_ms, provenance_line, smi, spread_pct  # noqa: E402
+
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels.attention.prefill.fa2 import flash_attention_triton_forward  # noqa: E402
 
 # The card's advertised/stat-sheet bf16 tensor peak, used as the fixed roofline anchor the rung
 # names ("% of the 72 TF/s bf16 peak"). Roofs.measure() confirms it live (~72.3 TF/s cuBLAS GEMM).

@@ -5,7 +5,7 @@ bf16-tensor-core roof a pure-CUDA-core, shared-memory-tiled hgemm reaches at >=2
 single-digit %-of-cuBLAS — this is the floor with NO tensor cores; the whole point of A3 is that WMMA
 and mma.sync beat it. Measured the same way as every other kernel bench (CUDA-event timing, L2 flush).
 
-Run on the GPU box:  PYTHONPATH=../src python gemm_smem_cuda.py   (or --n 4096)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.gemm.cuda_smem   (or --n 4096)
 """
 
 from __future__ import annotations
@@ -16,11 +16,14 @@ from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # bench/ for the R0 harness
+# bench/ on sys.path for the shared _harness (resolve upward to the dir holding _harness.py —
+# move-proof: this script lives at bench/kernels/<family>/, two levels below bench/).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
 from _harness import Roofs, bench_ms, provenance_line, spread_pct  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from scratch_llm.kernels.gemm_smem_cuda import gemm_smem  # noqa: E402
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels.gemm.cuda.smem_tiled import gemm_smem  # noqa: E402
 
 
 def main() -> None:
@@ -47,7 +50,9 @@ def main() -> None:
     cublas_tflops = flops / (cublas_med * 1e-3) / 1e12
     print(f"\n# cuBLAS (torch.matmul) baseline: {cublas_med:.3f} ms · {cublas_tflops:.1f} TF/s\n")
 
-    header = f"{'stage':<14}{'ms':>10}{'spread%':>9}{'TF/s':>9}{'%roof':>8}{'%cuBLAS':>9}{'%72TF':>8}"
+    header = (
+        f"{'stage':<14}{'ms':>10}{'spread%':>9}{'TF/s':>9}{'%roof':>8}{'%cuBLAS':>9}{'%72TF':>8}"
+    )
     print(header)
     print(
         f"{'cuBLAS':<14}{cublas_med:>10.3f}{'—':>9}{cublas_tflops:>9.1f}"

@@ -28,7 +28,7 @@ block auto-vectorizes and coalesces (the block *is* the row, contiguous). We do 
 float4 path; a raw-CUDA variant would add explicit ``float4``/``__ldg`` and a warp-shuffle tree
 reduction, and would be where an ncu ``sectors/request`` (ideal 4) check lives. See ncu_debt below.
 
-Run on the GPU box:  python bench/norm.py   (--help for shape overrides)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.norm.normalize   (--help for shape overrides)
 """
 
 from __future__ import annotations
@@ -41,11 +41,13 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # bench/ on path for _harness
+# bench/ on sys.path for the shared _harness (resolve upward to the dir holding _harness.py).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
 from _harness import Roofs, bench_ms, provenance_line, spread_pct  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from scratch_llm.kernels.norm_triton import layernorm_triton, rmsnorm_triton  # noqa: E402
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels.norm.normalize import layernorm_triton, rmsnorm_triton  # noqa: E402
 
 # The ncu metric the raw-CUDA float4 variant would inspect on the H100 day (counters blocked here).
 NCU_DEBT = "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum / requests (sectors/request, ideal 4 = fully coalesced 128-bit loads)"

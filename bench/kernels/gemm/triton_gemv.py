@@ -4,22 +4,29 @@ GEMV (``y = A @ x``) reads A once for one MAC/element ⇒ ``AI ≈ 1 FLOP/byte``
 **memory-bound**, so the deliverable is **GB/s and %-of-HBM-peak**, not FLOP/s. Traffic model:
 ``bytes = M*N*2 (A, bf16) + N*2 (x) + M*2 (y)`` — A dominates. FLOPs = ``2*M*N``.
 
-The ladder (see ``kernels/gemv_triton.py``): naive one-warp-per-row → coalesced block-per-row
+The ladder (see ``kernels/gemm/triton/gemv.py``): naive one-warp-per-row → coalesced block-per-row
 (autotuned) → split-N two-stage (atomics). Correctness is gated first (a fast wrong kernel scores
 zero) against ``torch.mv``. Target: the best stage > 80% of the measured HBM peak (>440 GB/s of
 0.55 TB/s) at M=N=8192. ``torch.mv`` is reported as the vendor reference.
 
-Run on the GPU box:  python bench/gemv.py            (--help for shape overrides)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.gemm.triton_gemv   (--help for shape overrides)
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
 import torch
-from _harness import Roofs, bench_ms, provenance_line, spread_pct, waves
 
-from scratch_llm.kernels.gemv_triton import gemv_blockrow, gemv_naive, gemv_split
+# bench/ on sys.path for the shared _harness (resolve upward to the dir holding _harness.py).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
+from _harness import Roofs, bench_ms, provenance_line, spread_pct, waves  # noqa: E402
+
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels.gemm.triton.gemv import gemv_blockrow, gemv_naive, gemv_split  # noqa: E402
 
 # The ncu section this kernel would inspect on the H100 day (counters BLOCKED on this box,
 # ERR_NVGPUCTRPERM): a GEMV lives or dies on load efficiency, so the sector/request ratio is the one.

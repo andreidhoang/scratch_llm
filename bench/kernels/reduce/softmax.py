@@ -28,19 +28,27 @@ the kernel docstring. ncu is blocked here (ERR_NVGPUCTRPERM); the metric to disc
 is ``l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum / requests`` (sectors/request → coalescing) plus
 ``sm__throughput`` Memory% (Speed-of-Light: confirm the kernel is DRAM-bound, not launch-bound).
 
-Run on the GPU box:  python bench/softmax.py            (--help for shape overrides)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.reduce.softmax   (--help for shape overrides)
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from _harness import Roofs, provenance_line
-from kernel_roofline import KernelProfile, profile
 
-from scratch_llm.kernels.softmax_triton import softmax_triton
+# bench/ on sys.path for the shared _harness + kernel_roofline (resolve upward to the dir holding
+# _harness.py — move-proof across bench/kernels/<family>/).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
+from _harness import Roofs, provenance_line  # noqa: E402
+from kernel_roofline import KernelProfile, profile  # noqa: E402
+
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels.reduce.softmax import softmax_triton  # noqa: E402
 
 # stage → (read-passes over the row); +1 for the write pass = algorithmic HBM passes.
 _STAGES: dict[str, int] = {"twopass": 3, "online": 2, "fused": 1}

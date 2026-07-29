@@ -7,7 +7,7 @@ tensor-core throughput, not an L1-resident fantasy. The kernel takes float16 ope
 accumulates and outputs FP32; cuBLAS is measured on the same float16 inputs with fp32-accumulate and
 reduced-precision reduction OFF, the fairest apples-to-apples proxy.
 
-  Run on the GPU box:  PYTHONPATH=../src python gemm_mma_sync.py   (or --n 8192)
+  Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.gemm.cuda_mma_sync   (or --n 8192)
 
 ncu-debt (blocked here — ERR_NVGPUCTRPERM, unprivileged): the shared-load bank-conflict count
 (l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum, target ~0) is UNMEASURABLE on this box.
@@ -25,8 +25,8 @@ import torch
 import triton
 from torch import Tensor
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from scratch_llm.kernels.gemm_mma_sync import gemm_mma_sync  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
+from scratch_llm.kernels.gemm.cuda.mma_sync import gemm_mma_sync  # noqa: E402
 
 _BF16_PEAK_TF = 72.0  # measured bf16 tensor-core roof on this sm120 card (bench/RESULTS.md A2 R0)
 

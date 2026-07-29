@@ -24,20 +24,29 @@ Clocks: lock them if the host allows it (`sudo nvidia-smi -pm 1 && nvidia-smi -l
 unprivileged container that is usually blocked, so we instead warm to steady state and print the SM
 clock per row — if it drifts down across the sweep, distrust the tail.
 
-Run on the GPU box:  python bench/flash_roofline.py   (--help for shape/dtype overrides)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.attention.fa2_fwd_roofline   (--help for shape/dtype overrides)
 """
 
 from __future__ import annotations
 
 import argparse
 import math
+import sys
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from _harness import Roofs, bench_ms, provenance_line, smi, spread_pct, waves
 
-from scratch_llm.kernels import flash_attention_forward  # pure-PyTorch oracle (the ground truth)
-from scratch_llm.kernels.flash_attention_triton import flash_attention_triton_forward
+# bench/ on sys.path for the shared _harness (resolve upward to the dir holding _harness.py).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
+from _harness import Roofs, bench_ms, provenance_line, smi, spread_pct, waves  # noqa: E402
+
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels import (
+    flash_attention_forward,  # pure-PyTorch oracle (the ground truth)  # noqa: E402
+)
+from scratch_llm.kernels.attention.prefill.fa2 import flash_attention_triton_forward  # noqa: E402
 
 # Optional like-for-like baseline: the upstream FA2 CUDA kernel. Absent on this box; column shows n/a.
 try:
@@ -73,7 +82,7 @@ def _selected_block_q(n: int, d: int) -> int:
     """Best-effort read of the autotuner's chosen BLOCK_Q for this shape (drives the CTA count).
     Falls back to 128 (the larger candidate → fewer CTAs → conservative under-fill warning)."""
     try:
-        from scratch_llm.kernels.flash_attention_triton import _fa2_fwd_kernel
+        from scratch_llm.kernels.attention.prefill.fa2 import _fa2_fwd_kernel
 
         for key, cfg in _fa2_fwd_kernel.cache.items():
             if n in key and d in key:

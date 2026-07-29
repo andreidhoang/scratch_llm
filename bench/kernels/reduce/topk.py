@@ -15,7 +15,7 @@ Two things this bench proves, both honestly:
 ncu is BLOCKED on this box (ERR_NVGPUCTRPERM) → the bound is established by achieved-vs-measured-peak
 % (this harness); the ncu metric we WOULD inspect is registered as debt below.
 
-Run on the GPU box:  python bench/topk.py   (--help for shape overrides)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.reduce.topk   (--help for shape overrides)
 """
 
 from __future__ import annotations
@@ -26,11 +26,14 @@ from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # bench/ on sys.path for _harness
+# bench/ on sys.path for the shared _harness (resolve upward to the dir holding _harness.py).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
 
 from _harness import Roofs, bench_ms, provenance_line, spread_pct  # noqa: E402
 
-from scratch_llm.kernels.topk_triton import fused_softmax_topk, topk_last_dim  # noqa: E402
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels.reduce.topk import fused_softmax_topk, topk_last_dim  # noqa: E402
 
 # The ncu metric this rung would inspect on the H100 day (counters blocked here).
 NCU_DEBT = "launch__waves_per_multiprocessor + warp state 'No Eligible' (dependent-reduction stall)"

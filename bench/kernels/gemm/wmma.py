@@ -9,7 +9,7 @@ This is a *synchronous* WMMA kernel (128x128 block tile, 8 warps x 4x2 fragments
 no cp.async double-buffering — the book's "basic WMMA" cut. Expect a meaningful-but-sub-cuBLAS fraction;
 the identified path to the tuned 40-60% band is cp.async GMEM->SMEM overlap (see the module docstring).
 
-Run on the GPU box:  PYTHONPATH=../src python wmma_gemm.py   (or --n 8192)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.gemm.wmma   (or --n 8192)
 """
 
 from __future__ import annotations
@@ -20,11 +20,13 @@ from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # bench/ for the shared harness
+# bench/ on sys.path for the shared _harness (resolve upward to the dir holding _harness.py).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
 from _harness import Roofs, bench_ms, provenance_line, spread_pct  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from scratch_llm.kernels.wmma_gemm import wmma_gemm  # noqa: E402
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels.gemm.wmma.gemm import wmma_gemm  # noqa: E402
 
 # Nominal FP16/BF16 tensor-core peak quoted for this RTX PRO 4000 Blackwell (sm120), for the
 # %-of-peak column. cuBLAS on this card measures a hair above it, so %-of-cuBLAS is the tighter number.

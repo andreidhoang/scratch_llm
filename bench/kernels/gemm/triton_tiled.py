@@ -9,7 +9,7 @@ At 4096^3 the arithmetic intensity (~1365 FLOP/byte minimal-traffic, ~512 under 
 is far past this card's ridge (~131 FLOP/byte): the GEMM is compute-bound, so %-of-peak here means
 %-of-the-bf16-tensor-core-roof, and %-of-cuBLAS is the tighter, fairer number (cuBLAS ≈ that roof).
 
-Run on the GPU box:  PYTHONPATH=../src python gemm.py   (or --n 8192)
+Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.gemm.triton_tiled   (or --n 8192)
 """
 
 from __future__ import annotations
@@ -22,12 +22,15 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # bench/ for the R0 harness
+# bench/ on sys.path for the shared _harness + kernel_roofline (resolve upward to the dir holding
+# _harness.py — move-proof: this script lives at bench/kernels/<family>/, two levels below bench/).
+_BENCH_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "_harness.py").exists())
+sys.path.insert(0, str(_BENCH_ROOT))
 from _harness import Roofs, bench_ms, provenance_line, spread_pct  # noqa: E402
 from kernel_roofline import profile  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from scratch_llm.kernels.gemm_triton import (  # noqa: E402
+sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
+from scratch_llm.kernels.gemm.triton.tiled import (  # noqa: E402
     gemm_autotuned,
     gemm_naive,
     gemm_tiled,
