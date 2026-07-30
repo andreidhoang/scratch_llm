@@ -12,6 +12,18 @@ from __future__ import annotations
 
 from scratch_llm.eval.generative import GenResult, evaluate_generative
 from scratch_llm.eval.metrics import BpbResult, bits_per_byte
+from scratch_llm.eval.moe_ablation import (
+    AblationArm,
+    AblationSpec,
+    Granularity,
+    ablation_table,
+    build_moe_config,
+    evaluate_val_loss,
+    router_diagnostics,
+    run_moe_ablation,
+    save_ablation_results,
+    train_arm,
+)
 from scratch_llm.eval.multiple_choice import (
     MCResult,
     evaluate_multiple_choice,
@@ -47,9 +59,19 @@ from scratch_llm.eval.spec_acceptance import (
 )
 
 __all__ = [
+    "AblationArm",
+    "AblationSpec",
     "AcceptanceReport",
     "ArmResult",
     "BpbResult",
+    "Granularity",
+    "ablation_table",
+    "build_moe_config",
+    "evaluate_val_loss",
+    "router_diagnostics",
+    "run_moe_ablation",
+    "save_ablation_results",
+    "train_arm",
     "DomainPrompt",
     "DomainStats",
     "GenResult",

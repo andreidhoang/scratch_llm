@@ -87,6 +87,7 @@ ignore = ["E501"]  # line length enforced softly; long math/comments allowed
 "tests/kernels/test_flash_attention_triton.py" = ["E402", "I001"]
 "tests/kernels/test_flash_attention_fa3.py" = ["E402", "I001"]
 "bench/kernels/**/*.py" = ["E402"]
+"scripts/f6_moe_ablation.py" = ["E402"]
 
 [tool.pyright]
 include = ["src", "tests"]
