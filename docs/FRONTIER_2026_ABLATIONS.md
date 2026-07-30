@@ -417,6 +417,9 @@ honestly and three of them didn't survive a tuned baseline / a proper control."*
 
 ## Source-of-truth pointers
 
+- **Refactored end-to-end plan (2026-07-30, latest):** [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md)
+  — 9-angle 2026 research pass synthesized into the full S0→S8 pipeline, re-ranked EV order, the new
+  S3 scaling-law-calibration gate, and the updated honesty ledger. Read this first.
 - **Buildable task breakdown (the next-phase DAG):** [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)
   — 25 rungs (A-loop-to-chat + B-ablation, incl. F10 linear-hybrid + F11 agentic-RL added 2026-07-09),
   EV-ranked, each with exact interfaces / tests / falsifier /

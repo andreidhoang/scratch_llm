@@ -22,6 +22,10 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > authoring moved to Python DSLs (FA4 = CuTe-DSL); **DELTA re-scoped** to the FP8/NVFP4 GDN-2 *decode*
 > kernel (FLA already ships the standard-precision one) married to F10 = the #1 co-designed artifact.
 >
+> **🗺️ Refactored end-to-end plan (2026-07-30):** [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md)
+> — 9-angle 2026 research pass folded into the full pipeline (S0 data → S8 serve), re-ranked EV order,
+> new S3 scaling-law-calibration gate before the $100 run, and the updated honesty ledger.
+>
 > **✅ THE LOOP CLOSES (2026-07-04):** F1 Muon · train-wiring/F4 (bf16/compile + NaN guard) · eval
 > report card (`val_bpb`/MC/generative/CORE-style) · `speedrun.py` + `scripts/speedrun.sh` spine all
 > SHIPPED + pushed — GPU-verified end-to-end talking sample (`RESULTS.md` §Phase 0). **A1 real-corpus
