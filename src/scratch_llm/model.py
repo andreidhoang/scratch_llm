@@ -40,6 +40,7 @@ from scratch_llm.kv_cache import (
 
 if TYPE_CHECKING:
     from scratch_llm.moe import AuxOutput, MoEConfig, MoEStats
+    from scratch_llm.mtp import MTPHead
 
 __all__ = [
     "AnyKVCache",
@@ -82,6 +83,9 @@ class ModelConfig:
     # forwards run a different precision regime (train.py::_val_loss is fp32) and must not mix
     # into the reported S_max. OFF (default) is byte-identical — zero extra ops.
     track_attn_logits: bool = False
+    # F2a MTP head (DeepSeek-V3, arXiv:2412.19437): 0 (default) = no aux head, byte-identical;
+    # 1 = build one MTPHead (see mtp.py) for the training-time next-next-token objective.
+    mtp_depth: int = 0
 
     def __post_init__(self) -> None:
         if self.d_model % self.n_heads != 0:
@@ -453,6 +457,16 @@ class TransformerLM(nn.Module):
         self.lm_head = Linear(cfg.d_model, cfg.vocab_size)
         if cfg.tie_embeddings:
             self.lm_head.weight = self.token_emb.weight
+        # F2a MTP head: built LAST so RNG consumption order of every base module is
+        # unchanged — a mtp_depth=0 vs 1 model under the same seed has bit-identical
+        # base weights and forward (tested in tests/test_mtp.py).
+        if cfg.mtp_depth > 1:
+            raise NotImplementedError("MTP depth D > 1 is not implemented (the F2a spec is D=1)")
+        self.mtp_head: MTPHead | None = None
+        if cfg.mtp_depth == 1:
+            from scratch_llm.mtp import MTPHead
+
+            self.mtp_head = MTPHead(cfg, self.token_emb, self.lm_head)
 
     def forward(
         self, token_ids: Tensor, cache: AnyKVCache | None = None, return_aux: bool = False
@@ -460,6 +474,21 @@ class TransformerLM(nn.Module):
         """``return_aux=False`` (default, and the decode path) returns just logits — identical
         to the dense build. ``return_aux=True`` returns ``(logits, AuxOutput)`` with the summed
         MoE aux/z losses and per-layer routing diagnostics for the training objective."""
+        x, layer_stats = self._trunk(token_ids, cache)
+        if cache is not None:
+            cache.advance(token_ids.shape[1])  # bump once, after all layers
+        logits = self.lm_head(x)
+        if return_aux:
+            return logits, self._aggregate_aux(layer_stats)
+        return logits
+
+    def _trunk(
+        self, token_ids: Tensor, cache: AnyKVCache | None = None
+    ) -> tuple[Tensor, list[MoEStats]]:
+        """embed → blocks → final_norm (everything before the LM head). Returns the trunk
+        hidden state (B, S, d_model) and the per-layer MoE stats ([] on a dense model).
+        Does NOT advance the cache — the caller owns that (once per forward, after all
+        layers, so each layer saw the same start)."""
         s = token_ids.shape[1]
         if isinstance(cache, SlotKVCache):
             # Ragged batched decode: each slot's next token sits at its own absolute position.
@@ -473,13 +502,26 @@ class TransformerLM(nn.Module):
             x, stats = block(x, positions, cache, layer_idx)
             if stats is not None:
                 layer_stats.append(stats)
-        x = self.final_norm(x)
-        if cache is not None:
-            cache.advance(s)  # bump once, after all layers, so each layer saw the same start
-        logits = self.lm_head(x)
-        if return_aux:
-            return logits, self._aggregate_aux(layer_stats)
-        return logits
+        return self.final_norm(x), layer_stats
+
+    def forward_train(
+        self, ids: Tensor, targets: Tensor
+    ) -> tuple[Tensor, AuxOutput | None, Tensor]:
+        """Training forward with the MTP aux head (F2a). ``targets`` is the one-step-shifted
+        ``ids`` (the usual next-token targets); the MTP head consumes their embeddings to
+        predict one token FURTHER ahead.
+
+        Returns ``(logits, aux, mtp_logits)``: ``logits`` are identical to ``forward(ids)``;
+        ``aux`` is the MoE :class:`AuxOutput` when the model is MoE, else ``None``;
+        ``mtp_logits[:, i]`` predicts ``targets[:, i+1]`` (the last position has no target —
+        slice it off when computing the loss)."""
+        if self.mtp_head is None:
+            raise ValueError("forward_train requires ModelConfig.mtp_depth >= 1")
+        h, layer_stats = self._trunk(ids)
+        logits = self.lm_head(h)
+        mtp_logits = self.mtp_head(h, targets)
+        aux = self._aggregate_aux(layer_stats) if self.cfg.moe is not None else None
+        return logits, aux, mtp_logits
 
     def _aggregate_aux(self, layer_stats: list[MoEStats]) -> AuxOutput:
         """Sum the MoE aux/z losses across layers (zeros on a dense model)."""

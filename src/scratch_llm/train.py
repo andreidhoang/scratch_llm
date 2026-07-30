@@ -236,6 +236,9 @@ class TrainConfig:
     # ModelConfig.track_attn_logits=True (the observer supplies S_max). Default OFF = untouched loop.
     qk_clip: bool = False
     qk_clip_tau: float = 100.0
+    # F2a — MTP aux head (DeepSeek-V3): weight λ on the one-token-further-ahead CE. Active only
+    # when the model was built with ModelConfig.mtp_depth >= 1; ignored otherwise (loss unchanged).
+    mtp_loss_weight: float = 0.3
 
 
 def _val_loss(
@@ -397,7 +400,18 @@ def train(
             else nullcontext()
         )
         with amp_ctx:
-            if model.cfg.moe is not None:
+            if model.cfg.mtp_depth > 0:
+                # F2a MTP: main CE (+ MoE aux if present) + λ·CE one token further ahead.
+                # Reads model.cfg (not forward_model) — the same wrapper-safe pattern as the
+                # MoE branch below (torch.compile / DDP wrappers forward the call but the
+                # ORIGINAL module carries the config).
+                logits, aux, mtp_logits = forward_model.forward_train(inputs, targets)
+                loss = cross_entropy(logits, targets) + cfg.mtp_loss_weight * cross_entropy(
+                    mtp_logits[:, :-1], targets[:, 1:]
+                )
+                if aux is not None:
+                    loss = loss + aux.total
+            elif model.cfg.moe is not None:
                 # MoE: add the sparse-regularization terms (seq-wise balance + router z-loss) to CE.
                 logits, aux = forward_model(inputs, return_aux=True)
                 loss = cross_entropy(logits, targets) + aux.total
