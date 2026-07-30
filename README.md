@@ -25,7 +25,10 @@ See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the A1→A5
 deliverable tagged **LOAD-BEARING / COURSE-ROTE / SKIP** and mapped to a source file. Live status:
 [`docs/STATUS.md`](docs/STATUS.md). The 2026 **frontier-practice layer** — per-pillar modern-default
 upgrades, opt-in build labs, and interview-awareness items (fact-checked) — is in
-[`docs/FRONTIER_PRACTICE_2026.md`](docs/FRONTIER_PRACTICE_2026.md).
+[`docs/FRONTIER_PRACTICE_2026.md`](docs/FRONTIER_PRACTICE_2026.md). The pipeline-level **end-to-end
+training plan** (2026-07-30, 9-angle 2026 research pass — S0→S8, data → tokenizer → pretrain → d20 →
+RL → serve/eval) is [`docs/FRONTIER_2026_END_TO_END_PLAN.md`](docs/FRONTIER_2026_END_TO_END_PLAN.md) —
+read it first; rung-level specs stay in `docs/FRONTIER_2026_TASKSPEC.md` / `docs/FRONTIER_2026_ABLATIONS.md`.
 
 **Capstone — DELTA** (the barbell *spike*, sitting on the A2/A5 base): a fused **GatedDeltaNet-2
 decode-step** kernel (target ≥85% of the H100 memory roofline; the "erase/write decoupling is free at

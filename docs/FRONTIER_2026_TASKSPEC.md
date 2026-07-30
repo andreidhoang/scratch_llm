@@ -8,6 +8,10 @@
 > zone note. Loop status: **CLOSED** (F1 Muon + train-wiring/F4 + eval harness + speedrun spine
 > shipped, GPU-verified talking sample). This is what comes next.
 >
+> **Pipeline-level plan of record (2026-07-30, 9-angle 2026 research pass):**
+> [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md) — the S0→S8 end-to-end plan.
+> **Read it first**; this doc stays the buildable rung-level spec (interfaces · tests · falsifiers · kills).
+>
 > **Provenance.** Produced 2026-07-04 by an 8-agent workflow (`w77bbp4pb`): one deep-spec agent per
 > rung reading the ACTUAL files it would touch + verifying primary sources, plus a sequencing critic.
 > 18 rung specs, 0 agent errors. The critic's genuinely-missing items are folded in as §B added

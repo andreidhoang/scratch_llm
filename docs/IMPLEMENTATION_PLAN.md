@@ -230,4 +230,7 @@ runs as a **third front** in parallel with the perf curriculum and DELTA; the tr
 what those fronts finally measure against. **The full engineering spec + execution DAG is the
 source of truth:** [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md) (decision:
 [`adr/ADR-0018`](adr/ADR-0018-close-the-loop-nanochat-front.md); ledger `bench/RESULTS.md`
-§Frontier ablations; plan of record `~/.claude/plans/misty-sniffing-cerf.md`).
+§Frontier ablations; plan of record `~/.claude/plans/misty-sniffing-cerf.md`). **Pipeline-level
+end-to-end plan (2026-07-30, 9-angle 2026 research pass) — read first:**
+[`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md) (S0→S8 pipeline · re-ranked EV
+order · S3 scaling-law gate before the d20 run; rung-level specs stay in ABLATIONS/TASKSPEC).

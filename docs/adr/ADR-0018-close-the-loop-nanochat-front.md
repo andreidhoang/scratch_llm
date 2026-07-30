@@ -5,6 +5,8 @@
 curriculum (`performance/PERF_PLAN.md`, ADR-0014 model) and DELTA (`../../DELTA.md`). Spec:
 `docs/FRONTIER_2026_ABLATIONS.md`. Plan of record: `~/.claude/plans/misty-sniffing-cerf.md`.
 
+**Status note (2026-07-30):** see [`../FRONTIER_2026_END_TO_END_PLAN.md`](../FRONTIER_2026_END_TO_END_PLAN.md) for the current refactored pipeline-level plan (S0→S8, re-ranked EV order); this ADR stands as the decision record.
+
 ## Context
 
 CS336 A1–A5 shipped (STATUS: 461 CPU tests, advanced serving stack). Read with claims-honesty

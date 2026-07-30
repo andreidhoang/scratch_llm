@@ -213,6 +213,10 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
   set), each with a falsifiable invariant and a dated source. Lever 2 like the rest of `docs/`: `CLAUDE.md`
   holds the pointer, this doc holds the depth, and 🟢-adoption is tracked back in `STATUS.md`'s build state
   (no separate ledger). Its provenance header records the fact-check pass + the later GDM-alignment batch.
+- **[`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md)** — the plan of record for the
+  close-the-loop / frontier-ablation front (2026-07-30, synthesized from a 9-angle 2026 research pass): the
+  pipeline-level S0→S8 end-to-end plan, with the re-ranked EV order + the S3 scaling-law gate before the d20
+  run. **Read it first** — rung-level specs stay in `FRONTIER_2026_TASKSPEC.md` / `FRONTIER_2026_ABLATIONS.md`.
 - **[`learning/`](learning/INDEX.md)** — the mastery track (Vietnamese): one Feynman/teach-back lesson per
   *shipped and measured* component, tracing exact `src/` functions (line anchors pinned to a commit), a
   hand-worked tensor example, the invariant→test map, and the teach-back gate with collapsed answers. This

@@ -44,6 +44,11 @@
 > below (Muon, MTP, MLA, MoE balancing, the RL "aha") graduate from "recommended" to
 > *measured-on-a-real-model*.
 
+> **➕ Pipeline-level plan (2026-07-30).** [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md)
+> — the end-to-end S0→S8 training plan for the close-the-loop front (9-angle 2026 research pass), with the
+> re-ranked EV order + the S3 scaling-law gate before the d20 run. **Read it first**; rung-level specs stay
+> in `FRONTIER_2026_TASKSPEC.md` / `FRONTIER_2026_ABLATIONS.md`.
+
 ## How to use the three tiers
 
 - **🟢 Modern default** — a small, high-value upgrade a 2026 from-scratch build *should* adopt as its

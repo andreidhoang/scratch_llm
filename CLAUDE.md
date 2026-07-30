@@ -38,8 +38,8 @@
 >   runbooks + compile-verified ISA kernels (`performance/rental/kernels/`) + WGMMA PTX artifact done.
 >   Mastery roadmap: [`docs/learning/roadmap/`](docs/learning/roadmap/README.md). Only the 3 rental DAYS
 >   remain (hardware-gated). Node pointer `performance/PERF_PLAN.md`. **Kernel-lane operating spec:
->   [`performance/KERNEL_ROADMAP_2026.md`](performance/KERNEL_ROADMAP_2026.md)** (2026-07-14 — verified
->   frontier delta, P0 quarry protocol `/kquarry`, P1+ phases gated per `../../JOB_SPRINT/MASTER_PLAN_2026-07-12.md`). Zone: `performance/`,
+>   [`performance/KERNEL_ROADMAP_2026.md`](performance/KERNEL_ROADMAP_2026.md)** (2026-07-14, re-verified
+>   2026-07-30 — verified frontier delta, P0 quarry protocol `/kquarry`, P1+ phases gated per `../../JOB_SPRINT/MASTER_PLAN_2026-07-12.md`). Zone: `performance/`,
 >   `src/scratch_llm/{serving,kernels,quant}/`, `mla.py`, `utils/{tp_mlp,pipeline_schedule,ep_moe,mfu}.py`,
 >   perf sections of `bench/RESULTS.md`, `docs/learning/roadmap/`.
 > - **Main-track front** — the CS336 A2→A5 finish, plan =
@@ -54,7 +54,10 @@
 >   re-verified vs the mid-2026 frontier 2026-07-09 — F1/F7/F4 reframed, F8 promoted, F10 linear-hybrid +
 >   F11 agentic-RL added; see `FRONTIER_2026_ABLATIONS.md` §10):**
 >   [`docs/FRONTIER_2026_TASKSPEC.md`](docs/FRONTIER_2026_TASKSPEC.md) (strategy:
->   [`docs/FRONTIER_2026_ABLATIONS.md`](docs/FRONTIER_2026_ABLATIONS.md)). Zone:
+>   [`docs/FRONTIER_2026_ABLATIONS.md`](docs/FRONTIER_2026_ABLATIONS.md)). **Pipeline-level end-to-end
+>   plan (2026-07-30, 9-angle 2026 research pass) — read first:**
+>   [`docs/FRONTIER_2026_END_TO_END_PLAN.md`](docs/FRONTIER_2026_END_TO_END_PLAN.md) (S0→S8 pipeline ·
+>   re-ranked EV order · S3 scaling-law gate before the d20 run; rung specs stay in TASKSPEC/ABLATIONS). Zone:
 >   `src/scratch_llm/{eval,data,algos}/` (additive), `scripts/`, `optim.py`, `train.py`, `speedrun.py`,
 >   `chat*.py`, `mtp.py`, `dsa.py`, additive `model.py`/`moe.py`, the F-rung sections of `bench/RESULTS.md`.
 >   **NEVER** edit perf-owned `mla.py`/`serving/`/`kernels/`/`quant/` — satisfy their Protocols instead.
@@ -342,6 +345,7 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
 | **Fresh-pod continuity** — rebuild everything on a newly rented Vast.ai GPU (Claude Code install · torch cu130/sm120 · hook re-link · **auto-memory restore**); the one-command `scripts/bootstrap-pod.sh` + what survives destroy vs what you rebuild | `docs/VASTAI_BOOTSTRAP.md` · `.claude/memory-snapshot/` |
 | **Per-assignment build guides** — every deliverable tagged + mapped to `src/scratch_llm/` (start at `INDEX.md`) | `docs/assignment_guides/` |
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |
+| **Close-the-loop front — pipeline-level end-to-end plan (read first)** (S0→S8: data → tokenizer → pretrain → S3 scaling-law gate → d20 → midtrain → SFT → RL → serve/eval; re-ranked EV order; 2026-07-30, 9-angle 2026 research pass) | `docs/FRONTIER_2026_END_TO_END_PLAN.md` |
 | **Close-the-loop front — strategy + DAG** (thesis, model tiers, F1–F11 falsifiers, verification, honesty ledger; **§10 = 2026-07-09 frontier re-verification**) | `docs/FRONTIER_2026_ABLATIONS.md` |
 | **Close-the-loop front — buildable task spec** (25 rungs A/F incl. F10 linear-hybrid + F11 agentic-RL, exact interfaces + tests + falsifier + kill + zone; START-HERE current node) | `docs/FRONTIER_2026_TASKSPEC.md` |
 | Design specs — KV-cache · rollout seam · FA2 roofline · MoE walkthrough | `docs/design/` |
