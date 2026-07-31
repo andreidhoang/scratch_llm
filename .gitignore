@@ -46,8 +46,6 @@ wandb/
 .venv-backups/
 .claude/settings.local.json
 
-# Hands-on mastery track folder
-mastery/
 
 
 # AOT kernel build artifacts (the CMake/setup.py output for csrc/*.cu).
