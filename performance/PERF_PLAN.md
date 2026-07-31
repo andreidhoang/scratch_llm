@@ -102,6 +102,17 @@ LINCHPIN realized: the static buffer + serve() harness from R3b is the substrate
   measures against (bench/continuous.py is the standing workload).
 ```
 
+> **⚠ 2026-07-30 frontier re-verification (orientation only — no resequence).** Full curriculum
+> re-audit against primary sources landed (details: `references.md` §8 + `KERNEL_ROADMAP_2026.md` §1
+> 07-30 block; git diff 2026-07-30): CUTLASS 4.5.2→**4.6.0** · vLLM v0.26 + **AFD plugin**
+> (Attention–FFN disaggregation) · `flash-attn-4` pip (Hopper+Blackwell; FP8/FP4 numbers still
+> absent; cuDNN 9.24 matches it; Hopper-decode regression stands) · **B300 = sm_103** (may
+> substitute the P2 B200 rental at equal price, +50% FP4) · Vera Rubin vendor figures only ·
+> **DELTA niche re-checked: still open**. Curriculum files (00/A1–A7/references/spec) refreshed in
+> place; **phase map, Current Node, and rental days unchanged**. New mechanism-literacy adds to
+> know: sparse attention NSA/DSA (A4 §4.3) · AFD (A1 §4.6) · batch-invariance (A1 §5) · NCCL
+> device API (A6 §2.2) · MoE grouped GEMM (A2 §7).
+
 > **⚠ 2026-07-14 roadmap consolidation — orient HERE for the kernel lane.** The kernel lane now runs on
 > **[`KERNEL_ROADMAP_2026.md`](KERNEL_ROADMAP_2026.md)** (user-requested; five-stream primary-source
 > verification). It **supersedes the 07-09 note below where they conflict** — headline deltas: FA4

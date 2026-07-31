@@ -60,3 +60,6 @@ csrc/build/
 csrc/*.egg-info/
 build/
 *.egg-info/
+
+# Session tooling
+.zcode/

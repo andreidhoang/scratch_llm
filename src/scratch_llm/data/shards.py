@@ -42,7 +42,7 @@ from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -306,7 +306,9 @@ def download_fineweb_slice(
 
 
 # ---------------------------------------------------------------------------------------------
-# FineWeb-EDU parquet bulk path (F1 scale) — hub discovery / plan / download (stdlib only)
+# HF parquet bulk path (F1 scale) — hub discovery / plan / download (stdlib only). The
+# default target is FineWeb-EDU sample-10BT; --repo-id/--subdir/--text-column generalize it
+# (F12 stages ClimbMix through the same machinery; see the ClimbMix constants below).
 # ---------------------------------------------------------------------------------------------
 
 _HF_HUB = "https://huggingface.co"
@@ -320,6 +322,24 @@ FINEWEB_EDU_SAMPLE_10BT = "sample/10BT"
 # streaming builder anyway (``StreamStats.bytes_per_token`` measures the realized ratio);
 # ``plan_parquet_download``'s safety margin absorbs the residual error.
 PARQUET_BYTES_PER_TOKEN = 2.95
+
+# --- ClimbMix (F12's challenger corpus) -------------------------------------------
+# [FACT, hub tree API + datasets-server /info, 2026-07-31]: nvidia/Nemotron-ClimbMix ships NO
+# raw-text column. The parquet bulk files live under ``climbmix_small/`` (100
+# ``shard_*.tokenized.parquet``, ~0.3–1.1 GiB each); the schema is ``{cluster_id: int64,
+# tokens: list<int64> — GPT-2 token ids, token_count: int64}``. Raw text is recovered by
+# GPT-2-detokenizing ``tokens``: the card's ``detokenize_climbmix.py`` does it with tiktoken;
+# :func:`build_gpt2_detokenizer` below is the stdlib-only equivalent (no new deps). License
+# CC BY-NC 4.0 (research only). NOTE: PARQUET_BYTES_PER_TOKEN was measured on raw-text
+# parquet; for tokenized parquet it is a rougher [INFERENCE] — the 1.25 safety margin plus
+# the exact ``target_tokens`` stop in ``stream_tokenize_to_shards`` absorb the difference.
+CLIMBMIX_DATASET = "nvidia/Nemotron-ClimbMix"
+CLIMBMIX_SMALL_SUBDIR = "climbmix_small"
+CLIMBMIX_TOKENS_COLUMN = "tokens"
+
+# GPT-2's encoder (id ↔ token-string in the byte↔unicode mapped space), downloaded once and
+# cached — the only artifact the tiktoken-free ClimbMix detokenizer needs.
+GPT2_ENCODER_URL = "https://openaipublic.blob.core.windows.net/gpt-2/models/124M/encoder.json"
 
 
 @dataclass(frozen=True)
@@ -501,20 +521,86 @@ def iter_parquet_doc_batches(
     *,
     text_column: str = "text",
     batch_size: int = 1024,
+    decode: Callable[[Any], str] | None = None,
 ) -> Iterator[list[str]]:
     """Stream document texts batch-wise from parquet files — bounded RAM, order-stable.
 
     Reads ``text_column`` only (columnar projection: other columns never leave disk) via
     ``ParquetFile.iter_batches``, so peak memory is one record batch, never a whole file.
     Null/empty texts are dropped — they carry no tokens and would emit bare-EOT documents.
+
+    ``decode`` is the column-mapping seam for corpora that ship no raw text: when set, each
+    non-empty column value is mapped through it (e.g. ClimbMix's GPT-2-tokenized ``tokens``
+    column paired with :func:`build_gpt2_detokenizer`). ``None`` (default) is byte-identical
+    to the pre-seam behavior: ``str(value)``.
     """
     pq = _require_pyarrow_parquet()
     for path in paths:
         with pq.ParquetFile(path) as pf:
             for batch in pf.iter_batches(batch_size=batch_size, columns=[text_column]):
-                docs = [str(t) for t in batch.column(text_column).to_pylist() if t]
+                docs = []
+                for value in batch.column(text_column).to_pylist():
+                    if not value:
+                        continue
+                    text = str(value) if decode is None else decode(value)
+                    if text:
+                        docs.append(text)
                 if docs:
                     yield docs
+
+
+def _gpt2_bytes_to_unicode_inverse() -> dict[str, int]:
+    """GPT-2's byte↔unicode printable table, INVERTED (mapped char → original byte value).
+
+    GPT-2's byte-level BPE re-maps every byte to a printable unicode char: the printable
+    ranges keep their identity, the rest land at 2^8+n. ``encoder.json`` stores tokens in
+    that mapped space, so detokenization needs the inverse to recover raw bytes.
+    """
+    printable = (
+        list(range(ord("!"), ord("~") + 1))
+        + list(range(ord("¡"), ord("¬") + 1))
+        + list(range(ord("®"), ord("ÿ") + 1))
+    )
+    mapped = printable[:]
+    n = 0
+    for byte in range(256):
+        if byte not in printable:
+            printable.append(byte)
+            mapped.append(256 + n)
+            n += 1
+    return {chr(m): b for b, m in zip(printable, mapped, strict=True)}
+
+
+def build_gpt2_detokenizer(
+    cache_dir: str | Path, *, timeout: float = 30.0
+) -> Callable[[Sequence[int]], str]:
+    """A GPT-2 detokenizer (token ids → text), stdlib-only — the ClimbMix text recovery path.
+
+    Downloads GPT-2's ``encoder.json`` once into ``cache_dir`` (``.part``-rename, so a killed
+    download never leaves a truncated file masquerading as a good one), inverts it, and maps
+    each token's chars back through the byte↔unicode table. An id missing from the encoder
+    raises — a silent skip would corrupt document boundaries.
+    """
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    dest = cache_dir / "gpt2_encoder.json"
+    if not dest.exists():
+        part = dest.with_suffix(".json.part")
+        with (
+            urllib.request.urlopen(GPT2_ENCODER_URL, timeout=timeout) as resp,
+            part.open("wb") as out,
+        ):  # noqa: S310 (https, pinned host)
+            while chunk := resp.read(1 << 20):
+                out.write(chunk)
+        part.replace(dest)
+    encoder: dict[str, int] = json.loads(dest.read_text(encoding="utf-8"))
+    inverse = _gpt2_bytes_to_unicode_inverse()
+    id_to_bytes = {idx: bytes(inverse[c] for c in token) for token, idx in encoder.items()}
+
+    def detokenize(ids: Sequence[int]) -> str:
+        return b"".join(id_to_bytes[int(i)] for i in ids).decode("utf-8", errors="replace")
+
+    return detokenize
 
 
 # ---------------------------------------------------------------------------------------------
@@ -798,9 +884,35 @@ def main() -> None:
     )
     p.add_argument(
         "--fineweb-parquet",
+        "--hf-parquet",
         action="store_true",
-        help="F1-scale bulk path: download FineWeb-EDU sample-10BT parquet from the HF hub and "
-        "stream-tokenize to shards (bounded RAM; needs the pyarrow data extra).",
+        dest="fineweb_parquet",
+        help="F1-scale bulk path: download parquet shards from the HF hub (--repo-id/--subdir) "
+        "and stream-tokenize to shards (bounded RAM; needs the pyarrow data extra). Defaults "
+        "to the FineWeb-EDU sample-10BT slice; F12's ClimbMix arm passes "
+        "--repo-id nvidia/Nemotron-ClimbMix --subdir climbmix_small --text-column tokens "
+        "--gpt2-detokenize.",
+    )
+    p.add_argument(
+        "--repo-id",
+        default=FINEWEB_EDU_DATASET,
+        help="HF dataset repo for the parquet bulk path.",
+    )
+    p.add_argument(
+        "--subdir",
+        default=FINEWEB_EDU_SAMPLE_10BT,
+        help="Repo subdirectory holding the parquet shards.",
+    )
+    p.add_argument(
+        "--text-column",
+        default="text",
+        help="Parquet column carrying the document payload.",
+    )
+    p.add_argument(
+        "--gpt2-detokenize",
+        action="store_true",
+        help="The --text-column holds GPT-2 token ids (ClimbMix): detokenize each doc to text "
+        "via build_gpt2_detokenizer (stdlib-only; downloads + caches GPT-2's encoder.json).",
     )
     p.add_argument(
         "--target-tokens",
@@ -840,14 +952,17 @@ def main() -> None:
 
     if args.fineweb_parquet:
         target = int(args.target_tokens)
-        plan = plan_parquet_download(list_hub_parquet_files(), target)
+        plan = plan_parquet_download(
+            list_hub_parquet_files(dataset=args.repo_id, subdir=args.subdir), target
+        )
         print(plan.describe())
         if args.dry_run:
             return
         cache = Path(args.parquet_cache) if args.parquet_cache else Path(args.out) / "parquet"
         paths = download_parquet_files(plan.files, cache, progress=print)
+        decode = build_gpt2_detokenizer(cache) if args.gpt2_detokenize else None
         metas, stats = build_dataset_streaming(
-            lambda: iter_parquet_doc_batches(paths),
+            lambda: iter_parquet_doc_batches(paths, text_column=args.text_column, decode=decode),
             args.out,
             args.vocab_size,
             max_train_bytes=args.max_train_bytes,

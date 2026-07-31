@@ -26,6 +26,10 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > — 9-angle 2026 research pass folded into the full pipeline (S0 data → S8 serve), re-ranked EV order,
 > new S3 scaling-law-calibration gate before the $100 run, and the updated honesty ledger.
 >
+> **🆕 F12 (ClimbMix-400B vs FineWeb-EDU corpus ablation) — pending, standing-box free; gates the d20 corpus decision.**
+> 35M params / 700M tokens / iso-FLOP, tokenizer retrained per corpus, bpb + CORE. Tracked in
+> `FRONTIER_2026_END_TO_END_PLAN.md` §S0/§3, `FRONTIER_2026_TASKSPEC.md` §F12, and `docs/RESULTS.md` §F12.
+>
 > **✅ THE LOOP CLOSES (2026-07-04):** F1 Muon · train-wiring/F4 (bf16/compile + NaN guard) · eval
 > report card (`val_bpb`/MC/generative/CORE-style) · `speedrun.py` + `scripts/speedrun.sh` spine all
 > SHIPPED + pushed — GPU-verified end-to-end talking sample (`RESULTS.md` §Phase 0). **A1 real-corpus
@@ -37,10 +41,14 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > ✅ 2026-07-13** — `algos/chat_sft.py` (assistant-masked SFT reusing `sft.py` unedited) +
 > `chat_cli.py` (`ChatSession`/`batch_reply` over the public serving path) + speedrun `stage_sft`
 > and chat preview; **the loop now TALKS through the chat template** (overfit-one-chat-batch →
-> greedy reply reproduces the trained answer and stops at `<|eot|>`). **▶ NEXT NODE → the F1-run GPU
-> day on the sm120 box** (`bench/optimizer_race.py`, bf16 EAGER, build arms with
-> `track_attn_logits=True` so F9's falsifier rides the run; F3 scores the same trained ckpt);
-> **CPU batch 2 continues → F7a aha → F2a MTP → A7 DDP → A4 midtrain**. **The buildable next-phase DAG (23
+> greedy reply reproduces the trained answer and stops at `<|eot|>`). **▶ NEXT NODE → RUN the F12
+> corpus ablation (harness ✅ 2026-07-31: `eval/corpus_ablation.py` + `scripts/tok_train.py` +
+> ClimbMix staging in `data/shards.py`) + the S3 scaling sweep (driver ✅: `scaling/s3_sweep.py` +
+> `scripts/s3_scaling_sweep.py` plan/run/fit; pre-registered `RESULTS.md` §S3) → P5 d12 dress
+> rehearsal ($10–15) → 8×H100 d20 (~$100, gated)**. d14/d16 escalation is trigger-gated per E2E
+> §S3(g) (T1 fit failure / T2 P5-anchor divergence / T3 science promotion). F1-run DESCOPED 07-17 (Muon+AdamW adopted,
+> commit `f9e8f3b`); F2a MTP ✅ `3b89119` · F6 harness ✅ `98f62e3` (smoke-validated only —
+> `RESULTS.md` §F6) · A7 ZeRO-2 ✅ · launcher ✅ 07-28. **The buildable next-phase DAG (26
 > rungs, code-grounded, EV-ranked, with a START-HERE block) is
 > [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)** — a
 > fresh session reads that + the SessionStart `frontier node →` line and builds immediately.
@@ -180,7 +188,8 @@ below; build spine in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7.
 > serving day: DeepSeek-R1 FP8, TP×EP, MLA KV, PD-disagg)**, 1× B200 (Phase 3, tcgen05/NVFP4);
 > multi-node is optional. Estimated total: ~$235–460 in GPU spend, peak 8 GPUs concurrent.
 
-**Current node: Phase 1a — A1 Rung 4.2 (chunked prefill: kill the measured ITL p99 admission spikes)**
+**Current node: rental-days only.** All sm120-runnable rungs of A1–A5 shipped 2026-07-04 (banner
+above); the H100 / B200 ISA-kernel days and the 8×H200 serving day need the hardware, not more code.
 _R0–R4.1 shipped 2026-07-01→03. R3b: continuous batching **2.30× wall / 2.93× by steps** vs
 static-wave (R3.4 PASS), TTFT p95 **4.9×** (R3.6 PASS) on the `BatchedKVCache` slot buffer +
 `serving/continuous.py` engine. R4.1: `PagedKVCache` (block table, CoW, admission guard) + the

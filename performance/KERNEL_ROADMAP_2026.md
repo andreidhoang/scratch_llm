@@ -58,6 +58,14 @@ co-design (DELTA married to F10) remains the scarcest signal.
 
 ## 1. Frontier delta — what changed or got confirmed since the 2026-07-09 note
 
+> **2026-07-30 re-verification (maintenance-contract pass, primary-checked).** Deltas since 07-14:
+> **(a)** CUTLASS **4.5.2 → 4.6.0** (changelog 2026-07-09; CuTe DSL adds CUDA 13.1 support) — the P2 CuTe-DSL rung targets 4.6.
+> **(b)** vLLM **v0.26.0** shipped (2026-07) and the **AFD plugin** (2026-07-23) productizes Step3-style **Attention–FFN disaggregation** — a new serving-architecture line beyond PD-disagg (added to A1 §4.6 + references).
+> **(c)** `flash-attn-4` is pip-installable (JIT, Hopper+Blackwell, `cu13` extra); FP8/FP4 FA4 numbers **still** not public; current cuDNN (9.24) matches FA4 (techniques adopted, not merged); the Hopper-decode regression stands.
+> **(d)** Hardware: **B300 = `sm_103`** (CUDA 12.9+, `compute_100f` family-compatible), GB300 NVL72 shipping (~14–15 PF dense FP4, 288 GB, FP64 ~1.2 TF); NVIDIA's **Vera Rubin** page is live (VR200: 288 GB HBM4 @ 22 TB/s, NVLink-6 3.6 TB/s, ~50 PF NVFP4 vendor figure; volume H2-2026). A B300 may substitute the P2 B200 rental at equal price — same ISA contract, +50% FP4.
+> **(e)** DELTA niche: **still open** (spot-checked 2026-07-30 — FLA active at standard precision only, e.g. chunked-GDR B300 bug fla-org/flash-linear-attention#945; FlashInfer PRs; community repos — no public FP8/NVFP4 recurrent-state GDN decode kernel). Demand signal strengthened: Qwen3.5 / GLM-5 / Nemotron all ship GDN-or-hybrid layers in production.
+> Curriculum files (00_foundations, A1–A7, references, PERF_ENGINEERING_SPEC) refreshed accordingly — see git diff 2026-07-30.
+
 Corrections first, then fresh anchors. Each line: claim → status → source (dated).
 
 | # | 2026-07-09 note said | 2026-07-14 verified state |
@@ -206,7 +214,7 @@ surface (§7) at teach-back grade ≥ B.*
 ### P2 — Blackwell day (1× B200 rental, ~6–10 h, ≈ $50–120)
 | Rung | Build/measure | Named ceiling | Note |
 |---|---|---|---|
-| P2.1 | tcgen05/TMEM GEMM **via CUTLASS 4.5.2 / CuTe-DSL** (use, extend, profile — don't reimplement) | cuBLAS + TK-2.0's published B200 GEMMs | the 07-09 "vendor-served → understand+use" ruling stands |
+| P2.1 | tcgen05/TMEM GEMM **via CUTLASS 4.6 / CuTe-DSL** (use, extend, profile — don't reimplement) | cuBLAS + TK-2.0's published B200 GEMMs | the 07-09 "vendor-served → understand+use" ruling stands |
 | P2.2 | **CuTe-DSL authoring rung**: port one owned kernel (RMSNorm or GEMV) to CuTe-DSL; read the generated PTX/SASS | your own Triton version | this is the FA4/PyTorch-2.13-backend dialect — the JD-visible skill |
 | P2.3 | NVFP4 block-scaled GEMM (A5 §7) | FP8 baseline | speedup **and** SQNR + downstream-task delta; NVFP4(16-blk, E4M3 scale) vs MXFP4(32-blk, E8M0) mechanism [FACT] |
 | P2.4 | FA4 study-bench: run `flash-attn-4` vs cuDNN 9.24 vs FA3-port; read `flash_attn/cute/flash_fwd_sm100.py` | FA4's ≈1.6 PF/71% | teach-back the four tricks (§1 row 1) + the Hopper-decode regression |

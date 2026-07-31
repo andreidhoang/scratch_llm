@@ -25,6 +25,9 @@
 > primary-source-verified successor: [`../performance/KERNEL_ROADMAP_2026.md`](../performance/KERNEL_ROADMAP_2026.md)
 > — §1 (frontier delta incl. corrections to the 07-09 pass) + §2 (verified hiring bar) + §3 (Vizuara
 > curriculum dissection). **Where they conflict, the roadmap wins.** This doc stays the thesis layer (§0/§5).
+> **Re-verified 2026-07-30:** the roadmap's §1 07-30 block + `performance/references.md` §8 carry the
+> post-07-14 deltas (CUTLASS 4.6 · B300/Rubin hardware · AFD · DSA · FA4 caveats · NCCL device API);
+> the curriculum A-files were refreshed in place. The roadmap still wins on conflicts.
 
 ---
 

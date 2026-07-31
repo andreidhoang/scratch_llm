@@ -76,6 +76,7 @@ The two spines to carry through the entire assignment:
 - **Dense vs sparse TFLOPS.** NVIDIA datasheets, *dense / sparse(2:4)*: A100 **312 / 624** FP16 (no FP8). H100 **989 / 1,979** FP16, **1,979 / 3,958** FP8. B200 **2,250 / 4,500** FP16, **4,500 / 9,000** FP8, **9,000 / 18,000** FP4. Keynote "PFLOPS" almost always quotes the **sparse** number. A real, tuned B200 BF16 GEMM lands around **~1,476 TFLOPS ≈ 65% of the 2,250 dense spec** (≈98% of that machine's cuBLAS). Always say *dense* and always say *% of which peak*.
 - **FP6 ≠ FP4 rate.** On Blackwell, **FP6 runs at the FP8 rate, not the FP4 rate** — FP6 and FP8 share datapath circuits; **only FP4 is the 2× tier**.
 - **Consumer Blackwell is not datacenter Blackwell.** The **RTX 5090 is `sm_120`, B200 is `sm_100`.** The 5090 has **FP4 *inference*** but **NO `tcgen05`, NO TMEM, NO NVFP4-MMA, NO real NVLink** (see `00_foundations.md` gates). The 5090 *cannot* run any §4 B200-track kernel. Do not let "Blackwell" on the box fool you.
+- **Blackwell Ultra (B300/GB300, `sm_103`).** The 2025-H2 refresh keeps the **same tcgen05/TMEM contract** as B200 (family-compatible — `compute_100f` code runs on both sm_100 and sm_103): **160 SMs (vs 148), ~14–15 PF dense FP4 (+50–55%), FP8/BF16 rates unchanged, 288 GB HBM3e (270 GB on HGX B300), ~8 TB/s, 1,400 W** — and **FP64 is gutted to ~1.2 TF** (from 37 TF), an inference-first trade. Compile with `-arch=sm_103a` (CUDA 12.9+). If a B300 rents at B200 price, prefer it for the NVFP4 rungs.
 
 ### 2.5 The supporting machinery (one paragraph each)
 
@@ -88,8 +89,9 @@ The two spines to carry through the entire assignment:
 
 - **WMMA** (`nvcuda::wmma`): portable to any tensor-core GPU, but **cannot emit WGMMA or `tcgen05`** → caps ~63% of H100 peak. Right for *learning fragments* and for Ampere/Ada production where you don't need the ceiling.
 - **CUTLASS 3.x / CuTe**: an **MMA Atom** = a PTX instruction + traits; `make_tiled_mma` + `cute::gemm`. Blackwell adds `UMMA::*`, `TMEM::Allocator`, block-scaled tiled MMA. **GOTCHA:** calling `cute::gemm` from a *single thread* **deadlocks** on Blackwell — CUTLASS internally *elects* the issuing thread, so you must call it from a full warp.
-- **CuTe DSL / CUTLASS 4.x** (Python) — same atoms, Python authoring.
-- **ThunderKittens**: a 16×16-tile DSL covering WGMMA *and* `tcgen05`, with an escape hatch down to PTX.
+- **CuTe DSL / CUTLASS 4.x** (Python; 4.6 as of 2026-07) — same atoms, Python authoring. This is the tier that beats the libraries in public: **FA4 is written entirely in CuTe DSL**, and PyTorch 2.13 ships a CuTeDSL Inductor backend; NVIDIA claims PTX/SASS parity with C++ CUTLASS.
+- **Triton (+ Gluon)**: the default production substrate (vLLM/SGLang custom kernels, Inductor codegen). **Gluon** (in `triton.experimental`) is the low-level escape tier — explicit TMA, warp specialization, Blackwell tensor-memory control — for when Triton's scheduler leaves the last 20–30% on the table. **TileLang** is the novel-op research→production tier (Qwen's FlashQLA GDN kernel and DeepSeek's DSA kernels ship in it).
+- **ThunderKittens**: a 16×16-tile DSL covering WGMMA *and* `tcgen05`, with an escape hatch down to PTX; TK-2.0 (2026-02) is the best public B200 worklog (BF16/MXFP8/NVFP4 GEMMs at/above cuBLAS).
 - **Drop to raw PTX** only for instruction variants the atoms don't expose. (This assignment makes you do it *once* on purpose, so the abstractions stop being magic.)
 
 ---
@@ -212,4 +214,6 @@ Implement a **block-scaled FP4** GEMM — the format under 2025–2026 frontier 
 - **ThunderKittens**, Spector et al., arXiv:2410.20399 + the TK Blackwell blog. https://arxiv.org/abs/2410.20399
 - **NVIDIA**, *Introducing NVFP4 for Efficient and Accurate Low-Precision Inference* (block-16 + UE4M3). https://developer.nvidia.com/blog/
 - **Luo et al.**, *Microbenchmarking NVIDIA Blackwell* (TMEM microarchitecture [unknown]s), arXiv:2512.02189. https://arxiv.org/abs/2512.02189
+- **ThunderKittens 2.0** (2026-02-19) — the best public tcgen05/NVFP4 B200 worklog (BF16/MXFP8/NVFP4 GEMMs at/above cuBLAS). https://hazyresearch.stanford.edu
+- **CUTLASS 4.6 changelog** (CuTe DSL + CUDA 13.1) · **B300 (`sm_103`)** and **Vera Rubin** hardware pages. https://github.com/NVIDIA/cutlass · https://www.nvidia.com/en-us/data-center/vera-rubin-nvl72/
 - **NVIDIA datasheets** — H100 SXM, DGX B200 (dense/sparse TFLOPS of record). · Book ch7 (WMMA→WGMMA→TCGen05 progression, Table 7.2).

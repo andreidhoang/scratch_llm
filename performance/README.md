@@ -68,13 +68,13 @@ Each assignment's **definition of done** includes a short written artifact — a
 
 ## 5. Hardware & cost (summary — full plan in `00_foundations.md`)
 
-You will rent, not buy. The architecture *gates* the work: WMMA runs anywhere (sm_70+), **WGMMA/TMA need Hopper (sm_90)**, **`tcgen05`/TMEM/NVFP4 need datacenter Blackwell (sm_100)** — and note the consumer RTX 5090 is **sm_120, not sm_100**, so it does *not* substitute for a B200 on kernel coursework. Indicative mid-2026 spot/on-demand rates (reverify before spending — prices move weekly):
+You will rent, not buy. The architecture *gates* the work: WMMA runs anywhere (sm_70+), **WGMMA/TMA need Hopper (sm_90)**, **`tcgen05`/TMEM/NVFP4 need datacenter Blackwell (sm_100; sm_103 on the B300 refresh)** — and note the consumer RTX 5090 is **sm_120, not sm_100**, so it does *not* substitute for a B200 on kernel coursework. Indicative mid-2026 spot/on-demand rates (reverify before spending — prices move weekly):
 
 | You need… | Use | ~$/GPU-hr | Assignments |
 |---|---|---|---|
 | CUDA fundamentals, WMMA, reductions, INT8/INT4, FA1/2 | RTX 4090 / 5090 (Vast/RunPod) | $0.35–0.70 | A2 (0–6), A3 (WMMA), A4 (0–3), A5 (INT) |
 | FP8, WGMMA, TMA, FA3, near-cuBLAS GEMM, MLA serving | **1× H100** (Vast/Nebius) | $1.5–2.9 | A1, A2, A3, A4, A5 |
-| `tcgen05`, TMEM, NVFP4, FA4 | **1× B200** (Vast/Nebius) | $3.4–6 | A3, A4, A5 (frontier rungs) |
+| `tcgen05`, TMEM, NVFP4, FA4 | **1× B200 / B300** (Vast/Nebius) | $3.4–6 | A3, A4, A5 (frontier rungs) |
 | Real NVLink TP/PP/EP, NCCL tuning | **8× H100 node** | ~$22–24/node-hr | A6 |
 | Multi-node TP/PP/EP over InfiniBand | **2 nodes / 16 GPU** (RunPod Instant Clusters) | cluster rate | A6 (multi-node) |
 

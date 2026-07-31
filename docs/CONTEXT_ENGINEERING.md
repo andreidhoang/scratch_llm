@@ -213,10 +213,27 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
   set), each with a falsifiable invariant and a dated source. Lever 2 like the rest of `docs/`: `CLAUDE.md`
   holds the pointer, this doc holds the depth, and 🟢-adoption is tracked back in `STATUS.md`'s build state
   (no separate ledger). Its provenance header records the fact-check pass + the later GDM-alignment batch.
-- **[`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md)** — the plan of record for the
-  close-the-loop / frontier-ablation front (2026-07-30, synthesized from a 9-angle 2026 research pass): the
-  pipeline-level S0→S8 end-to-end plan, with the re-ranked EV order + the S3 scaling-law gate before the d20
-  run. **Read it first** — rung-level specs stay in `FRONTIER_2026_TASKSPEC.md` / `FRONTIER_2026_ABLATIONS.md`.
+- **[`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md)** — the curated entry point to the
+  Frontier 2026 front. Start here for the doc map, north star, decision principles, and a one-page
+  overview of the pipeline + ablations. It intentionally does not duplicate depth; it links to the
+  owner docs below.
+- **[`FRONTIER_STATUS.md`](FRONTIER_STATUS.md)** — the one-page live status board: every A/F/P/S rung,
+  its status, cost, owner doc, blocker, and the current next node. Check this before any session to
+  see what is done and what is next without opening the full plans.
+- **[`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md)** — the integrated pipeline
+  view for the close-the-loop / frontier-ablation front (2026-07-30, synthesized from a 9-angle 2026
+  research pass; **+ 2026-07-31 external-review & verification pass** in its header: re-fetched primary
+  sources, F6-smoke caveat, ClimbMix/NVFP4/MiniMax corrections): the pipeline-level S0→S8 end-to-end
+  plan, with the re-ranked EV order + the S3 scaling-law gate before the d20 run. Read this for
+  pipeline integration; rung-level specs stay in `FRONTIER_2026_TASKSPEC.md` /
+  `FRONTIER_2026_ABLATIONS.md`.
+- **Data / corpus decision (F12)** — the d20 corpus is **open and gated** until the FineWeb-EDU vs
+  **ClimbMix-400B** ablation verdicts. Current status: see [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md) row F12.
+  Sources: [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md) §5,
+  [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md) §S0,
+  [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md) §3/§10, [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md) §F12,
+  and the pre-registration in [`RESULTS.md`](RESULTS.md) §F12. If ClimbMix wins, the A9 model card must state
+  **CC BY-NC 4.0** and the HF source `nvidia/Nemotron-ClimbMix`.
 - **[`learning/`](learning/INDEX.md)** — the mastery track (Vietnamese): one Feynman/teach-back lesson per
   *shipped and measured* component, tracing exact `src/` functions (line anchors pinned to a commit), a
   hand-worked tensor example, the invariant→test map, and the teach-back gate with collapsed answers. This
@@ -253,10 +270,11 @@ Code day to day so context stays high-signal.
 The load-bearing rule that governs the rest of this section — codified in CLAUDE.md ("Orient before you
 build"), and applied by every agent as a lead-frontier-lab RE would. Before any engineering work:
 **analyze → reconstruct → reason → build.** Read `git log --oneline -15` + the current-node pointer
-(`performance/PERF_PLAN.md`, else `docs/STATUS.md`) + the ledger (`bench/RESULTS.md`) + the one spec
-governing the active node; state what the last commits established and what is *measured vs merely
-implemented*; then reason the next task from that state (the highest-EV node, predict-before-run) rather
-than pattern-matching a default. The SessionStart hook (Lever 4) injects the *starting* slice — latest
+(`performance/PERF_PLAN.md`; for the frontier front, [`docs/FRONTIER_STATUS.md`](FRONTIER_STATUS.md)) +
+the ledger (`bench/RESULTS.md`) + the one spec governing the active node (frontier entry point:
+[`docs/FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md)); state what the last commits
+established and what is *measured vs merely implemented*; then reason the next task from that state
+(the highest-EV node, predict-before-run) rather than pattern-matching a default. The SessionStart hook (Lever 4) injects the *starting* slice — latest
 commits + node — so this begins for free; the agent then reads deeper. Skipping orientation is the
 classic silent failure: re-doing closed work, trusting a stale doc over a fresh commit, or pulling a
 low-signal node. Depth scales with the task (a one-line fix needs only a `git log` glance).

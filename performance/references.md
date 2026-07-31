@@ -107,6 +107,21 @@ Citation discipline: arXiv IDs are given where they exist. Blog/doc links are da
 
 ---
 
+## 8. 2026-07-30 refresh — dated primaries (post-2026-07-14 re-verification)
+
+Re-verified 2026-07-30 against primary sources; extends (and where noted, supersedes) the mid-2026 list above. The curriculum's mechanisms are unchanged; this is the fast-moving surface.
+
+- **FlashAttention-4**: arXiv:2603.05451 (Zadouri et al., 2026-03-05) + code `pip install flash-attn-4` (CuTe-DSL, JIT, `cu13` extra; Hopper + Blackwell). Verified caveats: cuDNN 9.13+ adopted the same techniques and **current cuDNN (9.24) matches FA4** — the "1.3× cuDNN 9.13" launch claim is dated; **FA4 decode on Hopper regresses vs FA3 at long seq (−49% @16K, no SplitKV)**; FP8/FP4 numbers still not public.
+- **CUTLASS 4.6.0** (changelog 2026-07-09; CuTe DSL adds CUDA 13.1 support) — github.com/NVIDIA/cutlass. · **ThunderKittens 2.0** (2026-02-19) — best public tcgen05/NVFP4 B200 worklog, hazyresearch.stanford.edu.
+- **Hardware**: NVIDIA **B300 / GB300 NVL72** (Blackwell Ultra, `sm_103`, CUDA 12.9+; 160 SMs; ~14–15 PF dense FP4; 288 GB HBM3e; FP64 ~1.2 TF) — shipping 2026. NVIDIA **Vera Rubin NVL72 / NVL144** (VR200: 288 GB HBM4 @ 22 TB/s, NVLink-6 3.6 TB/s, ~50 PF NVFP4 [vendor figure, dense/sparse basis unverified]; Vera CPU 88 custom cores; volume H2-2026) — nvidia.com/en-us/data-center/vera-rubin-nvl72/.
+- **Sparse attention**: **NSA** (Native Sparse Attention), arXiv:2502.11089 · **DeepSeek-V3.2 (DSA)**, arXiv:2512.02556 (lightning indexer + top-k≈2048 selection under MLA; kernels shipped in TileLang + CUDA) · **Qwen FlashQLA** (TileLang GDN chunked prefill), github.com/QwenLM/FlashQLA.
+- **Serving**: NVIDIA **Dynamo 1.0** (GTC-2026; KV-aware routing, planner, NIXL) · **vLLM v0.26** (2026-07) + **AFD plugin** (2026-07-23) + KV-offloading connector · **Step3 / AFD** (MFA + Attention-FFN disaggregation), github.com/stepfun-ai/Step3 + vLLM RFC #22799 · **Deterministic inference**: Thinking Machines, "Defeating Nondeterminism in LLM Inference" (2025-09); LMSYS, "Towards Deterministic Inference in SGLang and Reproducible RL Training" (2025-09-22) · **DSpark** spec-decode, arXiv:2607.05147.
+- **Precision / training**: **TorchTitan MXFP8 + DeepEP** (+41% on DeepSeek-V3-style pretraining on B200; pytorch.org blog, 2026) · **DeepSeek-V4**, arXiv:2606.19348 (MoE experts FP4, rest FP8) · **gpt-oss** (MXFP4 MoE weights) · NVIDIA **GLM-5-NVFP4** checkpoint.
+- **Distributed**: **NCCL 2.28+ device API** (LSA / Multimem / GIN + symmetric memory; NVIDIA developer blog) · **NVSHMEM 3.7**.
+- **Linear / hybrid attention**: **Kimi Linear / KDA**, arXiv:2510.26692 · **Mamba-3**, arXiv:2603.15569 · **FLA** (flash-linear-attention), github.com/fla-org/flash-linear-attention — production hybrids (Qwen3.5, GLM-5, Nemotron) now mix GDN/Mamba-class layers with full attention.
+
+---
+
 ## End — Consolidated honesty / uncertainty flags
 
 The research that built this curriculum was explicit about what is solid vs evolving. Carry these into every assignment:
@@ -114,7 +129,7 @@ The research that built this curriculum was explicit about what is solid vs evol
 - **Dense vs sparse TFLOPS.** NVIDIA keynote "PFLOPS" numbers usually include 2:4 (or 4:8) structured sparsity = 2× the *dense* figure. Real kernels rarely approach the sparse number. Always benchmark and report dense unless you are actually exploiting sparsity. (E.g., H100 FP16 ≈ 989 dense / 1,979 sparse; B200 FP4 ≈ 9,000 dense / 18,000 sparse.)
 - **PCIe vs SXM peak.** Many published Hopper GEMM numbers (Colfax) are on H100 **PCIe** (114 SMs, ~750 TF/s FP16 peak), not the SXM 132-SM ~990 part. Don't cross-compare; recalibrate % targets to your card.
 - **Best-case shapes.** DeepGEMM's ~1,350–1,550 FP8 TFLOP/s, NVFP4's throughput multipliers, and library "% of peak" figures are on large, favorable shapes/specific GPUs. Your shape will differ.
-- **FA4 low-precision is not yet public.** FlashAttention-4's published benchmarks are BF16 on B200 (~1605 TF/s, ~71% util). FP8/FP4 FA4 accuracy/throughput, the exact rescale threshold τ, and the MUFU/FMA exp split are not published as of the research date — treat as targets to measure.
+- **FA4 low-precision is not yet public (re-verified 2026-07-30).** FlashAttention-4's published benchmarks are BF16 on B200 (≈1.6 PF/s, ~71% util); the code is public (`pip install flash-attn-4`, Hopper + Blackwell). FP8/FP4 FA4 accuracy/throughput, the exact rescale threshold τ, and the MUFU/FMA exp split remain unpublished — treat as targets to measure. Two dated launch claims to handle carefully: cuDNN adopted the same techniques and current cuDNN (9.24) matches FA4 (benchmark against the cuDNN of the day, not 9.13), and **FA4 decode on Hopper regresses vs FA3 at long sequence (−49% @16K, no SplitKV)** — FA3 stays the Hopper decode kernel.
 - **Blackwell tcgen05 microarchitecture is a contract, not a datasheet.** TMEM size/addressing/alloc and the `tcgen05.*` programming model are documented; physical TMEM latency/bandwidth, banking, and the cycle-level datapath are not. The arXiv:2512.02189 microbenchmark paper targets these gaps.
 - **Consumer ≠ datacenter Blackwell.** RTX 5090 is **sm_120**, not the B200's **sm_100**; it has FP4 inference but **no tcgen05/TMEM** and no NVLink. It cannot substitute for a B200 on the tensor-memory rungs.
 - **NVFP4 two-level constant placement varies.** Where the per-tensor FP32 scale vs the per-block FP8 scale absorbs the 448 (E4M3 max) and 6 (FP4 max) differs between TensorRT-Model-Optimizer and TransformerEngine. Verify against the kernel you target.

@@ -57,7 +57,9 @@
 >   [`docs/FRONTIER_2026_ABLATIONS.md`](docs/FRONTIER_2026_ABLATIONS.md)). **Pipeline-level end-to-end
 >   plan (2026-07-30, 9-angle 2026 research pass) — read first:**
 >   [`docs/FRONTIER_2026_END_TO_END_PLAN.md`](docs/FRONTIER_2026_END_TO_END_PLAN.md) (S0→S8 pipeline ·
->   re-ranked EV order · S3 scaling-law gate before the d20 run; rung specs stay in TASKSPEC/ABLATIONS). Zone:
+>   re-ranked EV order · S3 scaling-law gate before the d20 run; rung specs stay in TASKSPEC/ABLATIONS).
+>   **Live status board:** [`docs/FRONTIER_STATUS.md`](docs/FRONTIER_STATUS.md).
+>   **Curated entry point:** [`docs/FRONTIER_2026_MASTER_PLAN.md`](docs/FRONTIER_2026_MASTER_PLAN.md). Zone:
 >   `src/scratch_llm/{eval,data,algos}/` (additive), `scripts/`, `optim.py`, `train.py`, `speedrun.py`,
 >   `chat*.py`, `mtp.py`, `dsa.py`, additive `model.py`/`moe.py`, the F-rung sections of `bench/RESULTS.md`.
 >   **NEVER** edit perf-owned `mla.py`/`serving/`/`kernels/`/`quant/` — satisfy their Protocols instead.
@@ -77,7 +79,8 @@
 Before any engineering work — a new task, a resumed thread, or a fresh `/clear` — an agent MUST, in order:
 
 1. **Read the state, don't assume it.** `git log --oneline -15` (what just shipped) + the current-node
-   pointer (`performance/PERF_PLAN.md` for the perf curriculum, else `docs/STATUS.md`) + the live ledger
+   pointer (`performance/PERF_PLAN.md` for the perf curriculum,
+   `docs/FRONTIER_STATUS.md` for the frontier-ablation front, else `docs/STATUS.md`) + the live ledger
    (`bench/RESULTS.md`) + the one spec/guide governing the active node. The SessionStart hook surfaces
    the latest commits + node as the *starting* context — then read deeper; never trust a doc line that a
    later commit has moved.

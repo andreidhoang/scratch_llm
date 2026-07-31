@@ -34,7 +34,7 @@ Pick **one** track and take it to a genuinely competitive number. Depth over bre
 
 **The bar:** each kernel hits its assignment's frontier target (e.g., GEMM ≥80% of cuBLAS on the target shape; FP8 attention in sight of FA3's ~75% util / ~740 TF/s; NVFP4 GEMM within <1% accuracy of FP8). Every claim carries a locked-clock benchmark, an Nsight Speed-of-Light + roofline placement, and the dense-vs-sparse / PCIe-vs-SXM caveats. Bonus principal move: pick one kernel and **open a PR to CUTLASS, FlashInfer, vLLM, or SGLang** — the real-world version of "ship it."
 
-**Stretch:** the tcgen05 2-SM / NVFP4 path (open-research territory; a 2026 GPU-mode competition topic); a CuTe-DSL implementation; an autotuner over tile/stage configs.
+**Stretch:** the tcgen05 2-SM / NVFP4 path (open-research territory; a 2026 GPU-mode competition topic); a CuTe-DSL implementation; an **MoE grouped GEMM** (CUTLASS grouped / DeepGEMM m-grouped class — the serving kernel every 2026 MoE runs twice per layer); an autotuner over tile/stage configs.
 
 ---
 

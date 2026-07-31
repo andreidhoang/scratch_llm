@@ -1,5 +1,12 @@
 # Close the Loop → Frontier Ablations (2026) — engineering spec + execution DAG
 
+> **Doc role.** This file owns the **ablation strategy**: EV ranking, rung cards, falsifiable
+> predictions, kill criteria, citations, and the honesty ledger. For the integrated end-to-end
+> pipeline view see [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md); for the
+> buildable file→test spec see [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md); for a
+> one-page status board see [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md); for the curated entry point
+> see [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md).
+
 > **What this is.** The master spec for a **third front** on `scratch_llm`: adopt Karpathy's
 > **nanochat** end-to-end integration spine to produce a *trained, evaluated, chat-capable* model
 > from our own code, then run an **EV-ranked, pre-registered, iso-FLOP frontier-technique ablation
@@ -131,20 +138,28 @@ Tokenizer to match: GPT-4-style **Rust BPE**, vocab **32,768 = 2¹⁵** *(curren
 
 ## §3 — The ranked ablation program (the heart of the front)
 
+> **For build instructions** (file → change, tests, DoD, deps) see
+> [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md). **For the integrated pipeline view**
+> (S0→S8, scaling law, d20 gate) see
+> [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md). **For a one-page status
+> board** see [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md).
+
 EV-ranked (leverage ÷ effort, weighted by frontier-lab signal). Each rung is a pre-registered,
 falsifiable experiment; the discipline *is* the hireable skill.
 
 > **⚠ EV re-ranked 2026-07-09 (§10).** The original 1–9 order below is preserved for the rung-card
-> cross-refs, but the **scarce-2026 EV order is F8+F10 · F7-reframed+F11 · F1 · F2 · F4 · then
+> cross-refs, but the **scarce-2026 EV order is F8+F10 · F7-reframed+F11 · F12 (data) · F1 · F2 · F4 · then
 > F3/F5/F6/F9**. Attention-efficiency (F8 DSA + the new **F10** linear-hybrid) and RL-honesty/agentic
-> (F7-reframed + the new **F11**) carry the differentiating hiring signal; F1/F2/F4 are table-stakes done
+> (F7-reframed + the new **F11**) carry the differentiating hiring signal; **F12** is the highest-measured-effect
+> cheap win (data > optimizer at fixed compute) and gates the d20 corpus. F1/F2/F4 are table-stakes done
 > well; F3/F5/F6/F9 are necessary-but-minimize. The **KILL bands on F1 and F7 are recalibrated** to the
-> verified 2026 evidence (below, marked ⚠). Rung cards for F10/F11 are in §10.
+> verified 2026 evidence (below, marked ⚠). Rung cards for F10/F11/F12 are in §10.
 
-**Node pointer (current):** `F1-run — iso-FLOP Muon vs AdamW` (A1 shards + A2 checkpoint chaining
-✅ 2026-07-09; F1 unit level ✅). *Ordering call (Mode-2, human-owned): F1 stays the pending headline for
-loop-closure, but consider pulling **F8/F10** first as the higher-2026-signal science.* Advance the
-pointer as rungs ship.
+**Node pointer (current, 2026-07-31):** F1-run **DESCOPED 07-17** (Muon+AdamW adopted per FOP-7,
+commit `f9e8f3b`; the iso-FLOP race harness stays for F12). Next: **F12 corpus ablation (free) +
+S3 scaling sweep → P5 d12 dress rehearsal ($10–15) → 8×H100 d20 (gated)** per
+`FRONTIER_2026_END_TO_END_PLAN.md` and the taskspec Next-node marker; Tier-1 science (F8 / F10.2 /
+F7-reframed / F11) follows on the standing box. Advance the pointer as rungs ship.
 
 | # | Rung | Effort | Pre-registered result + KILL | Primary sources |
 |---|---|---|---|---|
@@ -159,6 +174,7 @@ pointer as rungs ship.
 | **9** | **Logit-stability guard** | S | `qk_norm` on ⇒ max per-head logit **<~30**, QK-Clip γ==1 sub-1B. *Cheap guard, keep small — QK-norm is settled.* | Kimi-K2 2507.20534 |
 | **10** | **Hybrid linear attention** 🆕*(GDN/KDA-style)* | M/L | iso-param 3:1 (Gated-DeltaNet : full-attn) hybrid within **+0.03 val loss** of full attention at ≤300M; **KV/token ≥2× smaller**, decode uplift at long ctx. *The 2026 attention frontier the program lacked — MLA is now the baseline it beats.* **KILL** if gap >0.1 nats or no KV win. | **Kimi Linear (Moonshot, Oct-25); Qwen3-Next/Qwen3.5; Gated DeltaNet; NSA 2502.11089** |
 | **11** | **Agentic / tool-use RL** 🆕*(the #1 2026 priority)* | L | A verifiable multi-turn tool env (calculator/code-exec): success-rate ↑ with turns-used bounded; a **format-only reward hacks** (control). *DeepSeek/K2/Qwen's stated #1 direction; 2026 eval = agentic (SWE-bench).* **KILL** if success-rate flat or reward-hacked without detection. | **K2 2507.20534; DeepSeek V3.2; Qwen3.5 agentic evals** |
+| **12** | **ClimbMix-400B vs FineWeb-EDU corpus ablation** 🆕*(data > optimizer)* | M | Train two 35M-param models for **700M tokens**, tokenizer retrained **per corpus**; **ClimbMix bpb < FineWeb-EDU bpb** at iso-FLOP on val_bpb + CORE. *Data was nanochat's biggest GPT-2 speedrun win (−27%, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)).* **KILL** if ClimbMix ≤ FWE ⇒ keep banked FWE corpus; **CC BY-NC 4.0** license note in A9 if ClimbMix wins. | **Nemotron-CLIMB 2504.13161; HF nvidia/Nemotron-ClimbMix; nanochat 324e69c** |
 
 **Convergent-defaults signal (verified 2026-07-09):** **MTP** (V3 + GLM-5 + Qwen3-Next + 6 more prod.
 models — *strongest* convergent signal) and **QK-norm** (Qwen3/Gemma3/OLMo2, already in `model.py`) are
@@ -224,14 +240,18 @@ KV cache; iso-param MLA-vs-GQA-8 at 0.2–0.5B. *Prediction:* +0.02 val loss, KV
 
 **F6 · MoE balancing.** aux-loss-free (γ=1e-3) vs seq-aux (α=1e-4) vs none; fine- vs coarse-grained.
 *Prediction:* aux-loss-free ≤ large-aux val loss, router entropy >0.9·log N; no-balancing collapses.
-*Files:* `moe.py`, `model.py:959` (`moe_update_biases`), a new ablation harness.
+*Files:* `moe.py`, `model.py:959` (`moe_update_biases`), harness shipped (`scripts/f6_moe_ablation.py`,
+commit `98f62e3`; smoke-validated only — real run ≥1B tokens pending, `docs/RESULTS.md` §F6).
 
 **F7 · GRPO "aha".** Run `algos/grpo.py` + `envs/{countdown,gsm_math}` + `rewards/r1_zero` on the
 trained base at ~0.5B; log the R1-Zero self-evolution curve (reward↑, correct-answer length growth,
-bounded KL). *Neural-RM control* reward-hacks to make the rule-based point. *Files:* `algos/`,
+bounded KL). *Neural-RM control* reward-hacks to make the rule-based point. *Reframed 07-09 as
+debunk:* **random-reward control arm** (Spurious Rewards, ICML 2026) + **contamination probe**
+(partial-prompt completion, AAAI-26) + ≥1 **non-Qwen-family** control + budget-matched eval
+([2509.21882](https://arxiv.org/abs/2509.21882)); see END_TO_END_PLAN 07-31 pass. *Files:* `algos/`,
 `rewards/`, `envs/`, `utils/monitors.py`.
 
-**F8 · DSA (stretch).** KL-aligned lightning-indexer + top-k gather; attention-recall + long-context
+**F8 · DSA (core — promoted from stretch 07-09).** KL-aligned lightning-indexer + top-k gather; attention-recall + long-context
 perplexity vs full attention. *Prediction:* ≥95% mass recovered, +0.03 val loss at 8k. *Files:* new.
 
 **F9 · Logit guard.** Keep `qk_norm` (model.py:769) as the sub-1B guard; add MuonClip QK-Clip
@@ -393,6 +413,28 @@ minimize · 🆕 MISSING (add).
 - *Interview.* "Why is agentic/tool-use RL the 2026 frontier over single-turn RLVR — and how do you keep a
   multi-turn agent from reward-hacking the tool-call *format* instead of solving the task?"
 
+**F12 · ClimbMix-400B vs FineWeb-EDU corpus ablation (the data decision).**
+- *Hypothesis.* Data quality filtering moves the loss constant at fixed compute; a semantic-clustering +
+  mixture-search corpus (Nemotron-CLIMB / ClimbMix) outperforms a strong heuristic-filtered corpus
+  (FineWeb-EDU) at our exact F1-harness scale, reproducing nanochat's head-to-head result.
+- *Prediction (falsifiable).* At **35M params / 700M tokens / iso-FLOP** (`C ≈ 1.5×10¹⁷`), with the
+  tokenizer retrained **per corpus** on the same byte budget and identical decontamination/packing,
+  ClimbMix delivers **lower val_bpb** than FineWeb-EDU on a shared held-out set, and the downstream
+  **CORE** point follows bpb (ClimbMix CORE ≤ FWE CORE). Predicted Δbpb ≈ −0.010 to −0.030 (nanochat
+  saw −0.028 at GPT-2 scale, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)).
+  **KILL** if ClimbMix bpb ≥ FineWeb-EDU bpb at iso-FLOP ⇒ keep the banked FineWeb-EDU corpus.
+- *DoD.* A reproducible corpus-ablation harness: shard builders for FineWeb-EDU (existing `data/shards.py`)
+  and ClimbMix-400B (new staging path); per-corpus BPE trained via `scripts/tok_train.py`; iso-FLOP
+  training arms via `eval/optimizer_race.py` or a dedicated `eval/corpus_ablation.py` driver; val_bpb and
+  CORE measured on a shared, decontaminated held-out set; results logged to `docs/RESULTS.md` §F12 and
+  `bench/RESULTS.md` §Frontier ablations.
+- *Files.* `data/shards.py`, `scripts/tok_train.py`, `eval/optimizer_race.py` (or new
+  `eval/corpus_ablation.py`), `bench/RESULTS.md`, `docs/RESULTS.md`.
+- *Interview.* "Why does changing the corpus often beat changing the optimizer at fixed compute — and why
+  must the tokenizer be retrained per corpus before you compare bpb?"
+- *License note.* ClimbMix-400B is **CC BY-NC 4.0**; if it wins, the A9 model card must state the license
+  and the HF dataset source ([nvidia/Nemotron-ClimbMix](https://huggingface.co/datasets/nvidia/Nemotron-ClimbMix)).
+
 ### Direction ranking (2026 hiring/contribution signal)
 
 Verified lab priorities mid-2026: **DeepSeek** (Dec-25) — (a) sparse attention for long context, (b) scaled
@@ -421,7 +463,7 @@ honestly and three of them didn't survive a tuned baseline / a proper control."*
   — 9-angle 2026 research pass synthesized into the full S0→S8 pipeline, re-ranked EV order, the new
   S3 scaling-law-calibration gate, and the updated honesty ledger. Read this first.
 - **Buildable task breakdown (the next-phase DAG):** [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)
-  — 25 rungs (A-loop-to-chat + B-ablation, incl. F10 linear-hybrid + F11 agentic-RL added 2026-07-09),
+  — 26 rungs (A-loop-to-chat + B-ablation, incl. F10/F11 added 2026-07-09 + F12 data ablation added 2026-07-30),
   EV-ranked, each with exact interfaces / tests / falsifier /
   kill / zone note; grounded per-rung in the real code by workflow `w77bbp4pb`.
 - Approved plan of record: `~/.claude/plans/misty-sniffing-cerf.md`.

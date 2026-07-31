@@ -1,5 +1,12 @@
 # Frontier 2026 — End-to-End Training Plan (the integrated spine)
 
+> **Doc role.** This file owns the **integrated pipeline view** (S0→S8): data, architecture,
+> pretraining, scaling-law calibration, distributed pretrain, midtrain, SFT, RL, serving/eval. For
+> ablation strategy and rung cards see [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md); for
+> the buildable file→test spec see [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md); for a
+> one-page status board see [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md); for the curated entry point
+> see [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md).
+
 > **What this is.** The refactored **end-to-end training plan** for `scratch_llm`: one document that
 > walks the whole pipeline — data → architecture → pretraining → scaling-law calibration →
 > distributed pretrain → midtrain → SFT → RL → serving/eval — and, at each stage, grounds (a) what
@@ -26,6 +33,65 @@
 > - `[INFERENCE]` — reasoning from verified premises; not itself measured.
 > A repo claim always carries a file path or commit hash. A 2026-research claim always carries a
 > URL or arXiv ID. If it has neither, it is not a claim — it is decoration, and it does not ship.
+
+> **2026-07-31 external review & verification pass.** An external "lead engineer brief" restating
+> this plan was reviewed adversarially against (i) repo ground truth and (ii) re-fetched primary
+> sources. Verdict: **plan upheld** — the brief restates this doc set (d20 spec, tiers, rungs,
+> contingent-cost path are all already here); its genuine errors are corrected below and folded
+> back into the ledger docs.
+>
+> *Verified / updated 2026 claims (primary sources re-fetched 2026-07-31):*
+> - **DeepSeek V4 exists** (released 2026-04-24; V4-Pro 1.6T/49B-active, V4-Flash 284B/13B-active;
+>   [model card](https://fe-static.deepseek.com/chat/transparency/deepseek-V4-model-card-EN.pdf),
+>   [2606.19348](https://arxiv.org/abs/2606.19348)): **CSA+HCA hybrid attention; MLA's KV-latent
+>   compression dropped** (low-rank q/o projections survive). "Frontier attention is contested"
+>   stands. `[VERIFIED]`
+> - **GLM-5.2 IndexShare** = cross-layer reuse of DSA's lightning indexer (1 indexer / 4 sparse
+>   layers, −2.9× per-token FLOPs @1M), not a new attention family
+>   ([z.ai/blog/glm-5.2](https://z.ai/blog/glm-5.2)). `[VERIFIED]`
+> - **Kimi Linear**: 3 KDA : 1 MLA hybrid; "outperforms full attention under fair comparison" is a
+>   vendor preprint claim, no independent replication
+>   ([2510.26692](https://arxiv.org/abs/2510.26692)). `[VERIFIED as claim]`
+> - **Qwen3-Next**: exactly 3:1 Gated-DeltaNet : gated-full layout (HF model card). `[VERIFIED]`
+> - **Muon deflation is scale-dependent**: 1.4× @0.1B → 1.1× @1.2B under equal tuning
+>   ([2509.02046](https://arxiv.org/abs/2509.02046)); 10–15% fewer tokens @100M–4B
+>   ([2505.02222](https://arxiv.org/abs/2505.02222)); ~20–30% recoverable at 1.2B via
+>   Hyperball-style norm control ([2606.16899](https://arxiv.org/abs/2606.16899)). ⇒ Muon+AdamW
+>   baseline decision upheld; expected edge at d20 scale ≈1.2–1.3×, not the headline 2×.
+> - **Spurious Rewards is now ICML 2026** ([2506.10947](https://arxiv.org/abs/2506.10947)) — but
+>   the naive reading is weakened by peer-reviewed counter-evidence: contamination (AAAI-26,
+>   [paper 40687](https://ojs.aaai.org/index.php/AAAI/article/view/40687/44648)) and an
+>   "Anchor-Adapter" memorization circuit ([2601.11061](https://arxiv.org/abs/2601.11061)). ⇒ F7
+>   gains: contamination probe (partial-prompt completion) + ≥1 non-Qwen-family control +
+>   budget-matched eval, per the emerging minimum RLVR standard
+>   ([2509.21882](https://arxiv.org/abs/2509.21882)).
+> - The "Wang et al." recall paper = **Dustin Wang et al., [2507.06457](https://arxiv.org/abs/2507.06457)**
+>   (*A Systematic Analysis of Hybrid Linear Attention*; preprint): LM loss flat across linear:full
+>   ratios while **RULER** recall collapses at high ratios; ~3:1 approaches Transformer recall.
+>   Probes: RULER (primary) / MQAR (Arora [2312.04927](https://arxiv.org/abs/2312.04927)) / NIAH —
+>   MQAR is *not* from that paper. ⇒ F8/F10 gates keep a mandatory recall probe, RULER-first; the
+>   3:1 F10 design point is supported.
+>
+> *Corrections to the reviewed brief (do NOT propagate):*
+> 1. **Its §"what F6 taught us" is void.** `artifacts/f6_moe_ablation/` is a 30-step, d=32 synthetic
+>    smoke run (commit `98f62e3`) — harness plumbing only. The coarse-vs-fine "takeaways" are not
+>    evidence; real F6 needs ≥1B real-token arms. Logged as smoke in `docs/RESULTS.md` §F6.
+> 2. ClimbMix −27% is a **wall-clock speedrun** confounded with the d26→d24 model shrink (nanochat
+>    LOG 2026-03-04), not iso-FLOP; the paper's ClimbMix-vs-FineWeb-EDU comparison is **1B @ equal
+>    token budget**, not 35–500M. F12 at 35M/700M is a *novel* measurement — cite it that way.
+> 3. NVFP4 residual gaps are documented at **8B/12B** (~1–1.5% rel. loss vs FP8/BF16,
+>    [2509.25149](https://arxiv.org/abs/2509.25149)); small scale (1.2B) is *more* forgiving, not
+>    less. B200 is **sm_100**; sm_120 is consumer Blackwell (RTX 5090 class).
+> 4. "MiniMax retreated to full attention" is **stale**: true for M2 (Nov 2025), reversed in M2.5
+>    (7:1 hybrid, Feb 2026) and M3 (**MSA** sparse attention,
+>    [2606.13392](https://arxiv.org/abs/2606.13392), Jun 2026). The contested-attention thesis is
+>    *stronger*, not weaker.
+> 5. The brief's "AdamW baseline" is pre-pivot: the d20 optimizer is **Muon+AdamW** (commit
+>    `f9e8f3b`; F1-run descoped 07-17).
+>
+> *Adopted from the review:* F7 contamination probe + non-Qwen control; F8/F10 recall probe fixed
+> to RULER-primary. Ordering unchanged — **next: F12 + S3 sweep (free) → P5 d12 ($10–15) → 8×H100
+> d20 (gated)**.
 
 ---
 
@@ -130,6 +196,18 @@ is the cheapest large-win ablation we are not running.
 
 **(f) Status.** A0/A1 shipped; P2 parquet path proven; ClimbMix re-staging + F12 **pending**
 (standing-box, free); d20 corpus choice **open until F12 verdicts**.
+
+**F12 corpus ablation.** Pre-registered head-to-head that decides the d20 corpus *with our recipe*:
+**35M params / 700M tokens / iso-FLOP** (`C ≈ 1.5×10¹⁷`), tokenizer retrained **per corpus** on the
+same byte budget, identical decontamination and packing. Primary metrics: **val_bpb + CORE** on a
+shared held-out set. Arms: banked **FineWeb-EDU-100B** vs **NVIDIA ClimbMix-400B** ([VERIFIED],
+[Nemotron-CLIMB 2504.13161](https://arxiv.org/abs/2504.13161); HF card
+[nvidia/Nemotron-ClimbMix](https://huggingface.co/datasets/nvidia/Nemotron-ClimbMix); nanochat
+switch [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch), 2026-03-04:
+2h46m → 2h01m (−27%), val_bpb 0.7465 → 0.7185). **License CC BY-NC 4.0** — must be stated in the
+A9 model card if ClimbMix wins. **Prediction:** ClimbMix bpb < FineWeb-EDU bpb, re-anchoring the
+d20 CORE band if the corpus flips. **Kill:** ClimbMix ≤ FineWeb-EDU at iso-FLOP ⇒ keep the banked
+FineWeb-EDU corpus.
 
 ---
 
@@ -371,6 +449,22 @@ pre-registered 0.19–0.22 band; a useful independent cross-check that the band 
   to close or explicitly accept before $100.
 - **Kill:** if even s5–s6 (59M, ≤2.4B tokens) cannot beat the loss floor of the toy corpus by a
   clear margin, the data/recipe stack has a bug — stop, do not scale.
+
+**(g) The d14/d16 mid-scale policy of record (2026-07-31, user-approved).** The largest free
+calibration point is s8 (d12, C ≈ 2.2e18); the d20 is C ≈ 2.77e19 — a 12.6× extrapolation. A
+**d14 (~193.6M, C ≈ 4.5e18)** or **d16 (~268.4M, C ≈ 8.6e18)** point cuts that to ~6×/~3.2×, but
+they are a **trigger-gated verification rung, never a scheduled spend** (standing box ~57/109 h
+free-but-slow; 1×H100 spot ~$8–12 / ~$15–25). Any one trigger fires ⇒ run; none ⇒ skip, $0:
+
+| trigger | condition | response |
+|---|---|---|
+| **T1 fit failure** | S3 gates fail (a+b ∉ [0.95,1.05] or R² < 0.98) | run **d14** — cheapest grid extension before trusting any extrapolation |
+| **T2 anchor divergence** | P5 d12 bpb diverges from the S3-fit prediction by > 0.01 bpb (or CORE > 0.02, the oracle-divergence gate) | run **d16** to localize where the curve breaks before the $100 |
+| **T3 science promotion** | F8 (DSA) or F10.2 (GDN-2 3:1) beats full attention on bpb at sweep scale **and** passes the mandatory RULER recall probe | confirm at **d14** before the result enters the public report (small-scale rankings can flip) |
+| none | — | d16 stays the $90-cumulative abort fallback only |
+
+Mid-scale runs use the *frozen* d20 recipe (full attention, Muon+AdamW, F12-winning corpus) — they
+are calibration points, not architecture bake-offs; the d20 architecture stays frozen regardless.
 
 **(f) Status.** Not started. Free (standing box). Blocks nothing that ships code; gates the D:N
 re-registration and the P5 go/no-go.
@@ -676,6 +770,11 @@ the d20.
 
 ## §3 — The updated ablation program
 
+> **Compact status summary.** This table gives the 2026-07-30 verdict, status, and falsifier for
+> each rung. Full rung cards (hypothesis, prediction, kill, DoD, files, interview questions,
+> citations) live in [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md) §3 and §10.
+> [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md) provides a one-page view of the same information.
+
 Every rung: pre-registered falsifier in `bench/RESULTS.md` / `docs/RESULTS.md` *before* running,
 one variable at iso-FLOP, kill criterion checked. Status: ✅ shipped · 🆕 shipped today (2026-07-30)
 · ⬜ pending · 💰 GPU/rental-gated.
@@ -704,7 +803,7 @@ one variable at iso-FLOP, kill criterion checked. Status: ✅ shipped · 🆕 sh
 | **F9** | QK-clip guard (gated >1B) | Settled (softcap dead — Gemma 3 2503.19786; K2 explosion was 9B-active); qk_norm suffices sub-1B | ✅ observer + `apply_qk_clip` | with qk_norm: max logit <30 ⇒ clip γ≡1 | sustained S_max>30 |
 | **F10** | Hybrid linear attention | The live attention frontier; **block of record is now GDN-2** (2605.22791) not GDN; recall probe mandatory (Wang 2507.06457) | F10.1 ✅ `linear_attn.py`; F10.2 ⬜ | 3:1 hybrid within +0.03 val loss of full-attn iso-param; state ≥2× smaller; **MQAR/NIAH recall parity**; decode uplift ≤8k predicted null | val gap >0.1 nats; no state win; recall deficit |
 | **F11** | Agentic / tool-use RL | #1 stated lab priority; SWE-bench Verified citation stale (withdrawn) — direction unaffected; reward mode collapse ≤1B documented (2504.02273) | ⬜ CPU-green harness pending | verifiable-reward success ↑, turns bounded; format-only control flat; pass^k + turns-used reported | flat success; control not caught by logging |
-| **F12** 🆕 | **Data ablation: FineWeb-EDU vs ClimbMix** | The missing rung — data was nanochat's biggest win (−27%, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)); decides the d20 corpus with *our* recipe | ⬜ proposed this pass (standing box, ~1 GPU-day) | ClimbMix bpb < FWE bpb at iso-FLOP (35M/700M, tokenizer retrained per corpus, CORE+bpb) | ClimbMix ≤ FWE ⇒ keep banked FWE corpus; CC BY-NC noted in A9 |
+| **F12** 🆕 | **Data ablation: FineWeb-EDU vs ClimbMix** | The missing rung — data was nanochat's biggest win (−27%, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)); decides the d20 corpus with *our* recipe | ⬜ pending, standing-box free; gates d20 corpus + CORE band re-anchor | ClimbMix bpb < FWE bpb at iso-FLOP (35M/700M, tokenizer retrained per corpus, CORE+bpb) | ClimbMix ≤ FWE ⇒ keep banked FWE corpus; CC BY-NC noted in A9 |
 | **P1–P6** | d20 gate prerequisites | Settled engineering | P1 ✅ SDPA · P2 ✅ parquet · P3 ✅ CORE suite · P4 LR machinery folds into P5 · P5 💰 $10–15 · P6 busbw ≥350 GB/s gate | per-runbook scorecard | per-runbook scorecard |
 
 **Re-ranked EV order (justified by the 2026-07-30 pass):**

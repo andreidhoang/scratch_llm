@@ -200,6 +200,7 @@ Nsight is the spine of this assignment. The full discipline is in `00_foundation
 - **Full DeepGEMM reproduction** — JIT, fine-grained scaling, two-level promotion — and push toward the ~1350–1550 H800 best-case band; document where you fall short and why.
 - **Stream-K ablation:** construct the worst-case geometry for a fixed grid and show Stream-K's largest win there (toward the paper's 14× tail), vs negligible win on the square case — the judgment is *when* Stream-K matters.
 - **Fused norm-into-GEMM-epilogue** (or GEMV-into-softmax) end-to-end micro-fusion, measured against the unfused two-kernel baseline.
+- **MoE grouped GEMM** (the production kernel every 2026 MoE layer runs twice): ragged per-expert shapes — a different M per expert, one launch, no padding waste — via CUTLASS grouped GEMM or DeepGEMM's m-grouped path, on your §4 WGMMA+TMA+persistent scaffold. *Judgment to demonstrate:* per-expert token counts are load-imbalanced, so the tile scheduler, not the MMA, is the hard part. This is the kernel A6's all-to-all feeds.
 
 ---
 

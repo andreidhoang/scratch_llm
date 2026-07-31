@@ -605,7 +605,8 @@ B200 (`B200_day_runbook.md`).
 
 The EV-ranked, pre-registered, iso-FLOP ablation study on a **real trained** nanochat-grade base.
 Predict-before-run (FOP-2/3): each rung's falsifiable number + kill criterion is registered here
-*before* the run; `[FACT]` only once the measured column is filled. Node pointer: **F1**.
+*before* the run; `[FACT]` only once the measured column is filled. Node pointer: **RUN F12 → S3**
+(harnesses shipped 2026-07-31, see "Built — F12 + S3" below).
 
 ### Pre-registration — F1 MuonAdamW (2026-07-04, PENDING)
 
@@ -1049,3 +1050,28 @@ re-measurement here**:
 
 **Next → all effort on the d20 gate:** A7 optimizer-embedded ZeRO-2 wiring + P3 CORE suite → A8
 runbook → P5 d12 rehearsal on 1×H100 (LR sweep folded in) → the 8×H100 d20 run.
+
+### Built — F12 corpus-ablation harness + S3 scaling-sweep driver (2026-07-31, CPU-green, runs pending)
+
+**F12 (FineWeb-EDU vs ClimbMix, the d20 corpus decision).** `src/scratch_llm/eval/corpus_ablation.py`
+(`CorpusAblationArm`, `split_held_out` with A0 13-gram decontam + logged overlap rate,
+`score_held_out_bpb` on a shared held-out byte set — each arm scores the same bytes with its own
+tokenizer), `scripts/tok_train.py` (per-corpus BPE, `--byte-budget`), and an additive
+`--repo-id` generalization of the `data/shards.py` parquet bulk path. ClimbMix ships **no raw-text
+column** (tokenized GPT-2 parquet under `climbmix_small/`) — a stdlib-only GPT-2 detokenizer
+(`build_gpt2_detokenizer`, verified against the real `encoder.json`) recovers the text; hub layout
+verified live 2026-07-31. Tests: `tests/test_corpus_ablation.py` + `tests/test_tok_train.py`.
+Pre-registration + falsifier/kill: `docs/RESULTS.md` §F12 (unchanged). **Run: pending (standing
+box, ~2×2 h).**
+
+**S3 (scaling-law calibration before the $100).** `src/scratch_llm/scaling/s3_sweep.py` +
+`scripts/s3_scaling_sweep.py` (`plan`/`run`/`fit`): grid d4/d8/d12 × D:N {8,20,40} = s1–s8, exact N
+from `model_config_for_depth`, per-budget min-pick + log-log fit via the existing
+`scaling/isoflop.py`, gates a+b ∈ [0.95,1.05] and R² ≥ 0.98, D:N decision rule (< 15 ⇒ re-register
+the d20's 9.6B), nanochat oracle overlay (d20-miniseries / leaderboard / GPT-2 XL / CORE-fit
+⇒ ≈0.195 at our C). Pre-registration: `docs/RESULTS.md` §S3. Tests: `tests/test_s3_scaling_sweep.py`.
+**Sweep: pending (standing box, ~2–3 GPU-days; s6/s8 droppable).** d14/d16 mid-scale escalation is
+trigger-gated (T1/T2/T3), policy of record in `docs/FRONTIER_2026_END_TO_END_PLAN.md` §S3(g).
+
+**Order correction (2026-07-31):** F12 runs **before** S3 — the scaling-law constants are
+corpus-dependent, so the fit must use the F12-winning corpus, not a borrowed one.

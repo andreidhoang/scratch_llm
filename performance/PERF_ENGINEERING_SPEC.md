@@ -76,7 +76,7 @@ rung that requires WGMMA/TMA needs a rented H100. Plan accordingly.
 | 0 own | RTX PRO 4000 Blackwell (sm_120, 24 GB, 0.55 TB/s) | — (~80% of all work) | n/a (24 GB; 0.84B bf16 → 327 tok/s) | every non-ISA-gated rung of A1–A5; all serving algorithms + oracles + traces | standing · $0 |
 | 1 rent | 1× H100 SXM (80 GB, 3.35 TB/s, sm_90a) | ISA: WGMMA/TMA/FP8 | 47.9 tok/s | A2 §4.1–4.5; A3 R3–4 + §4.1; A4 R4 (FA3); A5 FP8-WGMMA; **+ single-GPU frontier serving block** (Phase 2) | 1 × 12–15 h · ~$25–45 |
 | 2 rent | **8× H200 SXM NVLink node** (1,128 GB, 4.8 TB/s/GPU) — *the crown* | interconnect: one NVLink domain **+ capacity: R1-FP8 fits** | 68.6 tok/s | A6 R0–R1 + **the frontier-MoE serving day**: DeepSeek-R1 FP8 TP×EP, MLA KV at scale, PD-disagg (Phase 4) | 1 × 6–10 h · ~$150–320 |
-| 3 rent | 1× B200 (~192 GB, ~8 TB/s, sm_100a) | ISA: tcgen05/TMEM/NVFP4 | ~114 tok/s | A3 §4.2–4.3; A5 §7; DELTA NVFP4-state probe | 1 × 4–6 h · ~$25–45 |
+| 3 rent | 1× B200 (~192 GB, ~8 TB/s, sm_100a) **or B300** (288 GB, sm_103a — same tcgen05/TMEM contract, +50% dense FP4; prefer if price ≈) | ISA: tcgen05/TMEM/NVFP4 | ~114 tok/s | A3 §4.2–4.3; A5 §7; DELTA NVFP4-state probe | 1 × 4–6 h · ~$25–45 |
 | 4 skip | 2-node 16× over IB | the ~18× cliff itself | — | A6 R3 + §4.1/4.3/4.4 (optional; training-leaning) | optional |
 
 **The capacity gate, worked (why Tier 2 is H200, not H100):** DeepSeek-R1 FP8 weights ≈ **671 GB**
@@ -369,8 +369,11 @@ MLA demonstration and disaggregation can be at toy scale. FP8 KV bridges to A5.
 > **Honesty flags:**
 > - **FA3 numbers are from the paper** (arXiv:2407.08608): FP16 ~740 TF/s, FP8 ~1.2 PF/s. Your
 >   implementation will trail FA3 by some gap — diagnosing that gap is the deliverable.
-> - **FA4 BF16 B200 public numbers**: 1605 TF/s = 71% of B200 BF16 peak, 1.3× cuDNN 9.13, 2.7× Triton.
->   **FP8/FP4 FA4 numbers are NOT yet public** — do not invent them.
+> - **FA4 BF16 B200 public numbers**: ≈1.6 PF/s = 71% of B200 BF16 peak (blog 1605, abstract 1613 TF/s).
+>   The launch comparison (1.3× cuDNN 9.13, 2.7× Triton) is **dated** — cuDNN adopted the same techniques
+>   and current cuDNN (9.24) matches FA4; benchmark against the cuDNN of the day. **FA4 decode on Hopper
+>   regresses vs FA3 at long seq (no SplitKV)** — FA3 stays the Hopper decode kernel. **FP8/FP4 FA4
+>   numbers are NOT yet public (re-verified 2026-07-30)** — do not invent them.
 
 **DoD:**
 - [ ] Fused FA (Rung 2) bit-exact vs R0; constant SMEM verified (constant regardless of N); no OOM at N=64K

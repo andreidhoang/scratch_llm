@@ -1,5 +1,12 @@
 # Frontier 2026 — Task Spec (the buildable next-phase DAG)
 
+> **Doc role.** This file owns the **buildable implementation spec**: exact interfaces (file →
+> change), config additions, CPU-green tests, dependencies, and the `Next-node:` pointer. For
+> ablation strategy see [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md); for the integrated
+> pipeline view see [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md); for a
+> one-page status board see [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md); for the curated entry point
+> see [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md).
+
 > **What this is.** The implementation-grade task breakdown for the close-the-loop / frontier-ablation
 > front (ADR-0018). The strategy + falsifiers live in
 > [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md); **this doc is the buildable spec** —
@@ -14,13 +21,13 @@
 >
 > **Provenance.** Produced 2026-07-04 by an 8-agent workflow (`w77bbp4pb`): one deep-spec agent per
 > rung reading the ACTUAL files it would touch + verifying primary sources, plus a sequencing critic.
-> 18 rung specs, 0 agent errors. The critic's genuinely-missing items are folded in as §B added
+> 19 rung specs, 0 agent errors. The critic's genuinely-missing items are folded in as §B added
 > rungs; its scope corrections are §D.
 >
 > **Reference oracle available:** the venv vendors `transformers/models/{deepseek_v2,deepseek_v3,
 > deepseek_v32,glm4_moe,nanochat,qwen3}` — read these as implementation oracles (re-own, don't copy).
 
-<!-- Next-node: ⚡ d20 SPRINT (2026-07-17 pivot, user decision): F1-run DESCOPED mid-flight (killed at 3.8%, run healthy — optimizer ADOPTED = Muon+AdamW per nanochat/Moonlight/K2 evidence, RESULTS.md §Decision; harness stays shipped; LR sweep folds into P5). ALL effort → the d20 gate: A7 optimizer-embedded ZeRO-2 ✅ (`utils/dist_train.py`, 07-18, systems-verified ACCEPT 12/12 incl. single-proc byte-identity + 3-rank oracle; gloo/CPU, NCCL shares the path) + P3 CORE 22-task suite ✅ (`eval/core_suite.py` + `bench/core_eval.py`, fidelity-verified byte-identical to nanochat core.yaml). A8 ✅ (07-19, systems-verified ACCEPT: `deploy/runbooks/d20_speedrun_8xH100.md` 345L + consolidated full-gather ckpt `consolidated_state_dict`/`load_consolidated`/`save_consolidated_checkpoint` — bitwise round-trip incl. cross-topology W2→W1; suite 864/0). **ALL BUILDABLE d20-GATE RUNGS DONE** — incl. the last launcher wiring (07-28): `--checkpoint-every` threaded through `speedrun.stage_pretrain` → `work_dir/pretrain_ckpt.pt` (optimizer-state intra-stage snapshots, consolidated under torch.distributed via train()'s existing path; `tests/test_speedrun.py`, ruff+pyright green). NEXT (both need GPU $ + user go-ahead): **P5 d12 dress rehearsal 1×H100** (~$10–15: LR sweep for the single Muon LR + compile-on-sm90 re-validation + CORE-vs-public-checkpoint + ckpt kill/resume drill) → **the 8×H100 d20** (~$100, 480.4M, 9.6B tok, CORE 0.19–0.22). Runbook = `deploy/runbooks/d20_speedrun_8xH100.md`. P1 flash-attn ✅ (SDPA shipped 07-16, GPU-measured 07-17) · P2 parquet path ✅ PROVEN at 0.7B/sub-hour (10B variant = same code, --target-tokens 1e10, build on the rental box or pre-staged) · corpus + calibration banked on stopped vast box 43676999. Shipped 07-16/17: SDPA backend · parquet bulk shards · crash-safe F1 driver · launch calibration (B=16, 18.2 GiB, 0.283 s/step). ⚠ 07-16 refactor stands: d20 = 480.4M @ 32768 · anchor CORE 0.2219 · D = 9.6B. · UPDATE this line when a rung ships -->
+<!-- Next-node: ⚡ d20 SPRINT (2026-07-17 pivot, user decision): F1-run DESCOPED mid-flight (killed at 3.8%, run healthy — optimizer ADOPTED = Muon+AdamW per nanochat/Moonlight/K2 evidence, RESULTS.md §Decision; harness stays shipped; LR sweep folds into P5). ALL effort → the d20 gate: A7 optimizer-embedded ZeRO-2 ✅ (`utils/dist_train.py`, 07-18, systems-verified ACCEPT 12/12 incl. single-proc byte-identity + 3-rank oracle; gloo/CPU, NCCL shares the path) + P3 CORE 22-task suite ✅ (`eval/core_suite.py` + `bench/core_eval.py`, fidelity-verified byte-identical to nanochat core.yaml). A8 ✅ (07-19, systems-verified ACCEPT: `deploy/runbooks/d20_speedrun_8xH100.md` 345L + consolidated full-gather ckpt `consolidated_state_dict`/`load_consolidated`/`save_consolidated_checkpoint` — bitwise round-trip incl. cross-topology W2→W1; suite 864/0). **ALL BUILDABLE d20-GATE RUNGS DONE** — incl. the last launcher wiring (07-28): `--checkpoint-every` threaded through `speedrun.stage_pretrain` → `work_dir/pretrain_ckpt.pt` (optimizer-state intra-stage snapshots, consolidated under torch.distributed via train()'s existing path; `tests/test_speedrun.py`, ruff+pyright green). NEXT: **RUN the F12 corpus ablation** `[free, standing box]` (harness shipped 2026-07-31: `eval/corpus_ablation.py` + `scripts/tok_train.py` + ClimbMix staging in `data/shards.py`; FineWeb-EDU vs ClimbMix 35M/700M; gates d20 corpus) **then the S3 scaling sweep** (driver shipped: `scripts/s3_scaling_sweep.py` plan/run/fit, `scaling/s3_sweep.py`; pre-registered in `docs/RESULTS.md` §S3; d14/d16 escalation trigger-gated per E2E §S3(g)) → (GPU $ + user go-ahead) **P5 d12 dress rehearsal 1×H100** (~$10–15: LR sweep for the single Muon LR + compile-on-sm90 re-validation + CORE-vs-public-checkpoint + ckpt kill/resume drill) → **the 8×H100 d20** (~$100, 480.4M, 9.6B tok, CORE 0.19–0.22). Runbook = `deploy/runbooks/d20_speedrun_8xH100.md`. P1 flash-attn ✅ (SDPA shipped 07-16, GPU-measured 07-17) · P2 parquet path ✅ PROVEN at 0.7B/sub-hour (10B variant = same code, --target-tokens 1e10, build on the rental box or pre-staged) · corpus + calibration banked on stopped vast box 43676999. Shipped 07-16/17: SDPA backend · parquet bulk shards · crash-safe F1 driver · launch calibration (B=16, 18.2 GiB, 0.283 s/step). ⚠ 07-16 refactor stands: d20 = 480.4M @ 32768 · anchor CORE 0.2219 · D = 9.6B. · UPDATE this line when a rung ships -->
 
 > ▶ **START HERE (fresh session).** The loop is **CLOSED** (F1 Muon · train-wiring/F4 · eval report
 > card · speedrun spine shipped, GPU-verified talking sample). **A1 real-corpus shards ✅ 2026-07-09**
@@ -77,14 +84,16 @@ the frontier ablation study (the differentiating research). `[S/M/L]` = effort.
 | 18 | **F8.1 / F8.2** DSA sparse attn | B | M/L | — | lightning indexer + top-k gather + KL warm-up (**PROMOTED to core — §10; scarce 2026 signal**) |
 | 19 | **F10.1 / F10.2** hybrid linear attn 🆕 | B | M/L | (F5 seam) | Gated-DeltaNet block (chunkwise==recurrent==ref) → `attn_schedule` 3:1 iso-param quality/KV ablation — **the 2026 attn frontier; model-side twin of DELTA GDN-2** |
 | 20 | **F11** agentic / tool-use RL 🆕 | B | L | — | multi-turn `ToolEnv`(VerifiableEnv) + masked multi-turn rollout + format-only reward-hack control — **the #1 stated 2026 lab priority** |
+| 21 | **F12** ClimbMix-400B vs FineWeb-EDU corpus ablation 🆕 | B | M | — | **35M params / 700M tokens / iso-FLOP**, tokenizer retrained per corpus, bpb + CORE; decides d20 corpus before any $ spent — **data > optimizer** |
 | — | **A7** distributed d20 pretrain | A | L | A2 | optimizer-embedded ZeRO-2 (reduce_scatter → owner-update → all_gather; nanochat's verified shape) — the 480M d20 needs data-parallel on 8×H100 |
 | — | **A8** d20 rental runbook + guardrails | A | M | A2,A7 | resume/off-box-sync + $/token cap + divergence kill-switch + repro manifest |
 | — | **A9** public release surface | A | S | A6 | model card + reproducible weights/tokenizer/config/transcript bundle |
 
-> **⚠ EV re-ranked 2026-07-09 (ABLATIONS §10).** The numeric order above is build-dependency order, not
-> EV. **Scarce-2026 EV order = F8(+F10) · F7-reframed(+F11) · F1 · F2 · F4**, then F3/F5/F6/F9. Attention
+> **⚠ EV re-ranked 2026-07-09 (ABLATIONS §10), updated for F12 2026-07-30.** The numeric order above is build-dependency order, not
+> EV. **Scarce-2026 EV order = F8(+F10) · F7-reframed(+F11) · F12 (data) · F1 · F2 · F4**, then F3/F5/F6/F9. Attention
 > efficiency (F8 DSA + F10 linear-hybrid) and RL honesty/agentic (F7-reframed + F11) carry the
-> differentiating hiring signal; F1/F2/F4 are table-stakes done well. F7's falsifier is **reframed** to a
+> differentiating hiring signal; **F12** is the highest-measured-effect cheap win and gates the d20 corpus.
+> F1/F2/F4 are table-stakes done well. F7's falsifier is **reframed** to a
 > *random-reward debunk control* (length-growth is a GRPO-bias artifact, not the "aha"); F1's kill band is
 > **recalibrated** to the tuned-baseline 1.1–1.4× (see the F1-run DoD note + `bench/RESULTS.md`).
 
@@ -300,6 +309,15 @@ Midtrain (A4) is **descoped from the paid run** until built (`speedrun.py` raise
 - **Zone:** `envs/`, `algos/` (additive multi-turn rollout — reuse, don't edit, `grpo.py`'s update), `rewards/`, `utils/monitors.py` — all F-front / main-track owned. No perf-owned files.
 - **Scope (§D-style):** ship the **CPU-green harness + the by-construction control proof** first (safe evaluator + multi-turn masking + the format-only-hacks incentive test); the real "does it learn tool-use" run is rental-gated (needs a ~0.5–1.5B base, like F7).
 - **Interview.** "Why is agentic/tool-use RL the 2026 frontier over single-turn RLVR — how do you mask tool outputs from the loss, credit-assign across turns, and stop the agent from reward-hacking the tool-call *format* instead of solving the task?"
+
+### F12 · ClimbMix-400B vs FineWeb-EDU corpus ablation `[M]` 🆕 *(2026-07-30, END_TO_END_PLAN §S0 — the d20 data decision)*
+> **Why (verified 2026).** nanochat's switch FineWeb-EDU-100B → **ClimbMix-400B** ([Nemotron-CLIMB 2504.13161](https://arxiv.org/abs/2504.13161); HF card [nvidia/Nemotron-ClimbMix](https://huggingface.co/datasets/nvidia/Nemotron-ClimbMix); commit [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch), 2026-03-04) was the single biggest improvement to its GPT-2 speedrun: **2h46m → 2h01m (−27%)**, val_bpb **0.7465 → 0.7185**. The program currently treats the corpus as fixed while treating optimizer/architecture decisions as open — F12 fixes that asymmetry at F1-harness scale before the $100 run.
+- **Interfaces:** NEW `eval/corpus_ablation.py` (or reuse `eval/optimizer_race.py`) — `CorpusAblationArm`(FINEWEB_EDU / CLIMBMIX), `build_corpus_shard()` wrapping existing `data/shards.py` for FineWeb-EDU and adding a ClimbMix staging path; per-corpus BPE via `scripts/tok_train.py` (vocab 32,768, trained *on the train split of the chosen corpus*); `run_corpus_ablation()` trains two iso-FLOP models and emits val_bpb + CORE on a shared, decontaminated held-out set; results append to `docs/RESULTS.md` §F12 and `bench/RESULTS.md` §Frontier ablations.
+- **Config:** `CorpusAblationConfig` with `corpus: Literal['fineweb-edu','climbmix']`, `n_params=35_000_000`, `n_tokens=700_000_000`, `retrain_tokenizer=True`, `val_set='held_out_common_crawl'`, `decontaminate=True`. Use the same model depth/width, MuonAdamW optimizer, and MTP/F4 recipe as the F1-run harness so the result is recipe-specific.
+- **DoD:** both arms train to a stable loss curve; loss-at-init ≈ log V for each tokenizer; the per-corpus tokenizer round-trips a held-out doc; val_bpb and CORE are measured on the same held-out set; decontamination overlap rate logged for both corpora. **Measured falsifier:** ClimbMix **bpb <** FineWeb-EDU bpb at iso-FLOP; CORE follows bpb (ClimbMix CORE ≤ FWE CORE). **Kill:** ClimbMix bpb ≥ FineWeb-EDU bpb at iso-FLOP ⇒ keep the banked FineWeb-EDU corpus; do **not** stage ClimbMix for the d20.
+- **Zone:** `data/` (additive shard builder), `eval/` (new ablation driver), `scripts/` (tokenizer retrain), `docs/RESULTS.md`/`bench/RESULTS.md`. No perf-owned files.
+- **d20 extension:** the F12 verdict gates the d20 corpus staging in `deploy/runbooks/d20_speedrun_8xH100.md` Step 1. If ClimbMix wins, re-stage ~10B tokens of ClimbMix-400B, retrain the d20 tokenizer on that corpus, and re-anchor the pre-registered CORE band (0.19–0.22) to the ClimbMix point. The A9 model card must state **CC BY-NC 4.0** license and HF source `nvidia/Nemotron-ClimbMix`.
+- **Interview.** "Why can a corpus swap be a bigger win than an optimizer swap at fixed compute — and why does comparing bpb require retraining the tokenizer on each corpus?"
 
 ---
 

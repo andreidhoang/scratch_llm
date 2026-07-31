@@ -56,6 +56,8 @@ Six core collectives (book) plus the one MoE needs: **AllReduce, Broadcast, Redu
 
 > Tuning knobs you will actually touch: `NCCL_ALGO` (Ring/Tree/NVLS), `NCCL_PROTO` (LL/LL128/Simple — LL128 needs NVLink), `NCCL_BUFFSIZE`, `NCCL_IB_HCA`, `NCCL_NET_GDR_LEVEL` (GPUDirect RDMA), `NCCL_MIN/MAX_NCHANNELS`. Always end with: does measured busbw approach line rate? If not, the algorithm/protocol/topology is wrong, not the model.
 
+> **2026 addition — the NCCL device API (2.28+) and symmetric memory.** Communication has moved *on-device*: NCCL's device-side API (three modes: **LSA** load/store access within a node, **Multimem** NVLink-multicast ops, **GIN** GPU-initiated networking for internode, over **symmetric memory**) lets a CUDA kernel issue and complete collectives *from inside the kernel* — no host round-trip, no launch gap on the critical path. This is the substrate under DeepEP-style fused comm/compute kernels and their "~0-SM overlap" claims; NVSHMEM 3.x is the lower-level PGAS form. Know the three modes and *why* comm moved on-device: at decode-size messages, launch/sync overhead dominates — the same wall A1's CUDA-graph rung attacks.
+
 ### 2.3 Data parallel + ZeRO — the memory accounting you must write from memory (arXiv:1910.02054)
 
 Mixed-precision Adam keeps, **per device**, model state of **`16Ψ` bytes** for `Ψ` parameters: `2Ψ` (fp16 params) + `2Ψ` (fp16 grads) + `12Ψ` optimizer (fp32 master weights `4Ψ` + fp32 momentum `4Ψ` + fp32 variance `4Ψ`). Plain DDP replicates all `16Ψ` on every GPU and does **one AllReduce of gradients per step** (book's data-parallel section: 7 GB/iter for a 1B model, ~7 ms on 8×H100 NVLink). ZeRO shards this across `N` data-parallel ranks:
@@ -89,7 +91,7 @@ The boundary activations a pipeline ships are *small* (one microbatch's layer ou
 
 ### 2.6 Expert parallel — the all-to-all axis (arXiv:2412.19437)
 
-MoE routes each token to a few of many experts. With experts sharded across GPUs, a layer is: **all-to-all dispatch** (send each token to its expert's GPU) → expert GEMM → **all-to-all combine** (return results). The **capacity factor** (tokens-per-expert budget; drop or pad the overflow) governs the memory/quality trade-off [U: typical ranges ~1.0–2.0 / 1.25 for train, ~2.0+ for eval cited variously — re-verify before quoting a number]. DeepSeek-V3 uses **256 experts, 8 active per token**, with **auxiliary-loss-free** load balancing (a learned per-expert bias nudges routing instead of a balancing loss term). All-to-all is the chattiest collective in the stack, so **EP belongs intra-node on NVLink** wherever possible; when it must cross nodes, you *hide* it under compute (§2.8).
+MoE routes each token to a few of many experts. With experts sharded across GPUs, a layer is: **all-to-all dispatch** (send each token to its expert's GPU) → expert GEMM → **all-to-all combine** (return results). The **capacity factor** (tokens-per-expert budget; drop or pad the overflow) governs the memory/quality trade-off [U: typical ranges ~1.0–2.0 / 1.25 for train, ~2.0+ for eval cited variously — re-verify before quoting a number]. DeepSeek-V3 uses **256 routed experts + 1 shared, 8 routed active per token**, with **auxiliary-loss-free** load balancing (a learned per-expert bias nudges routing instead of a balancing loss term). All-to-all is the chattiest collective in the stack, so **EP belongs intra-node on NVLink** wherever possible; when it must cross nodes, you *hide* it under compute (§2.8).
 
 ### 2.7 Sequence / context parallel — splitting the sequence (arXiv:2310.01889, arXiv:2309.14509)
 
@@ -114,6 +116,7 @@ Two real topologies anchor it: **Llama-3 = 4D TP×CP×PP×DP** (arXiv:2407.21783
 - **TP overlap (Async-TP / userbuffers):** decompose the TP AllGather/ReduceScatter into **p2p ring steps pipelined against GEMM tiles** (TransformerEngine `tp_comm_overlap`); **FLUX** fuses collective + GEMM into a single kernel (arXiv:2406.06858).
 - **DualPipe (DeepSeek-V3):** a **bidirectional** pipeline fed from both ends; each chunk is split into **4 components — attention, all-to-all dispatch, MLP, all-to-all combine** — and forward/backward compute is overlapped with comm so the **cross-node EP all-to-all is fully hidden**. Bubble `(PP/2 − 1)(F&B + B − 3W)`; cost is **2× params/device** (two pipeline copies). (github.com/deepseek-ai/DualPipe)
 - **DeepEP (DeepSeek MoE all-to-all kernels):** *normal* kernels do **NVLink→RDMA forwarding** (intranode EP8 ~153 GB/s NVLink; internode EP64 ~51 GB/s RDMA — **[U: these predate a documented +30% optimization, re-verify]**); *low-latency* pure-RDMA decode kernels (dispatch ~77→194 µs from EP8→EP256) use **hook-based overlap that consumes ZERO SMs**, so comm steals no compute. Built on **NVSHMEM** (PGAS one-sided put/get *from inside* CUDA kernels — removes kernel launch/sync from the critical path). (github.com/deepseek-ai/DeepEP)
+- **TorchTitan MXFP8 + DeepEP (training-side proof point, 2026):** PyTorch's TorchTitan ran a DeepSeek-V3-style pretraining recipe at **+41% throughput on B200** by pairing MXFP8 GEMMs with DeepEP expert-parallel comms and async-TP — this section's overlap techniques composed with A5's low-precision, on a vendor-neutral stack. (pytorch.org blog; [FACT] 2026-07.)
 
 ### 2.9 MFU — the scoreboard (arXiv:2204.02311; arXiv:2205.05198)
 
@@ -144,7 +147,7 @@ At 16,384 GPUs the **mean time between failures is hours, not days.** Llama-3's 
 - **SLURM** (book's cluster manager): `sbatch --nodes=2 --ntasks-per-node=8 --gres=gpu:8`; `srun --mpi=pmix`. Production pattern = **one torchrun per node**, `SLURM_PROCID` → `node_rank`, `MASTER_ADDR` from the first node.
 - **MPI** (book's launcher): bootstraps the processes (`MPI_Init`, `cudaSetDevice(rank % 8)`); **NCCL still does the GPU collectives**. Fine for ≤4-node experiments; SLURM owns shared clusters.
 
-> **RL trainer↔inference bridge** (where this connects to A1's serving world): veRL/HybridFlow (arXiv:2409.19256) — colocated vs disaggregated actors, with **weight resharding every step** because the *training* sharding ≠ the *inference* sharding (~**140 GB/step** for a 70B model, up to **36.4% of iteration time**); rollout can be **>90% of RL runtime** with long-tail response stragglers. NeMo-Aligner (arXiv:2405.01481) refits TRT-LLM weights in place. Resharding is the distributed-systems crux of modern RLHF.
+> **RL trainer↔inference bridge** (where this connects to A1's serving world): veRL/HybridFlow (arXiv:2409.19256) — colocated vs disaggregated actors, with **weight resharding every step** because the *training* sharding ≠ the *inference* sharding (~**140 GB/step** for a 70B model, up to **36.4% of iteration time**); rollout can be **>90% of RL runtime** with long-tail response stragglers. NeMo-Aligner (arXiv:2405.01481) refits TRT-LLM weights in place. Resharding is the distributed-systems crux of modern RLHF. 2026 practice has largely moved past disk round-trips: serving engines expose **sleep/wake + in-place weight sync** (NCCL broadcast or CUDA-IPC from the trainer straight into the engine's weights), and async-RL frameworks (AReaL) trade bounded staleness for rollout saturation.
 
 ---
 
@@ -250,5 +253,7 @@ Add **async DCP checkpointing** (parallel sharded writes, CPU-staged background 
 - **Async-TP / FLUX** (collective+GEMM fusion): Chang et al., arXiv:2406.06858.
 - **Ring Attention**: Liu et al., arXiv:2310.01889; **DeepSpeed-Ulysses**: Jacobs et al., arXiv:2309.14509.
 - **veRL / HybridFlow** (RL resharding): Sheng et al., arXiv:2409.19256; **NeMo-Aligner**: arXiv:2405.01481.
+- **NCCL 2.28+ device API** (LSA / Multimem / GIN + symmetric memory; NVIDIA developer blog) · **NVSHMEM 3.x** docs.
+- PyTorch, **TorchTitan MXFP8 + DeepEP** (+41% DeepSeek-V3-style pretraining on B200, 2026) — cross-ref A5.
 - **NCCL User Guide** (collectives, ring/tree, NVLS, tuning env vars); **nccl-tests** (busbw vs algbw); **HuggingFace Ultra-Scale Playbook** (the practitioner's companion to all of the above).
 - Hardware: NVLink/NVSwitch & InfiniBand NDR/XDR data sheets; **GB200 NVL72** architecture brief. Cross-reference `00_foundations.md` for the interconnect-hierarchy table and the multi-GPU rental plan.

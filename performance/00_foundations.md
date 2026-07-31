@@ -17,8 +17,11 @@ The compute capability (`sm_XX`) of the GPU determines which instructions exist.
 | H200 SXM | Hopper | **90/90a** | 141 GB / 4.8 TB/s | 989 TF | 1,979 TF | — | 900 GB/s | same compute as H100 + more memory |
 | **B200** | Blackwell-DC | **100/100a** | 180 GB / ~8 TB/s | **2,250 TF** | 4,500 TF | **9,000 TF** | 1.8 TB/s | **tcgen05, TMEM, NVFP4, FA4** |
 | GB200 | 2×B200+Grace | 100 | 360 GB / ~16 TB/s | 4,500 TF | 9,000 TF | 18,000 TF | 1.8 TB/s | NVL72 rack-scale (overkill for kernels) |
+| **B300** (Blackwell Ultra) | Blackwell-DC | **103/103a** | 288 GB / ~8 TB/s | ~2,250 TF | ~4,500 TF | **~15,000 TF** | 1.8 TB/s | +50% dense FP4 vs B200; 160 SMs; FP64 ~removed (~1.2 TF); same tcgen05/TMEM contract (`compute_100f` family runs on both) |
+| GB300 NVL72 | 72×B300+36×Grace | 103 | 20.7 TB HBM3e / rack | — | — | ~1.1 EF dense FP4 / rack | 1.8 TB/s | rack-scale, shipping 2026 (rental beyond curriculum) |
+| **Rubin VR200** | Rubin | not public (2026-07) | 288 GB HBM4 / ~22 TB/s | — | — | **~50,000 TF NVFP4 [vendor figure]** | NVLink-6 3.6 TB/s | Vera Rubin NVL144 rack (72 packages/144 dies, 8 EF NVFP4); volume H2-2026; successor ISA not yet public |
 
-\* Consumer FP8/FP4 TFLOPS are NVIDIA-uneven across published sources — treat as estimates; the firm facts are sm_120 ≠ sm_100 and **no NVLink**. All datacenter numbers are **dense**; NVIDIA keynote "PFLOPS" figures are usually the **2× sparse** number. Sources: NVIDIA datasheets, SemiAnalysis Tensor-Core Evolution — see `references.md`.
+\* Consumer FP8/FP4 TFLOPS are NVIDIA-uneven across published sources — treat as estimates; the firm facts are sm_120 ≠ sm_100 and **no NVLink**. All datacenter numbers are **dense**; NVIDIA keynote "PFLOPS" figures are usually the **2× sparse** number. B300 HGX-B300 boards carry 270 GB (the 288 GB figure is GB300/B300-SXM). Rubin figures are NVIDIA.com/OCP vendor announcements (2026-07): the dense-vs-sparse basis of "~50 PF NVFP4" and the tcgen05-successor ISA are **not yet public** — orientation, not rental targets. Sources: NVIDIA datasheets, SemiAnalysis Tensor-Core Evolution — see `references.md`.
 
 **The three hard gates to memorize:**
 - **WGMMA + TMA → Hopper (sm_90) only.** A 4090 cannot run `wgmma.mma_async` or `cp.async.bulk.tensor`. A3's Hopper rungs and A4's FA3 rung *require* an H100.
@@ -43,13 +46,13 @@ Budget discipline: A1–A5 required cores fit in the low hundreds of dollars of 
 
 Install once per instance (script it; bake an image if your provider allows):
 
-- **CUDA Toolkit 12.6+ (13.x where available on Blackwell).** `nvcc`, `cuobjdump`, `nvdisasm`, `ptxas`. Confirm `nvcc --version` and that your `-arch=sm_90a`/`sm_100a` matches the GPU. The trailing `a` ("architecture-specific") matters for WGMMA/tcgen05 — use `sm_90a`, not `sm_90`.
+- **CUDA Toolkit 13.x** (13.1+ — the CuTe DSL requires it on Blackwell; 12.8 remains the floor for Hopper-only work). `nvcc`, `cuobjdump`, `nvdisasm`, `ptxas`. Confirm `nvcc --version` and that your `-arch=sm_90a`/`sm_100a`/`sm_103a` (B300) matches the GPU. The trailing `a` ("architecture-specific") matters for WGMMA/tcgen05 — use `sm_90a`, not `sm_90`.
 - **Nsight Compute (`ncu`) and Nsight Systems (`nsys`).** Kernel-level and timeline profilers. Non-negotiable for this curriculum.
-- **CUTLASS 3.x / 4.x + CuTe** (header-only; clone the repo). You'll read it constantly and use it for the harder tensor-core rungs.
+- **CUTLASS 4.x + CuTe / CuTe DSL** (4.6 as of 2026-07; C++ headers, plus `pip install nvidia-cutlass-dsl` for the Python DSL that FA4 is written in). You'll read it constantly and use it for the harder tensor-core rungs.
 - **PyTorch (current) + Triton.** Your correctness oracles, your `torch.compile` floor, and Triton for the kernels where it's the right tool.
 - **Python stack:** `numpy`, `matplotlib` (roofline + ladder plots), `pandas` (sweep results), `nvidia-ml-py`/`pynvml` (telemetry).
 - **For A6:** NCCL (bundled), `nccl-tests` (clone + build), `mpirun`/`torchrun`, and SLURM if your cluster uses it.
-- **Optional but recommended:** ThunderKittens and FlashInfer repos (read their kernels), `nvtx` for annotating timelines.
+- **Optional but recommended:** ThunderKittens and FlashInfer repos (read their kernels), `flash-attn-4` (pip, JIT — the FA4 reference implementation, CuTeDSL, Hopper+Blackwell), `nvtx` for annotating timelines.
 
 Sanity check every instance the moment it boots: `nvidia-smi` (right GPU? right count?), `nvidia-smi -q -d CLOCK` (can you lock clocks?), a trivial WGMMA/tcgen05 compile if you're on Hopper/Blackwell (fail fast if the toolchain/arch is wrong, before you've spent an hour).
 
