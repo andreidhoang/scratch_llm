@@ -34,7 +34,7 @@ import json
 import random
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from enum import Enum
 from pathlib import Path
 
@@ -373,8 +373,13 @@ def _run_arm(
     tokenizer = load_tokenizer(shard_dir)
 
     model_cfg = model_config_for_depth(depth, len(tokenizer.vocab), train_cfg.context_length)
+    # Match the F1-run recipe (bench/optimizer_race.py defaults): fused SDPA on GPU (avoids the
+    # eager-attention OOM) + qk_norm for the F9 falsifier regime.
+    sdpa = "cuda" in str(train_cfg.device)
+    model_cfg = replace(model_cfg, use_sdpa=sdpa, qk_norm=True)
     seed_everything(train_cfg.seed)
     model = TransformerLM(model_cfg)
+    model.to(train_cfg.device)
 
     held_ids = encode_held_out(tokenizer, held_out)
     init_ce = loss_at_init(

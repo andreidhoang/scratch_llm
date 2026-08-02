@@ -89,7 +89,9 @@ ignore = ["E501"]  # line length enforced softly; long math/comments allowed
 "bench/kernels/**/*.py" = ["E402"]
 "scripts/f6_moe_ablation.py" = ["E402"]
 "scripts/f12_corpus_ablation.py" = ["E402"]
+"scripts/resume_climbmix_only.py" = ["E402"]
 "scripts/s3_scaling_sweep.py" = ["E402"]
+"scripts/stage_s3_corpus.py" = ["E402"]
 "scripts/tok_train.py" = ["E402"]
 
 [tool.pyright]

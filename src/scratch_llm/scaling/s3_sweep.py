@@ -127,10 +127,18 @@ class GridPoint:
 @cache
 def _instantiated_params(depth: int, vocab_size: int, context_length: int) -> int:
     """Exact N for a depth: build the model and count — the plan table's approximations are
-    never trusted (optimizer_race.py uses the same instantiation-count pattern)."""
+    never trusted (optimizer_race.py uses the same instantiation-count pattern).
+
+    The real GPU training path turns on ``qk_norm`` (F9 guardrail) and ``use_sdpa`` (OOM guard),
+    so the planned param count must include ``qk_norm``'s extra parameters.
+    """
+    from dataclasses import replace
+
     from scratch_llm.model import TransformerLM
 
-    model = TransformerLM(model_config_for_depth(depth, vocab_size, context_length))
+    cfg = model_config_for_depth(depth, vocab_size, context_length)
+    cfg = replace(cfg, qk_norm=True, use_sdpa=True)
+    model = TransformerLM(cfg)
     return sum(p.numel() for p in model.parameters())
 
 

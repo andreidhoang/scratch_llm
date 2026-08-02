@@ -1,0 +1,14 @@
+[2026-08-02T02:57:49Z] S3 sweep wrapper starting
+[2026-08-02T02:57:49Z] Protocol deviations: ClimbMix selected by operator override; batch sizes may be reduced for OOM; S3 grid fixed to include qk_norm params.
+Checking for active staging process...
+[2026-08-02T02:57:49Z] staging process exited.
+[2026-08-02T02:57:49Z] Running s1 with batch=8
+[s1] depth=4 N=19,991,808 ratio=8 D=159,934,464 tok C=1.92e+16 -> 9762 steps (D / (batch 8 x ctx 2048))
+[s1] val_bpb=1.2553 val_loss=3.5523 wall=0.14 h -> artifacts/s3_scaling_sweep/results.json
+[2026-08-02T03:06:05Z] s1 completed with batch=8
+[2026-08-02T03:06:05Z] Running s2 with batch=8
+[s2] depth=4 N=19,991,808 ratio=20 D=399,836,160 tok C=4.80e+16 -> 24405 steps (D / (batch 8 x ctx 2048))
+[s2] val_bpb=1.1772 val_loss=3.3314 wall=0.34 h -> artifacts/s3_scaling_sweep/results.json
+[2026-08-02T03:26:33Z] s2 completed with batch=8
+[2026-08-02T03:26:33Z] Running s3 with batch=8
+[s3] depth=4 N=19,991,808 ratio=40 D=799,672,320 tok C=9.59e+16 -> 48809 steps (D / (batch 8 x ctx 2048))

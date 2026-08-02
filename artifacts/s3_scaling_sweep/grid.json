@@ -1,0 +1,66 @@
+[
+  {
+    "point": "s1",
+    "depth": 4,
+    "n_params": 19991808,
+    "ratio": 8,
+    "tokens": 159934464,
+    "compute": 1.918427458122547e+16
+  },
+  {
+    "point": "s2",
+    "depth": 4,
+    "n_params": 19991808,
+    "ratio": 20,
+    "tokens": 399836160,
+    "compute": 4.796068645306368e+16
+  },
+  {
+    "point": "s3",
+    "depth": 4,
+    "n_params": 19991808,
+    "ratio": 40,
+    "tokens": 799672320,
+    "compute": 9.592137290612736e+16
+  },
+  {
+    "point": "s4",
+    "depth": 8,
+    "n_params": 59255296,
+    "ratio": 8,
+    "tokens": 474042368,
+    "compute": 1.6853712499428557e+17
+  },
+  {
+    "point": "s5",
+    "depth": 8,
+    "n_params": 59255296,
+    "ratio": 20,
+    "tokens": 1185105920,
+    "compute": 4.213428124857139e+17
+  },
+  {
+    "point": "s6",
+    "depth": 8,
+    "n_params": 59255296,
+    "ratio": 40,
+    "tokens": 2370211840,
+    "compute": 8.426856249714278e+17
+  },
+  {
+    "point": "s7",
+    "depth": 12,
+    "n_params": 135288576,
+    "ratio": 8,
+    "tokens": 1082308608,
+    "compute": 8.785439422131732e+17
+  },
+  {
+    "point": "s8",
+    "depth": 12,
+    "n_params": 135288576,
+    "ratio": 20,
+    "tokens": 2705771520,
+    "compute": 2.196359855532933e+18
+  }
+]

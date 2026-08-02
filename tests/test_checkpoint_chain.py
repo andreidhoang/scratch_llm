@@ -205,7 +205,10 @@ def test_speedrun_work_dir_writes_stage_artifacts(tmp_path: Path) -> None:
 
     rebuilt, step = build_model_from_checkpoint(tmp_path / "pretrain.pt")
     assert step == cfg.train_steps
-    assert rebuilt.cfg == model_config_for_depth(cfg.depth, 300, cfg.context_length)
+    # stage_pretrain's device policy: qk_norm always on (F9 regime); SDPA only on cuda —
+    # this CPU run trains with use_sdpa=False, qk_norm=True.
+    expected = replace(model_config_for_depth(cfg.depth, 300, cfg.context_length), qk_norm=True)
+    assert rebuilt.cfg == expected
 
 
 def test_speedrun_resume_rebuilds_and_reproduces(tmp_path: Path) -> None:

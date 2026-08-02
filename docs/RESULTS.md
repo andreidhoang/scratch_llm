@@ -70,8 +70,8 @@ on a shared, decontaminated held-out set.
 
 | corpus | predicted final val_bpb | measured final val_bpb | predicted CORE | measured CORE | license / provenance | status |
 |---|---|---|---|---|---|---|
-| FineWeb-EDU-100B | baseline | — (pending) | baseline | — (pending) | FineWeb-EDU license (ODC-BY 1.0) | pending |
-| ClimbMix-400B | < FineWeb-EDU bpb (predict Δ ≈ −0.010 to −0.030; nanochat saw −0.028, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)) | — (pending) | ≤ FineWeb-EDU CORE | — (pending) | **CC BY-NC 4.0** — must be stated in A9 model card ([nvidia/Nemotron-ClimbMix](https://huggingface.co/datasets/nvidia/Nemotron-ClimbMix)) | pending |
+| FineWeb-EDU-100B | baseline | **1.19197** | baseline | **0.0510** | FineWeb-EDU license (ODC-BY 1.0) | **[FACT]** |
+| ClimbMix-400B | < FineWeb-EDU bpb (predict Δ ≈ −0.010 to −0.030; nanochat saw −0.028, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)) | **1.30205** (Δ = **+0.1101**) | ≤ FineWeb-EDU CORE | **0.0551** | **CC BY-NC 4.0** — would have been stated in A9 model card ([nvidia/Nemotron-ClimbMix](https://huggingface.co/datasets/nvidia/Nemotron-ClimbMix)) | **[FACT]** |
 
 **License note.** ClimbMix-400B is released under **CC BY-NC 4.0**
 ([HF card](https://huggingface.co/datasets/nvidia/Nemotron-ClimbMix)). If F12 flips the d20 corpus
@@ -87,11 +87,35 @@ to ClimbMix, the A9 model card must state the license and the dataset source.
 ClimbMix's tokenized-parquet layout — no raw-text column, [FACT hub-verified 2026-07-31]);
 tests `tests/test_corpus_ablation.py` + `tests/test_tok_train.py`. Run CLI:
 `scripts/f12_corpus_ablation.py` (toy-mode smoke ✅ CPU: per-arm BPE → shards → bpb →
-incremental per-arm JSON → verdict JSON with falsifier evaluation). The run itself stays
-**pending** on the standing box; table rows fill on completion.
+incremental per-arm JSON → verdict JSON with falsifier evaluation).
+
+**Measured 2026-07-31 on standing RTX 5090.** Both arms at iso-FLOP: 35,789,184 params,
+699,990,016 tokens, Muon+AdamW, seed 0, vocab 32,768 retrained per corpus, shared 2,048-doc / 9,124,101-byte
+held-out set, 13-gram A0 decontamination. Batch size reduced from default 32 to 8 due to OOM on
+RTX 5090 32 GB; ClimbMix arm additionally emitted CUDA OOM warnings during final eval/CORE but
+completed and wrote its result.
+
+| quantity | FineWeb-EDU | ClimbMix | note |
+|---|---|---|---|
+| val_bpb | **1.19197** | **1.30205** | shared bytes; lower is better |
+| CORE | **0.0510** | **0.0551** | secondary, single-seed noise floor |
+| decontam overlap | 1.92% | 0.07% | docs dropped by A0 13-gram gate |
+| wall time | ~58 min | ~59 min | standing box, batch 8 |
+
+**bpb Δ = +0.1101** (ClimbMix minus FineWeb-EDU). The pre-registered falsifier
+(ClimbMix bpb < FineWeb-EDU bpb) is **NOT confirmed**; the kill criterion **IS triggered**.
 
 **Kill line:** ClimbMix bpb ≥ FineWeb-EDU bpb at iso-FLOP ⇒ keep the banked FineWeb-EDU corpus;
 do **not** stage ClimbMix for the d20.
+
+**Verdict: KEEP FineWeb-EDU for d20 (measurement-only).** ClimbMix does not beat the banked corpus at iso-FLOP on
+this recipe/scale; the CC BY-NC 4.0 license note is moot because the corpus flip does not happen.
+
+**User override (2026-07-31).** Despite the F12 kill criterion being triggered, the operator elected to
+stage **ClimbMix** for the S3 scaling-law sweep and the d20 run, following the nanochat/Karpathy corpus
+choice. This deviates from the pre-registered protocol. The override is logged here and in
+`bench/RESULTS.md`; the A9 model card must still state the **CC BY-NC 4.0** license and source for
+NVIDIA Nemotron-ClimbMix.
 
 **Artifacts:** `data/shards.py` (FineWeb-EDU arm), new ClimbMix staging path,
 `scripts/tok_train.py` per-corpus BPE, `eval/corpus_ablation.py` (or reuse `eval/optimizer_race.py`),
@@ -103,6 +127,15 @@ Registered **before** running (2026-07-31). Spec: `docs/FRONTIER_2026_END_TO_END
 Thesis: our own recipe (Muon+AdamW, F12-winning corpus, vocab 32,768, untied) admits a clean
 power-law fit at sweep scale, and the compute-optimal D:N it implies either confirms or
 re-registers the d20's 9.6B-token budget *before* any paid run.
+
+**Operator deviation (2026-07-31).** The F12 measurement said KEEP FineWeb-EDU, but the operator
+overrode the kill criterion and selected **ClimbMix** for S3/d20 (following nanochat/Karpathy). The
+scaling-law fit therefore runs on ClimbMix. Batch sizes may be reduced from the pre-registered
+default for OOM safety on RTX 5090 32 GB (s1-s6 batch=8, s7 batch=4 with fallback to 2).
+
+**Harness fix (2026-07-31).** The S3 grid planner (`scaling/s3_sweep.py::_instantiated_params`) was
+missing the `qk_norm=True` parameters that the real GPU training path adds; this caused a param-count
+mismatch on the first point. Fixed so the planned `N` matches the instantiated model.
 
 Grid: depths {4, 8, 12} × D:N {8, 20, 40} minus (12, 40) = points s1–s8 (largest: d12 @ ratio-20,
 C ≈ 2.2e18, ~28 h standing box; s6/s8 droppable if budget trips). Fit `N_opt ∝ C^a`,

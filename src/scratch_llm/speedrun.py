@@ -26,7 +26,7 @@ from __future__ import annotations
 import argparse
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -211,7 +211,12 @@ def stage_pretrain(
         model.to(cfg.device)
         return model, "pretrain[resumed]"
 
-    model = TransformerLM(model_config_for_depth(cfg.depth, vocab_size, cfg.context_length))
+    model_cfg = model_config_for_depth(cfg.depth, vocab_size, cfg.context_length)
+    # GPU training path: fused SDPA avoids materializing the (B,H,S,S) score matrix and OOM'ing;
+    # qk_norm is the F1-run default and bounds attention logits (F9 falsifier regime).
+    sdpa = "cuda" in str(cfg.device)
+    model_cfg = replace(model_cfg, use_sdpa=sdpa, qk_norm=True)
+    model = TransformerLM(model_cfg)
     intra_ckpt = _work_path(cfg, "pretrain_ckpt.pt")
     if cfg.checkpoint_every and intra_ckpt is None:
         raise ValueError(

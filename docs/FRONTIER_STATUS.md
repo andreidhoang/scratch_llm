@@ -8,6 +8,7 @@
 > - End-to-end pipeline (S0→S8) + scaling law + d20 gate → [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md)
 > - Buildable spec (file→change, tests, DoD) → [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)
 > - Integrated entry point → [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md)
+> - Architecture × scaling-law program (when a re-sweep is/isn't needed) → [`FRONTIER_2026_ARCH_SCALING.md`](FRONTIER_2026_ARCH_SCALING.md)
 
 ---
 
@@ -21,9 +22,14 @@ the 2026 frontier's *contested* claims.
 
 ## Current next node
 
-> **F12 corpus ablation (free, standing box)** → **P5 d12 dress rehearsal ($10–15)** → **8×H100 d20 (~$100, gated on P5 + user go-ahead)**
+> **S3 scaling-law sweep s1–s7 (free, standing box, ClimbMix corpus by operator override)** → **P5 d12 dress rehearsal ($10–15)** → **8×H100 d20 (~$100, gated on P5 + user go-ahead)**
 
 See `FRONTIER_2026_TASKSPEC.md` Next-node marker for exact commands and prerequisites.
+
+F12 completed 2026-07-31: measured **KEEP FineWeb-EDU** (ClimbMix bpb 1.30205 ≥ FWE bpb 1.19197 at
+iso-FLOP; kill criterion triggered). **Operator override:** S3/d20 will use **ClimbMix** anyway,
+following the nanochat/Karpathy corpus choice; deviation logged in `docs/RESULTS.md` §F12 and
+`bench/RESULTS.md` §Frontier ablations.
 
 ---
 
@@ -99,7 +105,7 @@ See `FRONTIER_2026_TASKSPEC.md` Next-node marker for exact commands and prerequi
 | F5 | MLA for real | ⬜ First-slice pending | 0.2–0.5B, standing box | +0.02 val loss vs GQA-8; KV ≥3×; kill >0.05 | ABLATIONS §F5 |
 | F6 | MoE balancing | Harness ✅ (`98f62e3`); smoke 30-step (vacuous); real run ≥1B pending | 30–300M, standing box | BIAS_FREE ≤ SEQ_AUX val CE; entropy >0.9·log N | ABLATIONS §F6 |
 | F9 | QK-clip / logit guard | ✅ Shipped; rides instrumented runs | Sub-1B | Max logit <~30 with qk_norm | ABLATIONS §F9 |
-| F12 | ClimbMix vs FineWeb-EDU corpus | ⬜ **Pending — next node** | 35M/700M, standing box | ClimbMix bpb < FWE at iso-FLOP; kill ≥ FWE | ABLATIONS §F12 |
+| F12 | ClimbMix vs FineWeb-EDU corpus | ✅ **DONE — KEEP FineWeb-EDU** | 35M/700M, standing box | ClimbMix bpb 1.30205 ≥ FWE bpb 1.19197; kill triggered | ABLATIONS §F12 |
 
 ---
 
@@ -107,14 +113,14 @@ See `FRONTIER_2026_TASKSPEC.md` Next-node marker for exact commands and prerequi
 
 | Rung | Depth | Params | Tokens | Compute | Status |
 |---|---|---|---|---|---|
-| s1 | 4 | ~7M | ~150M | ~6e15 | ⬜ Pending |
-| s2 | 6 | ~15M | ~330M | ~3e16 | ⬜ Pending |
-| s3 | 8 | ~27M | ~580M | ~9e16 | ⬜ Pending |
-| s4 | 10 | ~43M | ~910M | ~2.3e17 | ⬜ Pending |
-| s5 | 12 | ~62M | ~1.3B | ~4.8e17 | ⬜ Pending |
-| s6 | 14 | ~85M | ~1.8B | ~9.2e17 | ⬜ Pending |
-| s7 | 16 | ~110M | ~2.4B | ~1.6e18 | ⬜ Pending |
-| s8 | 12 | ~135M (d12) | ~2.7B | ~2.2e18 | ⬜ P5 dress rehearsal |
+| s1 | 4 | 19.99M | 159.9M | 1.92e16 | ✅ bpb 1.2553 (batch 8) |
+| s2 | 4 | 19.99M | 399.8M | 4.80e16 | ✅ bpb 1.1772 (batch 8) |
+| s3 | 4 | 19.99M | 799.7M | 9.59e16 | 🔄 Running (batch 8) |
+| s4 | 8 | 59.26M | 474.0M | 1.69e17 | ⬜ Pending |
+| s5 | 8 | 59.26M | 1.18B | 4.21e17 | ⬜ Pending |
+| s6 | 8 | 59.26M | 2.37B | 8.43e17 | ⬜ Pending |
+| s7 | 12 | 135.29M | 1.08B | 8.79e17 | ⬜ Pending (batch 4/2) |
+| s8 | 12 | 135.29M | 2.71B | 2.20e18 | ⬜ P5 dress rehearsal |
 
 Output: fit `N*(C)` and `D*(C)`, confirm `a+b≈1`, decide d20 D:N re-registration.
 
@@ -143,6 +149,11 @@ Owner: `FRONTIER_2026_END_TO_END_PLAN.md` §S3 + `scaling/isoflop.py`.
 | 2026-07-09 | F11 agentic RL added | #1 stated 2026 lab priority |
 | 2026-07-30 | F12 ClimbMix data ablation added | Data > optimizer; gates d20 corpus |
 | 2026-07-30 | d20 ratio-20 overtrain re-registered | Inference-aware allocation, not Chinchilla folklore |
+| 2026-07-31 | F12 measured: KEEP FineWeb-EDU | ClimbMix bpb 1.30205 ≥ FWE 1.19197 at iso-FLOP; falsifier not confirmed |
+| 2026-07-31 | S3 grid fixed to include qk_norm params | Planned N now matches the instantiated GPU training model; batch-size deviations logged for OOM safety |
+| 2026-08-02 | S3 s1–s2 landed: bpb 1.2553 / 1.1772 | Grid fix verified on GPU; sweep continuing s3→s7 |
+| 2026-08-02 | `FRONTIER_2026_ARCH_SCALING.md` added | One law per recipe backbone; per-architecture anchors, not re-sweeps; MoE the sole mini-fit exception |
+| 2026-08-02 | `stage_pretrain` device policy pinned (qk_norm on; SDPA on cuda) + stale checkpoint-chain test updated | Green CI restored after the S3 grid fix |
 
 ---
 
@@ -155,4 +166,4 @@ When a rung ships or a doc changes:
 3. Do **not** duplicate rung-card detail here — link to the owner doc.
 4. Keep this file <300 lines so it loads fast.
 
-*Last updated: 2026-07-30*
+*Last updated: 2026-08-02*

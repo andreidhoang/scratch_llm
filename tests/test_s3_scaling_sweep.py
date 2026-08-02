@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -33,8 +34,9 @@ from scratch_llm.scaling.s3_sweep import (
 )
 from scratch_llm.speedrun import model_config_for_depth
 
-# Measured once by instantiation (vocab 32768, ctx 2048, untied embeddings), then frozen.
-EXPECTED_N = {4: 19_990_784, 8: 59_253_248, 12: 135_285_504}
+# Measured once by instantiation (vocab 32768, ctx 2048, untied embeddings, qk_norm=True),
+# then frozen. qk_norm adds per-layer parameters that the real GPU training path enables.
+EXPECTED_N = {4: 19_991_808, 8: 59_255_296, 12: 135_288_576}
 
 
 def _record(
@@ -99,12 +101,9 @@ def test_grid_matches_instantiated_model() -> None:
         (12, 20),
     ]  # depths {4,8,12} x ratios {8,20,40} minus (12, 40)
     for g in grid:
-        expected = sum(
-            p.numel()
-            for p in TransformerLM(
-                model_config_for_depth(g.depth, VOCAB_SIZE, CONTEXT_LENGTH)
-            ).parameters()
-        )
+        cfg = model_config_for_depth(g.depth, VOCAB_SIZE, CONTEXT_LENGTH)
+        cfg = replace(cfg, qk_norm=True, use_sdpa=True)
+        expected = sum(p.numel() for p in TransformerLM(cfg).parameters())
         assert g.n_params == expected == EXPECTED_N[g.depth]  # exact, never the ~20M table values
         assert g.tokens == g.ratio * g.n_params  # D = ratio × N
         assert g.compute == pytest.approx(6.0 * g.n_params * g.tokens, rel=1e-12)  # C = 6ND

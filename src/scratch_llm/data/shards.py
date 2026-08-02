@@ -36,6 +36,8 @@ import json
 import multiprocessing
 import pickle
 import tempfile
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import deque
@@ -280,6 +282,7 @@ def download_fineweb_slice(
     split: str = "train",
     offset: int = 0,
     timeout: float = 30.0,
+    max_retries: int = 5,
 ) -> list[str]:
     """Fetch ``n_docs`` document texts via the HF datasets-server rows API (no extra deps).
 
@@ -287,6 +290,9 @@ def download_fineweb_slice(
     even thousands of docs is only ~millions of tokens) — F1-scale corpora come from the
     parquet bulk path below (``list_hub_parquet_files`` → ``build_dataset_streaming``),
     never this endpoint.
+
+    Retries with exponential backoff on 5xx / transient errors — the rows API can 502 on
+    deep offsets, and the held-out set is load-bearing for the F12 verdict.
     """
     docs: list[str] = []
     while len(docs) < n_docs:
@@ -296,8 +302,24 @@ def download_fineweb_slice(
             f"?dataset={urllib.parse.quote(dataset, safe='')}"
             f"&config={config}&split={split}&offset={offset + len(docs)}&length={length}"
         )
-        with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310 (https, fixed host)
-            payload = json.load(resp)
+        for attempt in range(max_retries):
+            try:
+                with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310 (https, fixed host)
+                    payload = json.load(resp)
+                break
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
+                is_retryable = isinstance(e, (TimeoutError, urllib.error.URLError)) or (
+                    isinstance(e, urllib.error.HTTPError) and e.code >= 500
+                )
+                if is_retryable and attempt + 1 < max_retries:
+                    wait = 2**attempt
+                    print(
+                        f"rows API error ({e}) for offset {offset + len(docs)}, "
+                        f"retry in {wait}s ({attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(wait)
+                    continue
+                raise
         rows = payload.get("rows", [])
         if not rows:
             raise RuntimeError(f"datasets-server returned no rows at offset {offset + len(docs)}")

@@ -806,6 +806,29 @@ One pre-registered tolerance honestly falsified and corrected (see row 2). CPU-v
 correctness signals, not perf numbers. Deferred to §D d20 extension: resume-at-step inside a stage,
 RNG/dataloader-position restore, off-box sync. Next: **F1-run** (iso-FLOP Muon vs AdamW).
 
+### Measured — F12 corpus ablation (2026-07-31, `eval/corpus_ablation.py`, standing RTX 5090)
+
+**Hypothesis.** At iso-FLOP (35M params / 700M tokens), with per-corpus BPE retrained on the same byte
+budget and identical A0 decontamination, NVIDIA ClimbMix-400B beats FineWeb-EDU-100B on shared held-out
+bytes (predicted Δ ≈ −0.010 to −0.030 bpb).
+
+| rung | falsifier | predicted (pre-reg) | KILL if | measured |
+|---|---|---|---|---|
+| F12 iso-FLOP corpus | ClimbMix val_bpb < FineWeb-EDU val_bpb at 35M/700M | Δ ≈ −0.010..−0.030 bpb | ClimbMix bpb ≥ FineWeb-EDU bpb (keep FWE) | **KILL triggered.** FWE **1.19197**, ClimbMix **1.30205**, **Δ = +0.1101** |
+| F12 secondary CORE | ClimbMix CORE ≤ FineWeb-EDU CORE | ≤ FWE CORE | >> FWE CORE (noise check) | FWE **0.0510**, ClimbMix **0.0551** (secondary, single-seed) |
+| F12 decontam overlap | both < 5% | > 5% flags contamination | FWE 1.92%, ClimbMix 0.07% — both pass |
+
+**Protocol deviations logged:** batch size reduced from default 32 to 8 due to OOM on RTX 5090 32 GB;
+ClimbMix arm emitted CUDA OOM warnings during final eval/CORE allocation but completed and wrote its
+result (`artifacts/f12_corpus_ablation/climbmix_result.json`).
+
+**Verdict:** **KEEP FineWeb-EDU for d20 (measurement-only).** The pre-registered falsifier is not confirmed at this
+iso-FLOP scale on this recipe. However, the operator elected to **override the kill criterion and use
+ClimbMix for S3/d20**, following the nanochat/Karpathy corpus choice. This deviation is logged in
+`docs/RESULTS.md` §F12. Next: **S3 scaling-law calibration on the operator-selected ClimbMix corpus**
+(s1–s7 only; s8 is the paid H100 rehearsal); A9 model card must state ClimbMix's **CC BY-NC 4.0**
+license.
+
 ---
 
 ## Perf track (A4 — flash attention)
@@ -1061,8 +1084,10 @@ tokenizer), `scripts/tok_train.py` (per-corpus BPE, `--byte-budget`), and an add
 column** (tokenized GPT-2 parquet under `climbmix_small/`) — a stdlib-only GPT-2 detokenizer
 (`build_gpt2_detokenizer`, verified against the real `encoder.json`) recovers the text; hub layout
 verified live 2026-07-31. Tests: `tests/test_corpus_ablation.py` + `tests/test_tok_train.py`.
-Pre-registration + falsifier/kill: `docs/RESULTS.md` §F12 (unchanged). **Run: pending (standing
-box, ~2×2 h).**
+Pre-registration + falsifier/kill: `docs/RESULTS.md` §F12.
+**Run: DONE 2026-07-31 (standing RTX 5090, ~2×1 h, batch 8).** FWE bpb 1.19197 vs ClimbMix bpb 1.30205
+(Δ +0.1101); kill criterion triggered, **KEEP FineWeb-EDU (measurement-only)**. Operator override:
+S3/d20 will use **ClimbMix** anyway; `scripts/stage_s3_corpus.py` now supports `--corpus` override.
 
 **S3 (scaling-law calibration before the $100).** `src/scratch_llm/scaling/s3_sweep.py` +
 `scripts/s3_scaling_sweep.py` (`plan`/`run`/`fit`): grid d4/d8/d12 × D:N {8,20,40} = s1–s8, exact N
@@ -1070,8 +1095,11 @@ from `model_config_for_depth`, per-budget min-pick + log-log fit via the existin
 `scaling/isoflop.py`, gates a+b ∈ [0.95,1.05] and R² ≥ 0.98, D:N decision rule (< 15 ⇒ re-register
 the d20's 9.6B), nanochat oracle overlay (d20-miniseries / leaderboard / GPT-2 XL / CORE-fit
 ⇒ ≈0.195 at our C). Pre-registration: `docs/RESULTS.md` §S3. Tests: `tests/test_s3_scaling_sweep.py`.
-**Sweep: pending (standing box, ~2–3 GPU-days; s6/s8 droppable).** d14/d16 mid-scale escalation is
-trigger-gated (T1/T2/T3), policy of record in `docs/FRONTIER_2026_END_TO_END_PLAN.md` §S3(g).
+**Sweep: RUNNING 2026-07-31 (standing RTX 5090, tmux session `s3`, ~2–3 GPU-days).** Operator
+override: runs on **ClimbMix** (not the F12-winning FineWeb-EDU); s7 uses batch=4 (fallback to 2) to
+avoid OOM; `scaling/s3_sweep.py` grid planner fixed to include `qk_norm=True` params so planned N
+matches the trained model. d14/d16 mid-scale escalation is trigger-gated (T1/T2/T3), policy of record
+in `docs/FRONTIER_2026_END_TO_END_PLAN.md` §S3(g).
 
 **Order correction (2026-07-31):** F12 runs **before** S3 — the scaling-law constants are
 corpus-dependent, so the fit must use the F12-winning corpus, not a borrowed one.
