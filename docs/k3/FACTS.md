@@ -1,0 +1,86 @@
+# K3 FACTS LEDGER — verified claims about Kimi K3 and the two Vizuara books
+
+> Compiled 2026-07-31 from a 4-angle research pass (official tech report/model card/config/code ·
+> component papers · serving ecosystem · book recon). Verdict labels follow the hosting book's own
+> discipline: **VERIFIED** (primary source, exact numbers) · **CONTRADICTED** · **REPORTED** (claimed by
+> a named party, method thin) · **NOT VERIFIED / NOT FOUND**.
+> Spec of record: **K3 tech report, arXiv:2607.24653** + `huggingface.co/moonshotai/Kimi-K3` (config.json,
+> modeling_kimi_linear.py, LICENSE). Where the books and the report disagree, the report wins.
+
+## 1. Model facts (Moonshot primary sources)
+
+| # | Claim | Verdict | Evidence / actual value | Source |
+|---|---|---|---|---|
+| A1 | 2.8T total / ~104B active | VERIFIED | 2.78T total (2,779,931,837,184 per HF), 104.2B activated | arXiv:2607.24653 Table 1; HF API |
+| A2 | 93 layers = 69 KDA + 24 Gated MLA, "3:1" | VERIFIED w/ nuance | 23 blocks × (3 KDA + 1 MLA) + 1 terminal MLA ⇒ 69:24 = **2.875:1**, not exactly 3:1. Layer 1 MLP is dense (`first_k_dense_replace: 1`) | report §2.1; config.json `linear_attn_config` |
+| A3 | 896 routed experts, top-16, shared experts, latent dim 3584 | VERIFIED | 896 routed, top-16 (sparsity 56), **2 shared at full width 7168**, routed latent width **3584 (0.5×)**, expert intermediate 3072 | Table 1; config.json |
+| A4 | 160K vocab | VERIFIED | 163,840, tiktoken-based (bos 163584, eos 163586, pad 163839) | config.json |
+| A5 | 1M context | VERIFIED | 1,048,576; curriculum 8K→64K (pre-train) → 256K→1M (cooldown) | Table 1, §3.4 |
+| A6 | MXFP4 QAT "from SFT onward"; 1.561 TB; 96 shards | VERIFIED | QAT covers **SFT + RL**, MXFP4 **routed-expert weights only** (group 32, E8M0 scales), MXFP8 activations; attention/latent projections/shared experts/routers stay BF16. On disk: 1,561,018,243,668 B = 1.561 TB (SI), 96 safetensors shards; dtypes U8 2.72T / BF16 57.2B / F32 11.1M params | model card §4; HF API |
+| A7 | License "modified MIT like K2" | VERIFIED w/ nuance | "**Kimi K3 License**": MIT grant + MaaS clause (separate agreement if MaaS revenue > $20M / 12 months) + attribution if product > 100M MAU or > $20M/mo revenue | HF LICENSE file |
+| A8 | Optimizer / training tokens | PARTLY CONTRADICTED | Optimizer is **Per-Head Muon** (Newton–Schulz per attention head on partitioned Q/K/V momentum blocks) + K2's weight-clipping; cosine LR, 1% warmup, WD 0.1. **Total training tokens NOT disclosed** (K2 disclosed 15.5T; K3 does not). Peak LR/batch not printed | report §2.5, §3.3 |
+| A9 | AttnRes = learned pseudo-queries | VERIFIED | `q_l = w_l` learned per sublayer; softmax over RMSNorm-ed keys; sources = embedding + preceding block outputs; **Block AttnRes, block size 12** ⇒ 8 blocks (+embedding = 9 sources); `attn_res_block_size: 12` in config | report §2.2; arXiv:2603.15031 |
+| A10 | SiTU-GLU activation | VERIFIED | `SiTU-GLU(x) = [β1·tanh(W_g x/β1) ⊙ σ(W_g x)] ⊙ [β2·tanh(W_u x/β2)]`, **β1=4 gate / β2=25 up**, bound ≤ 100; `hidden_act: "situ"` | report §2.3.2; config |
+| A11 | "KDA NoPE, MLA decoupled RoPE" | **CONTRADICTED (2nd half)** | K3 is **fully NoPE** — no RoPE anywhere ("Unlike Kimi K2 and Kimi K2.5 … applies NoPE to all MLA layers", §2.1.2). `qk_rope_head_dim: 64` in config is vestigial; `rotary_emb = None`, `assert use_nope`. NoPE-MLA enables MQA conversion at inference and no RoPE-base retuning for context extension | report §2.1.2, §3.4; HF code |
+| A12 | KDA: delta rule + per-channel forgetting, short conv, Swish, L2 norm | VERIFIED | `S_t = (I − β_t k kᵀ) Diag(α_t) S_{t−1} + β_t k vᵀ`, α_t ∈ (0,1)^{d_k} **per-channel** (vs GDN per-head scalar); q,k = L2Norm(Swish(ShortConv(Wx))), v = Swish(ShortConv(Wx)), β = sigmoid. **K3 deltas vs Kimi Linear paper:** log-decay = scaled sigmoid with **g_min = −5** (all-Tensor-Core tiles), output gate **full-rank** (paper was low-rank) | report §2.1.1; config (`gate_lower_bound: -5.0`, `short_conv_kernel_size: 4`, `use_full_rank_gate`) |
+| A13 | Full hyperparameters | VERIFIED | hidden 7168 · 93 layers · KDA 96 heads × 128 · MLA 96 heads, q_lora 1536, kv_lora 512, qk_nope 128, v 128 (q_head 192 w/ vestigial 64) · dense-layer intermediate 33792 · init 0.02 | config.json, Table 1 |
+| A14 | Router / balancing | VERIFIED | **sigmoid router + learned bias (`noaux_tc`), auxiliary-loss-free**; **Quantile Balancing**: `b̂ ← −quantile_{1−k/n}(s − α)`, mean-removed, one-step delay, histogram-estimated over a single all-reduce; bias frozen at inference | report §2.3.3 Eq. 14; config |
+| A15 | MTP / speculative | VERIFIED | 1 MTP layer pre-trained, fine-tuned into an **EAGLE-3-style draft (7-step)**; released checkpoint has `num_nextn_predict_layers: 0` (draft shipped separately as DSpark) | Table 1; §Deployment-Aware Post-Training |
+| A16 | Vision | VERIFIED | MoonViT-V2, 401M params, 27 layers, hidden 1024, patch 14, 2×2 pixel-shuffle, PatchMergerV2 → 7168 | Table 1; config |
+| A17 | Training infra | VERIFIED (partial) | **MoonEP** open-sourced (github.com/MoonshotAI/MoonEP): balanced EP + dynamic redundant experts; PP + virtual stages, ZeRO-1 DP, KDA Context Parallelism (FLA PR #691). GPU type/count/total FLOPs **not disclosed** | report §3; GitHub |
+| A18 | Param accounting closes from config alone | **VERIFIED — measured by us, EXACT closure (2026-07-31)** | `k3/param_count.py` = **2,779,931,837,184 = HF safetensors total, residual 0**, confirmed two ways: (a) derivation from config + reference code; (b) R0 census — all 497,220 tensor shapes read from the 96 shard headers via HTTP range reads (`scripts/k3_fetch_tensors.py`, `artifacts/k3_anatomy/`). Physical storage decomposition (census): BF16 57,179,884,544 + F32 11,122,432 params + U8 packed expert weights 1,361,370,415,104 B (×2 = 2,722,740,830,208 unpacked, exact) + U8 E8M0 scales 85,085,650,944 (= experts/32, exact; scales are storage metadata, not counted in HF's param total). Active = **104.19B** (report "104.2B"), convention: text − inactive routed experts − embedding. **Discovery:** the pre-census −2,208 was `A_log` — modeled as [num_heads=96] per the HF reference code, but the checkpoint carries **[128] in all 69 KDA layers** — a code-vs-checkpoint mismatch in Moonshot's own release; flagged for the `core/kda.py` hand-build (per-head vs per-dim decay-scale semantics). Gate: `tests/test_k3_param_count.py` (9 green, exact-equality assertions) | our census + HF API |
+
+| A19 | R0 anatomy — first cross-layer findings (417 small tensors, all 96 shards) | **MEASURED BY US (2026-07-31, census complete)** | (a) **AttnRes layer-0 self-attn pseudo-query ≈ 0** (absmax 1.7e-05): single-source softmax is constant → no gradient → weight decay shrinks init to ~0; layer-0 MLP query (2 sources) is non-zero — the checkpoint confirms exactly which pseudo-queries receive gradient. All 186 other res_proj queries non-zero. (b) **AttnRes query L2 norms grow with depth** (≈0 → ~2 early → ~3 mid → 5–6.3 late): later layers retrieve more sharply. (c) **QB bias std drifts up with depth** (early ~0.020–0.036 → late ~0.067–0.098, max L28): deeper MoE layers need stronger corrections — balancing is harder deep. (d) **dt_bias ≈ −4.63 ± 0.05 across ALL 69 KDA layers** (range of layer means −4.72…−4.54): the default learned decay is strongly long-retention everywhere; forgetting is input-modulated, not static. (e) A_log layer means trend upward with depth (−0.17 → +0.29). Data: `artifacts/k3_anatomy/` | our census |
+
+## 2. Component-paper anchors (the from-scratch spec)
+
+| Component | Paper | Key verified content |
+|---|---|---|
+| KDA | **Kimi Linear**, arXiv:2510.26692 (v1 2025-10-30) | recurrence + WY/UT chunkwise form (chunk 64); 3:1 hybrid ablation PPL 9.23/5.65 vs full-MLA 9.45/5.77; NoPE > RoPE long-ctx (avg 54.5 vs 51.8); 48B-A3B checkpoints (Base+Instruct) on HF; kernels `fla-org/flash-linear-attention/fla/ops/kda` (fla-core ≥ 0.4.0); TPOT@1M 1.84ms vs 11.48ms MLA (≈6.2×); KV cache −75% |
+| Output gate | **Gated Attention** (Qwen), arXiv:2505.06708 | `Y' = Y ⊙ σ(X W_θ)`; K3 applies a **full-rank** sigmoid gate from layer input x_t before W_o on both MLA and KDA (report Eqs. 6–7) |
+| AttnRes | arXiv:2603.15031 (2026-03-16) + github.com/MoonshotAI/Attention-Residuals | Full vs Block AttnRes equations; Block AttnRes loss 1.692 vs baseline 1.714 = **1.25× compute advantage**; online-softmax merge; param overhead L·d |
+| LatentMoE | arXiv:2601.18089 (NVIDIA) | down-project → experts at latent width → **RMSNorm** → up-project; basis of K3 "Stable LatentMoE" (+SiTU-GLU +Quantile Balancing) |
+| MXFP4/8 | OCP MX spec v1.0 + arXiv:2310.10537 | block 32, shared scale E8M0, elements E2M1 (fp4) / E4M3·E5M2 (fp8); 4.25 bit/param effective; QAT = fake-quant + STE (Jacob et al. 2018, arXiv:1712.05877) |
+
+## 3. Serving ecosystem (as of 2026-07-31)
+
+| # | Claim | Verdict | Evidence | Source |
+|---|---|---|---|---|
+| S1 | vLLM runs K3 | VERIFIED | Day-0 (2026-07-27) support via **Docker images off a `kimi-k3` branch** (pre-release FlashInfer deps); no numbered stable release confirmed. Flags: `--tensor-parallel-size 8 --trust-remote-code --load-format fastsafetensors --enable-prefix-caching --enable-auto-tool-choice --tool-call-parser kimi_k3 --reasoning-parser kimi_k3` | vllm.ai/blog/2026-07-27-k3 |
+| S2 | Min hardware 8×B300 | VERIFIED | "At least one 8× B300 (or GB300 NVL72) node"; 16× B200 and 8× MI355X also official. Weights 1,561 GB; ~1,680 GB VRAM practical floor | vLLM blog; kocpc |
+| S3 | B300 = 288 GB HBM3e ×8 = 2,304 GB | VERIFIED | NVLink 5 @ 1.8 TB/s, 8 TB/s HBM BW per GPU | vendor spec pages |
+| S4 | Modal B300 pricing → $1,363/day | VERIFIED arithmetic | modal.com/pricing: **$0.001972/s/GPU = $7.0992/hr** ⇒ 8× = **$56.79/hr = $1,363.06/day** (region/multiplier caveats: non-preemptible up to 3×) | modal.com/pricing |
+| S5 | Measured: 0.93 s TTFT / 92.1 tok/s / $190.13 per M tokens | **NOT VERIFIED** (book's own, gated) | Independent measured: vLLM **111 tok/s TP8 / 118 TP16** bs1, **331/370 tok/s with DSpark** (GB300 NVL72); SGLang ~113 bs1 / ~423 DSpark; Artificial Analysis API-side 39–62 tok/s. $190/M is consistent with single-stream ~83–92 tok/s at $56.79/hr ($171/M at 92 tok/s) — a derivation, not a citation. API price comparison: $15/M output first-party | vllm.ai blog; LMSYS blog 2026-07-27; openrouter |
+| S6 | "fp8 KV cache trap" | **CONTRADICTED as stated** | vLLM's *official* K3 benchmark recipe uses `--kv-cache-dtype fp8`; all NVIDIA Dynamo K3 targets run FP8 KV. Only caveat: GPUStack measured both engines logging "FP8 KV cache has no scaling factor, falling back to 1.0" → validate quality. Re-check what the book actually claims on Aug 3 | vLLM blog; docs.nvidia.com/dynamo; GPUStack via tech.china.com |
+| S7 | 8×A100 (640 GB) path ~9 tok/s ≈ $620/M | NOT VERIFIED | No published 8×A100 run. GGUF floor: Unsloth UD-IQ1_S **594 GB** (fits 640 GB); measured only ~20 tok/s on B200s (Unsloth) | unsloth.ai/docs/models/kimi-k3 |
+| S8 | Mainline llama.cpp cannot run K3 | VERIFIED (as of 07-30) | PR #26185 open/unmerged; Unsloth fork branch `kimi-k3-fullsize-vision` required; mainline gap analysis exists (`ggml_gated_delta_net`, `LLM_ARCH_KIMI_LINEAR`, MXFP4 repack reusable) | github.com/ggml-org/llama.cpp/pull/26185; discussion #26041 |
+| S9 | GGUF quants | VERIFIED existence | Unsloth UD-IQ1_S 594 GB (PPL 2.5789) … UD-Q4_K_XL 1,510 GB, UD-Q8_K_XL 1,560 GB ("lossless vs MXFP4"); sub-4-bit GGUFs are quants-of-quants (community skepticism) | HF unsloth/Kimi-K3-GGUF; smol.ai 26-07-29 |
+| S10 | "Xet trap" | PARTIALLY VERIFIED | Unsloth K3 docs warn about slow/stuck downloads + point to XET debugging; no K3-specific postmortem thread found | Unsloth docs; huggingface_hub#3036 |
+| S11 | DSpark speculative decoding | VERIFIED | `Inferact/Kimi-K3-DSpark` (EAGLE-3-style, 7 tokens); measured 118→370 tok/s (3.14×) by vLLM/Inferact; SGLang trained own draft (~423 tok/s) | vLLM blog; LMSYS blog |
+| S12 | Prefix caching over recurrent state | VERIFIED w/ caveats | Supported both engines but **off by default** in vLLM (`--enable-prefix-caching`; retention-interval knob); known bug vllm#50235 (miss at 1536-token boundary) | vLLM blog; vllm#50235 |
+| S13 | P/D disaggregation, EPLB, EP | VERIFIED | vLLM TEP8→DEP16 over NIXL; SGLang disaggregated = 2,808 tok/s/GPU; EP with TRT-LLM-Gen / MegaMoE(deep_gemm) backends; EPLB works but immature | vLLM/SGLang blogs; Dynamo recipes |
+| S14 | Multi-node | VERIFIED | vLLM `--nnodes 2`; GPUStack 8×B300 head-to-head (vLLM vs SGLang at 64K/200K); community 80× RTX 5090 / 25GbE ≈ 20 tok/s (REPORTED) | GPUStack; X via promppy |
+| S15 | Mac / CPU / pruning | REPORTED | Mac "painfully slow but works"; 128 GB Mac Studio floor; Rust disk-streaming engine (ferrumox/rabbit); REAP55 pruned ~342 GB (single mention) | smol.ai 26-07-28/29 |
+
+## 4. The two books (Vizuara, Dr. Raj Dandekar)
+
+| # | Claim | Verdict | Evidence |
+|---|---|---|---|
+| B1 | Books exist, 35 + 40 capsules, ~5h + ~9h | VERIFIED | books.vizuara.ai/book/kimi-k3-from-scratch (35 cap, 308 min) · /kimi-k3-hosting (40 cap, 538 min); public `/api/book` JSON carries full TOC + blurbs |
+| B2 | "Opens to all members 3 August; ch1 free" | VERIFIED w/ nuance | Ch1 "free" still requires a (free) sign-in; content API returns 401 anonymously |
+| B3 | Pricing | VERIFIED | $49/mo or $399/yr all-access (42-book library); six books free forever (not these two) |
+| B4 | Companion code repo for K3 books | **NOT FOUND** (as of 07-31) | Nothing in VizuaraAILabs/VizuaraAI orgs; DeepSeek book *did* ship one (VizuaraAILabs/DeepSeek-From-Scratch) → may appear Aug 3. Unofficial mini-K3 repos exist (Vexxter/kimi-k3-from-scratch, pablo-reyes8/kimi-k3-pytorch) |
+| B5 | Author credibility | VERIFIED | PhD MIT; Manning author "Build a DeepSeek Model (From Scratch)"; ~200K-sub YouTube |
+| B6 | Books' architecture numbers | VERIFIED accurate | Every blurb-level number (2.8T/104B, 69+24, 896/16/2, 3584, 512+64 MLA, g_min −5, situ, 1.561 TB/96 shards, license thresholds) matches Moonshot primary sources |
+| B7 | Books' measured hosting numbers (0.93 s, 92.1 tok/s, $190.13/M, 27-min cold boot, A100 ~9 tok/s, tool-calling 1.9 s) | NOT VERIFIABLE today | Own measurements in gated chapters; internally consistent (56.79 × 24 = 1,362.96 ≈ $1,363/day). Treat as hypotheses to re-measure in phase K9 |
+| B8 | Book capsule 15 "Decoupled RoPE: position in the MLA layers" | **MISLEADING TITLE vs K3** | K3 has no RoPE at all (A11). Decoupled RoPE is K2/DeepSeek heritage — worth learning (our `mla.py` implements it), but the K3 layer is NoPE. Verify the chapter's framing when it opens |
+| B9 | "6.3× decode at 1M" | PARTIALLY VERIFIED | Kimi Linear abstract: "up to 6×"; body: TPOT 1.84 vs 11.48 ms ≈ 6.2× |
+
+## 5. Explicitly NOT FOUND anywhere (do not let anyone cite these)
+
+- K3 total pre-training tokens, peak LR, batch size, GPU type/count, total FLOPs/MFU.
+- A published source for the hosting book's headline measured triple (0.93 s / 92.1 tok/s / $190.13 per M).
+- Any measured 8×A100 K3 run; any Mac tok/s number.
+- A numbered stable vLLM release containing K3 support (Docker/branch only, as of 07-31).
+- Standalone TensorRT-LLM or Mojo/Modular K3 support.
+- The standalone AttnRes preprint's arXiv listing is 2603.15031 (verified), but K3's *exact* KDA d_k/d_v and MLA latent dims are only in config.json (512 kv_lora etc.), not the report prose.

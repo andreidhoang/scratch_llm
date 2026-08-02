@@ -158,3 +158,30 @@ d16 stays the $90-abort fallback).
 
 **Artifacts:** `src/scratch_llm/scaling/s3_sweep.py`, `scripts/s3_scaling_sweep.py`,
 `artifacts/s3_scaling_sweep/`, `tests/test_s3_scaling_sweep.py`.
+
+## K3 · Anatomy + interaction of the K3 stack (pre-registration)
+
+Registered **before** running (2026-07-31). Spec: `docs/k3/ABLATIONS.md` (arm configs,
+iso-FLOP rule, eval protocol). R0 is CPU/weight-space and STARTED; R1/R2 launch only after
+`core/kda.py` is PROVEN (HANDCRAFTED.md) and mini-K3 is wired into the speedrun spine (K6).
+
+| arm | prediction (pre-registered) | measured | status |
+|---|---|---|---|
+| R0 closure | census param count == config-derived == HF total | **EXACT 0-residual closure** (2,779,931,837,184; 2026-07-31); A_log mismatch found ([128] ckpt vs [96] ref code) | **done** |
+| R0 `attnres` census | layers ≥ 1 res_proj weights non-zero; layer 0 ≈ 0 | ✓ all 186 non-zero; layer-0 attn-side absmax 1.7e-05 (no-gradient + weight decay); query L2 grows with depth (0→2→3→6) | **done** |
+| R0 `qb` census | per-layer bias mean ≈ 0 (construction), no collapse; structure over depth | ✓ mean ≈ 0 all 92 layers; std drifts up with depth (0.020→0.098) — balancing harder deep | **done** |
+| R0 `decay` census | dt_bias ≪ 0 across KDA layers (default-long-retention); A_log spreads per layer | ✓ dt_bias −4.63 ± 0.05 all 69 layers (no flips); A_log means −0.17→+0.29 with depth | **done** |
+| R1-A (KDA-hybrid vs GQA) | ≥ 1% val_bpb at iso-FLOP; gap grows with context | — | pending |
+| R1-A×B (interaction) | AttnRes marginal gain larger on GQA corner than KDA corner (substitution) | — | pending |
+| R1-C (LatentMoE+QB, 64×4) | ≈ standard MoE + sign-step within ±0.5% bpb (null) | — | pending |
+| R2 g_min sweep | flat ∈ [−3,−7]; degrades ≤ −10; bf16 chunkwise unstable at ≤ −10 (e^160 > BF16 max) | — | pending |
+| R2 KDA vs GDN | KDA ≥ 0.5% val_bpb at iso-FLOP | — | pending |
+
+**Kill lines:** R1-A: KDA-hybrid loses to GQA at iso-FLOP ⇒ the architecture claim does not
+transfer to our scale — stop and report, do not re-tune to force it. R2: no measurable
+degradation at g_min = −10 in bf16 ⇒ the paper's hardware rationale is weaker than claimed
+(report it, then re-examine our chunkwise precision split). R1-A×B: |Δgain| < 0.25% bpb ⇒
+additivity holds at 0.4B (record as null, still a result).
+
+**Artifacts:** `scripts/k3_fetch_tensors.py`, `artifacts/k3_anatomy/`,
+`tests/test_k3_param_count.py`, `docs/k3/ABLATIONS.md`.

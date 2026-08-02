@@ -3,6 +3,14 @@
 Single source of truth for what is built, tested, and green. Updated as modules land.
 Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m "not gpu"`.
 
+> 🆕 **K3 track chartered (2026-07-31).** Build & host **Kimi K3** from scratch — roadmap +
+> verified-facts ledger: [`k3/ROADMAP.md`](k3/ROADMAP.md) + [`k3/FACTS.md`](k3/FACTS.md) (4-angle
+> research pass vs Moonshot primary sources; K3 tech report = arXiv:2607.24653 is the spec of
+> record). Monorepo decision: `src/scratch_llm/k3/` upgrades existing assets (GDN→KDA, MLA→Gated
+> MLA-NoPE, MoE→Stable LatentMoE, Muon→Per-Head Muon, MXFP4→QAT) — K2 (KDA) is the critical path;
+> K6 mini-K3 is where F5/F6/F10 converge; K9 = 8×B300 rental to re-measure the hosting book's
+> numbers ourselves. Books open Aug 3; K0–K5 need nothing from them. START-HERE: ROADMAP §6.
+
 > 🆕 **Third front opened (2026-07-04 · [ADR-0018](adr/ADR-0018-close-the-loop-nanochat-front.md)).**
 > **Close the loop:** adopt nanochat's end-to-end `speedrun.sh` spine + a report card to train an
 > actual *talking* model from our own code (the loop has never closed — everything real is

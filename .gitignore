@@ -61,3 +61,10 @@ build/
 
 # Session tooling
 .zcode/
+
+# K3 anatomy — raw checkpoint data is regenerable via scripts/k3_fetch_tensors.py;
+# commit only the derived stats (repo rule: never commit weights/datasets)
+artifacts/k3_anatomy/index.json
+artifacts/k3_anatomy/census.json
+artifacts/k3_anatomy/tensors/
+artifacts/k3_anatomy/fetch.log
