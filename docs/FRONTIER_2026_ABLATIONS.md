@@ -5,7 +5,9 @@
 > pipeline view see [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md); for the
 > buildable file→test spec see [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md); for a
 > one-page status board see [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md); for the curated entry point
-> see [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md).
+> see [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md); for the K3 track (chartered
+> 2026-07-31 — converged twins of F5/F6/F10) see [`k3/ROADMAP.md`](k3/ROADMAP.md),
+> [`k3/FACTS.md`](k3/FACTS.md), and [`k3/ABLATIONS.md`](k3/ABLATIONS.md).
 
 > **What this is.** The master spec for a **third front** on `scratch_llm`: adopt Karpathy's
 > **nanochat** end-to-end integration spine to produce a *trained, evaluated, chat-capable* model
@@ -155,9 +157,12 @@ falsifiable experiment; the discipline *is* the hireable skill.
 > well; F3/F5/F6/F9 are necessary-but-minimize. The **KILL bands on F1 and F7 are recalibrated** to the
 > verified 2026 evidence (below, marked ⚠). Rung cards for F10/F11/F12 are in §10.
 
-**Node pointer (current, 2026-07-31):** F1-run **DESCOPED 07-17** (Muon+AdamW adopted per FOP-7,
-commit `f9e8f3b`; the iso-FLOP race harness stays for F12). Next: **F12 corpus ablation (free) +
-S3 scaling sweep → P5 d12 dress rehearsal ($10–15) → 8×H100 d20 (gated)** per
+**Node pointer (current, 2026-08-02):** F1-run **DESCOPED 07-17** (Muon+AdamW adopted per FOP-7,
+commit `f9e8f3b`; the iso-FLOP race harness stays for F12). **F12 DONE 2026-07-31** — kill fired
+(ClimbMix bpb 1.30205 ≥ FineWeb-EDU 1.19197 at iso-FLOP, Δ=+0.1101); **operator OVERRIDE → ClimbMix
+anyway** (nanochat's larger-scale result), decision FINAL 2026-08-02 (`docs/RESULTS.md` §F12). Next:
+**S3 scaling sweep RUNNING on the RTX 5090 pod (s1–s4 banked, s5 in flight, ClimbMix) → fit-gate →
+P5 d12 dress rehearsal ($10–15) → 8×H100 d20 (gated)** per
 `FRONTIER_2026_END_TO_END_PLAN.md` and the taskspec Next-node marker; Tier-1 science (F8 / F10.2 /
 F7-reframed / F11) follows on the standing box. Advance the pointer as rungs ship.
 
@@ -174,7 +179,7 @@ F7-reframed / F11) follows on the standing box. Advance the pointer as rungs shi
 | **9** | **Logit-stability guard** | S | `qk_norm` on ⇒ max per-head logit **<~30**, QK-Clip γ==1 sub-1B. *Cheap guard, keep small — QK-norm is settled.* | Kimi-K2 2507.20534 |
 | **10** | **Hybrid linear attention** 🆕*(GDN/KDA-style)* | M/L | iso-param 3:1 (Gated-DeltaNet : full-attn) hybrid within **+0.03 val loss** of full attention at ≤300M; **KV/token ≥2× smaller**, decode uplift at long ctx. *The 2026 attention frontier the program lacked — MLA is now the baseline it beats.* **KILL** if gap >0.1 nats or no KV win. | **Kimi Linear (Moonshot, Oct-25); Qwen3-Next/Qwen3.5; Gated DeltaNet; NSA 2502.11089** |
 | **11** | **Agentic / tool-use RL** 🆕*(the #1 2026 priority)* | L | A verifiable multi-turn tool env (calculator/code-exec): success-rate ↑ with turns-used bounded; a **format-only reward hacks** (control). *DeepSeek/K2/Qwen's stated #1 direction; 2026 eval = agentic (SWE-bench).* **KILL** if success-rate flat or reward-hacked without detection. | **K2 2507.20534; DeepSeek V3.2; Qwen3.5 agentic evals** |
-| **12** | **ClimbMix-400B vs FineWeb-EDU corpus ablation** 🆕*(data > optimizer)* | M | Train two 35M-param models for **700M tokens**, tokenizer retrained **per corpus**; **ClimbMix bpb < FineWeb-EDU bpb** at iso-FLOP on val_bpb + CORE. *Data was nanochat's biggest GPT-2 speedrun win (−27%, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)).* **KILL** if ClimbMix ≤ FWE ⇒ keep banked FWE corpus; **CC BY-NC 4.0** license note in A9 if ClimbMix wins. | **Nemotron-CLIMB 2504.13161; HF nvidia/Nemotron-ClimbMix; nanochat 324e69c** |
+| **12** | **ClimbMix-400B vs FineWeb-EDU corpus ablation** 🆕*(data > optimizer)* | M | Train two 35M-param models for **700M tokens**, tokenizer retrained **per corpus**; **ClimbMix bpb < FineWeb-EDU bpb** at iso-FLOP on val_bpb + CORE. *Data was nanochat's biggest GPT-2 speedrun win (−27%, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)).* **KILL** if ClimbMix ≤ FWE ⇒ keep banked FWE corpus; **CC BY-NC 4.0** license note in A9 if ClimbMix wins. **OUTCOME 2026-07-31:** kill fired — ClimbMix bpb 1.30205 ≥ FWE 1.19197 (Δ=+0.1101; CORE 0.0551 vs 0.0510) — **operator OVERRIDE → ClimbMix anyway** (nanochat's larger-scale result), decision **FINAL 2026-08-02** (`docs/RESULTS.md` §F12) | **Nemotron-CLIMB 2504.13161; HF nvidia/Nemotron-ClimbMix; nanochat 324e69c** |
 
 **Convergent-defaults signal (verified 2026-07-09):** **MTP** (V3 + GLM-5 + Qwen3-Next + 6 more prod.
 models — *strongest* convergent signal) and **QK-norm** (Qwen3/Gemma3/OLMo2, already in `model.py`) are
@@ -423,6 +428,13 @@ minimize · 🆕 MISSING (add).
   **CORE** point follows bpb (ClimbMix CORE ≤ FWE CORE). Predicted Δbpb ≈ −0.010 to −0.030 (nanochat
   saw −0.028 at GPT-2 scale, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)).
   **KILL** if ClimbMix bpb ≥ FineWeb-EDU bpb at iso-FLOP ⇒ keep the banked FineWeb-EDU corpus.
+- *Measured outcome (2026-07-31; logged per honesty discipline).* **Large prediction miss:**
+  predicted Δbpb −0.010..−0.030 for ClimbMix, **actual Δbpb = +0.1101** (ClimbMix val_bpb 1.30205 vs
+  FineWeb-EDU 1.19197; CORE 0.0551 vs 0.0510). The pre-registered falsifier was **NOT confirmed** and
+  the kill criterion **fired** — the measurement-only verdict was KEEP FineWeb-EDU. **Operator
+  OVERRIDE (2026-07-31, FINAL 2026-08-02):** ClimbMix staged for S3/d20 anyway, following nanochat's
+  larger-scale head-to-head; the d20 run itself becomes the corpus arbiter at our scale. Full record:
+  `docs/RESULTS.md` §F12 (lines 100-131).
 - *DoD.* A reproducible corpus-ablation harness: shard builders for FineWeb-EDU (existing `data/shards.py`)
   and ClimbMix-400B (new staging path); per-corpus BPE trained via `scripts/tok_train.py`; iso-FLOP
   training arms via `eval/optimizer_race.py` or a dedicated `eval/corpus_ablation.py` driver; val_bpb and
@@ -471,4 +483,7 @@ honestly and three of them didn't survive a tuned baseline / a proper control."*
 - Measurement ledger (pre-register + measure every rung): `bench/RESULTS.md` (§Frontier ablations).
 - Build status: `docs/STATUS.md`. Frontier-defaults context: `docs/FRONTIER_PRACTICE_2026.md`.
 - Parallel fronts: `performance/PERF_PLAN.md` (perf), `../../DELTA.md` (capstone).
+- K3 track (build & host Kimi K3 from scratch; chartered 2026-07-31): `docs/k3/ROADMAP.md`,
+  `docs/k3/FACTS.md` (claim ledger), `docs/k3/ABLATIONS.md` — F5/F6/F10 have converged K3 twins
+  there; the K3↔F cross-reference is bidirectional.
 - Reference repo (oracle, re-own — do not copy): karpathy/nanochat (`nanochat/{gpt,optim,tokenizer,engine}.py`, `speedrun.sh`).

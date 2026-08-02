@@ -78,3 +78,16 @@ sm_100a-gated.)
 - Market rates are `[UNCERTAIN]` (Vast-class 2026: H100 ~$2–2.5/h, H200 ~$2.5–3.5/h, 8×H200
   ~$20–32/node-h, B200 ~$4–7/h) — re-check at session time; the *tiers* are the decision, prices
   only move totals.
+
+## Amendment (2026-08-02) — a fourth session: the K9 B300 node
+
+The K3 track ([`../k3/ROADMAP.md`](../k3/ROADMAP.md), chartered 2026-07-31) adds **K9: serve the real
+Kimi K3 checkpoint — 8×B300 on Modal, $56.79/hr, budget a 2–3 h session ≈ $120–170**
+(ROADMAP §K9, lines 227–237; FACTS S4/S5; runbook `deploy/runbooks/k3_8xb300_modal.md`).
+
+**Fit-math amendment:** Kimi K3 at **1.561 TB MXFP4** (96 shards, FACTS S10) fits *none* of the
+original three tiers — 8×H200 = 1,128 GB total HBM < 1,561 TB weights. Only the **B300 node
+(2,304 GB)** holds it, leaving KV headroom. The B300 tier is therefore the K9 frontier-serving
+vehicle; the Tier-2 8×H200 day stands unchanged for the perf curriculum (DeepSeek-R1 FP8, 671 GB —
+fits). K9 inherits the node-day rules above (on-demand only; verify topology/bandwidth before the
+clock matters; runbook written before a dollar is spent). `[FACT: arithmetic from published configs]`

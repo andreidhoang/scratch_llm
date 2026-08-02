@@ -32,25 +32,26 @@ If a change doesn't build, test, or defend one of the five assignments to this s
 
 ## 1. Current state (what is green, what is greenfield)
 
-From `docs/STATUS.md` (157 CPU + 14 GPU-marked tests green, ruff/pyright clean — STATUS carries the
+From `docs/STATUS.md` (456 CPU + 14 GPU-marked tests green, ruff/pyright clean — STATUS carries the
 live numbers; this table tracks the CS336 track only, the perf curriculum lives in
 `performance/PERF_PLAN.md`):
 
 | Assignment | Built & green | To build |
 |---|---|---|
 | **A1** Basics | ✅ tokenizer · model (RMSNorm/RoPE/SwiGLU/GQA-ready MHA + opt-in QK-norm) · MoE (opt-in) · AdamW+clip+cosine · train · sampling | — (complete) |
-| **A2** Systems | ✅ FlashAttention-2 (oracle+Triton+roofline) · KV-cache · `utils/monitors.py` · rollout seam (`LocalBackend`) | ✅ DDP (naive→flat→overlap, gloo) · ⬜ ZeRO-1 · FSDP · 100B memory one-pager · real SGLang serving (Hopper) — queued behind the perf mandate |
-| **A3** Scaling | — | ⬜ `scaling/` IsoFLOP/Chinchilla fitter (the Stanford-API leaderboard runs in the official scaffold) |
-| **A4** Data | — | ⬜ `data/` extract·filter·quality-classify·dedup |
-| **A5** Alignment | ✅ env/grader protocol (`envs/protocol.py`) | ⬜ `algos/` (SFT·EI·GRPO/Dr.GRPO·DPO) · `rewards/` · `envs/` |
+| **A2** Systems | ✅ FlashAttention-2 (oracle+Triton+roofline) · KV-cache · `utils/monitors.py` · rollout seam (`LocalBackend`) · ✅ DDP (naive→flat→overlap, gloo) · ✅ ZeRO-1 · ✅ FSDP · ✅ 100B memory one-pager + comms algebra (shipped 2026-07-03, W1–W4) | ⬜ real SGLang serving (Hopper) — rental-gated |
+| **A3** Scaling | ✅ `scaling/` IsoFLOP/Chinchilla fitter (a=0.469 · b=0.531) + budget query planner (2026-07-03, W5–W6) | ⬜ Stanford-API leaderboard (blocked-external, runbook in `deploy/runbooks/`) |
+| **A4** Data | ✅ `data/` extract·filter·quality-classify·dedup (exact + MinHash/LSH; 2026-07-04, W7) | ⬜ full 5000-WET run (SKIP; slice runbook) |
+| **A5** Alignment | ✅ env/grader protocol (`envs/protocol.py`) · ✅ `algos/` (SFT·EI·GRPO/Dr.GRPO·DPO) · `rewards/` · `envs/` (code-complete 2026-07-04, W8) | ⬜ graded Qwen2.5-Math GPU runs + R1-Zero "aha" repro (rental-gated) |
 | **Capstone** DELTA | ✅ design doc + 4-week barbell plan (fact-checked 2026-06-14) | ⬜ Step-0 gate → Phase-1 harness (= A2 finish) → Triton decode kernel → ablations → postmortem (see §7) |
 
-`algos/`, `rewards/`, `envs/`, `scaling/`, `data/` are clean stubs today.
+All of `algos/`, `rewards/`, `envs/`, `scaling/`, `data/` are built and green (main-track sprint,
+ADR-0014); graded GPU runs are the only rental-gated remainder.
 
-> **Ordering mandate (2026-06-30) — supersedes the ship-order below until done.** The
-> `performance/` curriculum (A1–A7) ships first; its current node lives in
-> `performance/PERF_PLAN.md`. The A5 RL "aha" and DELTA are **gated behind it** (A2–A5 kernel
-> skills are direct DELTA prerequisites). The paragraph below is the canonical post-mandate sequence.
+> **Ordering mandate (2026-06-30) — DISCHARGED (perf curriculum complete 2026-07-04).** The
+> `performance/` curriculum (A1–A7) shipped first as mandated; all sm120-runnable rungs are done
+> (only the rental DAYS remain — `performance/PERF_PLAN.md`). The mandate was dissolved into the
+> two-front split (ADR-0013/0014). The paragraph below is the canonical post-mandate sequence.
 
 **Build-order is numeric
 (each layer builds on the last); ship-order is EV-ranked — they are not the same thing.** A1's substrate
@@ -102,7 +103,7 @@ tables + equations + checklists are in the cited guide.
 - **Load-bearing 20%:** FA2 tiling + online softmax (and the recomputation backward with the D-vector); the roofline (arithmetic intensity, % of peak, BW- vs compute-bound); the ~16–20 B/param optimizer-state memory math → why 100B needs DP+TP+PP; DDP overlap; ZeRO-1.
 - **Gates:** predict-before-you-run (write expected ms first) · `cuda.synchronize()` around all timing · fixed-seed.
 - **Production polish:** FA2 validated against the pure-PyTorch oracle and SDPA; DDP/ZeRO/FSDP each with a 2-rank gloo equivalence test (×5); the 100B memory one-pager.
-- **Status / next:** single-GPU half ✅ (FA2 fwd+bwd · selective checkpointing · mixed-precision numerics · KV-cache · monitors · rollout seam · roofline); distributed half in progress — **DDP naive/flat/overlap ✅ (gloo); ZeRO-1 next (D2) + the 100B one-pager, then FSDP2 (D3, graded) + comms algebra (D4)**; develop on the standing **Blackwell sm120** GPU (gloo for distributed-correctness here; multi-GPU NCCL throughput rents a multi-GPU box). Real SGLang on sm120 is an open **ADR-0008** re-check (was Hopper-gated on Ada).
+- **Status:** ✅ complete (both halves) — single-GPU ✅ (FA2 fwd+bwd · selective checkpointing · mixed-precision numerics · KV-cache · monitors · rollout seam · roofline) and distributed ✅ shipped 2026-07-03 (DDP naive/flat/overlap · ZeRO-1 + 100B one-pager · FSDP per-param ZeRO-3, graded · comms algebra — W1–W4, gloo-verified). Remainder: real SGLang on sm120 is an open **ADR-0008** re-check (was Hopper-gated on Ada); multi-GPU NCCL throughput rents a multi-GPU box.
 - **SKIP:** the 8B leaderboard; the optional Triton FA2 backward (Alg. 2) — do the `torch.compile` recomputation backward.
 - **Interview leverage:** the xAI inference loop (kernels, KV-cache, quant), "how would you train a 100B model?" (DP+TP+PP + the memory math), **MFU / inference co-design** (why 100% MFU is an anti-goal; pick matrix topologies that saturate the units), and the **MoE serving** tradeoff (expert-parallel all-to-all vs pipeline-prefill).
 
@@ -167,6 +168,7 @@ An assignment is "mastered to production" when:
 - Workspace map + interview-readiness: `../README.md`.
 - The official course (spec + test oracle): `../lectures/` (lectures + the 5 assignment scaffolds + PDFs).
 - **The capstone (DELTA):** `../../DELTA.md` (merged RFC + 4-week barbell plan), in the workspace root. See §7.
+- **The K3 track (newest, chartered 2026-07-31):** `docs/k3/ROADMAP.md` + `docs/k3/FACTS.md` — build & host Kimi K3 from scratch on this repo's substrate; the K3 tech report (arXiv:2607.24653) is the spec of record.
 
 ---
 
@@ -197,6 +199,8 @@ substrate (35B dropped); non-linear hybrid layers are 2K SWA; Triton-first; NVID
 
 **Source-of-truth doc (workspace root, one dir above this repo):**
 `../../DELTA.md` — the merged RFC (Part I) + dated 4-week plan (Part II).
+**K3 cross-link:** the K3 roadmap's **K10.2** re-aims this co-designed kernel at **KDA**
+(per-channel decay), building on DELTA's GDN-2 base — see `k3/ROADMAP.md` (K10 stretch).
 
 **Mastery & interview leverage (wire into `/master` + the daily teach-back).** DELTA fills the
 **inference/kernel axis** the A1–A5 map is light on. Five `/master`-able concepts, each teach-back-gated
@@ -222,12 +226,19 @@ map: [`../README.md`](../README.md).
 
 CS336 A1→A5 gave us every *layer*; it never ran the *loop*. The next build spine adopts Karpathy's
 **nanochat** integration harness (`speedrun.sh` + report card) over the components we already own to
-train an actual **talking model** (headline: nanochat **d20**, ~561M, ~$100 on 8×H100, target CORE ≈
-GPT-2), then runs an EV-ranked, pre-registered, **iso-FLOP frontier ablation study** — F1 MuonAdamW,
+train an actual **talking model** (headline: nanochat **d20**, measured **480.4M** @ vocab 32768,
+~$100 on 8×H100, pre-registered CORE band **0.19–0.22** vs the original-d20 anchor **0.2219** — the
+old "target CORE ≈ GPT-2" line was mis-anchored, corrected 2026-07-16), then runs an EV-ranked,
+pre-registered, **iso-FLOP frontier ablation study** — F1 MuonAdamW,
 F2 MTP draft head, F3 de-confound serving, F4 bf16+compile, F5 MLA-for-real, F6 MoE balancing,
-F7 GRPO "aha", F8 DSA, F9 logit-guard — each with a falsifiable prediction + kill criterion. This
+F7 GRPO "aha", F8 DSA, F9 logit-guard, F10 hybrid linear attention, F11 agentic/tool-use RL —
+plus **F12 (ClimbMix-400B vs FineWeb-EDU corpus ablation): DONE, decision FINAL 2026-08-02 =
+ClimbMix by operator override** (measured +0.110 bpb worse, kill criterion fired, overridden
+following nanochat's larger-scale result; details `docs/RESULTS.md` §F12) — each with a falsifiable
+prediction + kill criterion. This
 runs as a **third front** in parallel with the perf curriculum and DELTA; the trained model becomes
-what those fronts finally measure against. **The full engineering spec + execution DAG is the
+what those fronts finally measure against. Per the K3 roadmap, **F5/F6/F10 converge into K6
+(mini-K3)** (`docs/k3/ROADMAP.md`). **The full engineering spec + execution DAG is the
 source of truth:** [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md) (decision:
 [`adr/ADR-0018`](adr/ADR-0018-close-the-loop-nanochat-front.md); ledger `bench/RESULTS.md`
 §Frontier ablations; plan of record `~/.claude/plans/misty-sniffing-cerf.md`). **Pipeline-level

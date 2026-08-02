@@ -1,7 +1,8 @@
 # Frontier ablation results — predicted vs measured
 
 Pre-registered measurement ledger for the F-front ablations defined in
-`docs/FRONTIER_2026_TASKSPEC.md`.  A row is `[FACT]` only once measured; until
+`docs/FRONTIER_2026_TASKSPEC.md`, now also hosting the §S3 scaling-sweep and §K3
+anatomy/interaction pre-registrations.  A row is `[FACT]` only once measured; until
 then it records the falsifiable prediction and the kill criterion.
 
 ## F6 · MoE balancing ablation
@@ -117,6 +118,15 @@ choice. This deviates from the pre-registered protocol. The override is logged h
 `bench/RESULTS.md`; the A9 model card must still state the **CC BY-NC 4.0** license and source for
 NVIDIA Nemotron-ClimbMix.
 
+**Decision FINAL (2026-08-02).** The operator confirmed ClimbMix for S3/d20 and declined the proposed
+second-scale (d8/ratio-20) confirmation arm. Consequences of record: (1) the F12 measurement above
+stands unchanged — ClimbMix measured +0.110 bpb worse at 35M/700M with our recipe; the d20 corpus
+choice rests on nanochat's larger-scale result, not on a scale-stable verdict of ours; (2) the d20
+CORE band must be re-anchored against the *current* published ClimbMix curve (d24-class 0.257–0.269
+at ~4e19 FLOPs) before P5, per E2E §S4(e); (3) the d20 run itself becomes the corpus arbiter at our
+largest scale — its bpb/CORE vs the S3-fit prediction and the nanochat overlay is the final,
+self-measured verdict.
+
 **Artifacts:** `data/shards.py` (FineWeb-EDU arm), new ClimbMix staging path,
 `scripts/tok_train.py` per-corpus BPE, `eval/corpus_ablation.py` (or reuse `eval/optimizer_race.py`),
 `docs/RESULTS.md` §F12, `bench/RESULTS.md` §Frontier ablations.
@@ -124,7 +134,8 @@ NVIDIA Nemotron-ClimbMix.
 ## S3 · Scaling-law calibration sweep (pre-registration)
 
 Registered **before** running (2026-07-31). Spec: `docs/FRONTIER_2026_END_TO_END_PLAN.md` §S3.
-Thesis: our own recipe (Muon+AdamW, F12-winning corpus, vocab 32,768, untied) admits a clean
+Thesis: our own recipe (Muon+AdamW, chosen corpus — **ClimbMix, by operator override**; the F12
+measurement winner was FineWeb-EDU — vocab 32,768, untied) admits a clean
 power-law fit at sweep scale, and the compute-optimal D:N it implies either confirms or
 re-registers the d20's 9.6B-token budget *before* any paid run.
 
@@ -132,10 +143,25 @@ re-registers the d20's 9.6B-token budget *before* any paid run.
 overrode the kill criterion and selected **ClimbMix** for S3/d20 (following nanochat/Karpathy). The
 scaling-law fit therefore runs on ClimbMix. Batch sizes may be reduced from the pre-registered
 default for OOM safety on RTX 5090 32 GB (s1-s6 batch=8, s7 batch=4 with fallback to 2).
+*(Superseded for s7/s8 by the 2026-08-02 batch-consistency decision below: s7/s8 batch 4,
+fallback 2, LR held fixed.)*
 
 **Harness fix (2026-07-31).** The S3 grid planner (`scaling/s3_sweep.py::_instantiated_params`) was
 missing the `qk_norm=True` parameters that the real GPU training path adds; this caused a param-count
 mismatch on the first point. Fixed so the planned `N` matches the instantiated model.
+
+**Batch-consistency decision (2026-08-02, pre-registered before s7 launches).** The pretraining path
+(`train.py`/`speedrun.py`) has **no gradient accumulation** (verified at HEAD — only `algos/sft.py`
+supports it), so s7/s8 cannot hold batch 8 at d12 within the 5090's 32 GB. Decision: s7/s8 run at
+the largest batch that fits (batch 4, fallback 2) with **LR held fixed — no mid-grid LR rescale**.
+Rationale: a systematic batch-regime break is detectable and attributable post-hoc, whereas a
+mid-grid LR change would confound the fit irrecoverably. Pre-registered validity checks: (1) the
+d12 points must land on the d4/d8 envelope's log-log extrapolation — if they land HIGH, the excess
+is attributed to batch, not to the law; (2) the a+b fit is reported **with and without s7/s8** as a
+sensitivity arm; (3) no point estimate of the D:N optimum is quoted — the decision rule (optimum
+< 15 ⇒ re-register d20's D) is evaluated over the fitted interval only. Adding grad accumulation
+mid-sweep was considered and rejected: code churn on a live checkout is a larger risk to the grid
+than a documented, systematic batch break on two points.
 
 Grid: depths {4, 8, 12} × D:N {8, 20, 40} minus (12, 40) = points s1–s8 (largest: d12 @ ratio-20,
 C ≈ 2.2e18, ~28 h standing box; s6/s8 droppable if budget trips). Fit `N_opt ∝ C^a`,
@@ -162,7 +188,8 @@ d16 stays the $90-abort fallback).
 ## K3 · Anatomy + interaction of the K3 stack (pre-registration)
 
 Registered **before** running (2026-07-31). Spec: `docs/k3/ABLATIONS.md` (arm configs,
-iso-FLOP rule, eval protocol). R0 is CPU/weight-space and STARTED; R1/R2 launch only after
+iso-FLOP rule, eval protocol). R0 is CPU/weight-space and its census is **COMPLETE** (all four
+rows below done, 2026-07-31); R1/R2 launch only after
 `core/kda.py` is PROVEN (HANDCRAFTED.md) and mini-K3 is wired into the speedrun spine (K6).
 
 | arm | prediction (pre-registered) | measured | status |

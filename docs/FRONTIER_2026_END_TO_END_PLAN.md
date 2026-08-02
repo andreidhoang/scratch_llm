@@ -5,7 +5,8 @@
 > ablation strategy and rung cards see [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md); for
 > the buildable file→test spec see [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md); for a
 > one-page status board see [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md); for the curated entry point
-> see [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md).
+> see [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md); for the K3 track (chartered
+> 2026-07-31) see [`k3/ROADMAP.md`](k3/ROADMAP.md) + [`k3/FACTS.md`](k3/FACTS.md) (claim ledger).
 
 > **What this is.** The refactored **end-to-end training plan** for `scratch_llm`: one document that
 > walks the whole pipeline — data → architecture → pretraining → scaling-law calibration →
@@ -90,7 +91,7 @@
 >    `f9e8f3b`; F1-run descoped 07-17).
 >
 > *Adopted from the review:* F7 contamination probe + non-Qwen control; F8/F10 recall probe fixed
-> to RULER-primary. Ordering unchanged — **next: F12 + S3 sweep (free) → P5 d12 ($10–15) → 8×H100
+> to RULER-primary. Ordering unchanged — **next: S3 fit-gate → P5 d12 ($10–15) → 8×H100
 > d20 (gated)**.
 
 ---
@@ -183,7 +184,10 @@ BPB = Σℓᵢ/(ln 2·Σbᵢ) in [2605.26797](https://arxiv.org/html/2605.26797v
 **(d) Settled vs contested.** *Settled:* model-based quality filtering > heuristics; dedup but not
 aggressive global fuzzy dedup; decontaminate eval sets yourself; overtraining small models past
 20:1 is standard and beneficial; bpb as the vocab-invariant metric. *Contested:* which filtered
-corpus is best at ≤1B (only nanochat's head-to-head is trustworthy: ClimbMix > FWE); optimal vocab
+corpus is best at ≤1B — now **self-measured**: our F12 at 35M/700M said the opposite of nanochat's
+head-to-head (ClimbMix +0.110 bpb *worse* at iso-FLOP, `docs/RESULTS.md` §F12); the d20 corpus
+(ClimbMix, operator override FINAL 2026-08-02) rests on nanochat's *larger-scale* result, and the d20
+run itself becomes the corpus arbiter at our scale (RESULTS.md:120-127); optimal vocab
 at ≤1B; staged-mixture curriculum vs one good static mix (ClimbMix wins *statically* at GPT-2
 scale); reasoning-trace synthetic data at ≤1B (capacity floor unprobed).
 
@@ -194,8 +198,11 @@ FineWeb-EDU vs ClimbMix at F1-harness scale decides the d20 corpus with *our* re
 bigger nanochat win than Muon or FP8, and the program currently treats the corpus as fixed. That
 is the cheapest large-win ablation we are not running.
 
-**(f) Status.** A0/A1 shipped; P2 parquet path proven; ClimbMix re-staging + F12 **pending**
-(standing-box, free); d20 corpus choice **open until F12 verdicts**.
+**(f) Status.** A0/A1 shipped; P2 parquet path proven; **F12 DONE 2026-07-31** (`docs/RESULTS.md`
+§F12): kill criterion triggered (ClimbMix bpb 1.30205 ≥ FineWeb-EDU 1.19197 at iso-FLOP, Δ=+0.1101),
+measurement-only verdict = KEEP FineWeb-EDU; **operator OVERRIDE → ClimbMix anyway** (following
+nanochat's larger-scale result), decision **FINAL 2026-08-02**. d20 corpus choice **settled =
+ClimbMix**, already staged on the pod; the d20 run itself becomes the corpus arbiter at our scale.
 
 **F12 corpus ablation.** Pre-registered head-to-head that decides the d20 corpus *with our recipe*:
 **35M params / 700M tokens / iso-FLOP** (`C ≈ 1.5×10¹⁷`), tokenizer retrained **per corpus** on the
@@ -239,7 +246,7 @@ nothing to do, though nanochat uses 1e5 and we use 1e4 ([VERIFIED] attention-ang
   construction" ([2602.15763](https://arxiv.org/html/2602.15763v2)); GLM-5.2 adds IndexShare
   ([2603.12201](https://arxiv.org/pdf/2603.12201)).
 - **Linear-hybrid: real, parity-plus-efficiency, long-context-only.** Kimi Linear
-  ([2510.26692](https://arxiv.org/abs/2510.26692)): KDA 3:1 : MLA, 75% KV cut, 6.3× TPOT @1M — but
+  ([2510.26692](https://arxiv.org/abs/2510.26692)): KDA 3:1 : MLA, 75% KV cut, up to ~6× TPOT @1M (FACTS B9) — but
   the [repo](https://github.com/MoonshotAI/Kimi-Linear) shows the fair comparisons were 1.4T-token
   runs and **at 4k context the hybrid is the same speed as full attention**; speedups appear at
   128k+. The strongest negative result is official: MiniMax's M2 retreat
@@ -466,7 +473,8 @@ free-but-slow; 1×H100 spot ~$8–12 / ~$15–25). Any one trigger fires ⇒ run
 Mid-scale runs use the *frozen* d20 recipe (full attention, Muon+AdamW, F12-winning corpus) — they
 are calibration points, not architecture bake-offs; the d20 architecture stays frozen regardless.
 
-**(f) Status.** Not started. Free (standing box). Blocks nothing that ships code; gates the D:N
+**(f) Status.** **Running** (RTX 5090 pod, ClimbMix corpus): s1–s4 banked, s5 in flight as of
+2026-08-02. Blocks nothing that ships code; gates the D:N
 re-registration and the P5 go/no-go.
 
 ---
@@ -519,8 +527,9 @@ vs a public checkpoint + ckpt kill/resume drill + the G1/G2/G4 entrypoints) must
 (locked): a CORE-vs-FLOPs point on nanochat's published curve — we buy 73% of the anchor's compute
 at 86% of its N — **never** a depth-matched headline, and bpb not CE for any loss comparison.
 Re-anchor caveat from the data/eval angles: the 0.19–0.22 band is calibrated to the Oct-2025
-FineWeb-EDU recipe; if F12 moves the corpus to ClimbMix, re-anchor the band against the *current*
-published curve (d24-class 0.257–0.269 at ~4e19) before P5.
+FineWeb-EDU recipe; the corpus **moved to ClimbMix** (F12 operator override, FINAL 2026-08-02), so
+the band **must be re-anchored** against the *current*
+published ClimbMix curve (d24-class 0.257–0.269 at ~4e19) **before P5** (RESULTS.md §F12, lines 120-127).
 
 **(f) Status.** All buildable gate rungs **done** (A7, A8, P1 ✅ SDPA 07-16/GPU-measured 07-17,
 P2 ✅ parquet 0.7B, P3 ✅ CORE suite, launch calibration B=16/18.2 GiB/0.283 s-step `[MEASURED
@@ -803,7 +812,7 @@ one variable at iso-FLOP, kill criterion checked. Status: ✅ shipped · 🆕 sh
 | **F9** | QK-clip guard (gated >1B) | Settled (softcap dead — Gemma 3 2503.19786; K2 explosion was 9B-active); qk_norm suffices sub-1B | ✅ observer + `apply_qk_clip` | with qk_norm: max logit <30 ⇒ clip γ≡1 | sustained S_max>30 |
 | **F10** | Hybrid linear attention | The live attention frontier; **block of record is now GDN-2** (2605.22791) not GDN; recall probe mandatory (Wang 2507.06457) | F10.1 ✅ `linear_attn.py`; F10.2 ⬜ | 3:1 hybrid within +0.03 val loss of full-attn iso-param; state ≥2× smaller; **MQAR/NIAH recall parity**; decode uplift ≤8k predicted null | val gap >0.1 nats; no state win; recall deficit |
 | **F11** | Agentic / tool-use RL | #1 stated lab priority; SWE-bench Verified citation stale (withdrawn) — direction unaffected; reward mode collapse ≤1B documented (2504.02273) | ⬜ CPU-green harness pending | verifiable-reward success ↑, turns bounded; format-only control flat; pass^k + turns-used reported | flat success; control not caught by logging |
-| **F12** 🆕 | **Data ablation: FineWeb-EDU vs ClimbMix** | The missing rung — data was nanochat's biggest win (−27%, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)); decides the d20 corpus with *our* recipe | ⬜ pending, standing-box free; gates d20 corpus + CORE band re-anchor | ClimbMix bpb < FWE bpb at iso-FLOP (35M/700M, tokenizer retrained per corpus, CORE+bpb) | ClimbMix ≤ FWE ⇒ keep banked FWE corpus; CC BY-NC noted in A9 |
+| **F12** 🆕 | **Data ablation: FineWeb-EDU vs ClimbMix** | The missing rung — data was nanochat's biggest win (−27%, [324e69c](https://github.com/karpathy/nanochat/commit/324e69c.patch)); decides the d20 corpus with *our* recipe | ✅ **done 2026-07-31**: kill fired (ClimbMix bpb 1.30205 ≥ FWE 1.19197, Δ=+0.1101); **operator OVERRIDE → ClimbMix** (nanochat's larger-scale result), FINAL 2026-08-02; CORE band re-anchor now required (`docs/RESULTS.md` §F12) | ClimbMix bpb < FWE bpb at iso-FLOP (35M/700M, tokenizer retrained per corpus, CORE+bpb) | ClimbMix ≤ FWE ⇒ keep banked FWE corpus; CC BY-NC noted in A9 |
 | **P1–P6** | d20 gate prerequisites | Settled engineering | P1 ✅ SDPA · P2 ✅ parquet · P3 ✅ CORE suite · P4 LR machinery folds into P5 · P5 💰 $10–15 · P6 busbw ≥350 GB/s gate | per-runbook scorecard | per-runbook scorecard |
 
 **Re-ranked EV order (justified by the 2026-07-30 pass):**
@@ -892,9 +901,12 @@ build test-first → green-CI → measure → fill the ledger.
 1. **S3 scaling-law mini-sweep** `[L, free, no deps]` — the §3 grid (8 points, ~2–3 GPU-days
    standing box). Fit L(N,D) in bpb; a+b gate; D:N decision rule; nanochat-oracle overlay. *Output:
    the d20's D re-registered or confirmed, and a bpb-vs-FLOPs curve of our own.* Gates P5.
-2. **F12 data ablation** `[M, free, dep: none]` — FineWeb-EDU vs ClimbMix at 35M/700M iso-FLOP,
-   tokenizer retrained per corpus. *Output: the d20 corpus decision (+ re-anchored CORE band if it
-   flips).* Gates P5 corpus staging. Runs parallel with (1).
+2. ~~**F12 data ablation**~~ — **DONE 2026-07-31** (`docs/RESULTS.md` §F12): kill criterion fired
+   (ClimbMix bpb 1.30205 ≥ FineWeb-EDU 1.19197 at iso-FLOP, Δ=+0.1101; CORE 0.0551 vs 0.0510) —
+   measurement-only verdict was KEEP FineWeb-EDU; **operator OVERRIDE chose ClimbMix anyway**
+   (following nanochat's larger-scale result), decision **FINAL 2026-08-02**. Corpus is settled and
+   ClimbMix is already staged on the pod — no longer gates P5 corpus staging; the CORE-band
+   re-anchor (§S4(e)) rides (5).
 3. **Free harness batch (standing box / CPU)** `[M each, parallel]` — **F8.2** (DSA wired +
    measured, recall-gated), **F10.2** (`attn_schedule` 3:1 + GDN-2 block upgrade + MQAR/NIAH probe
    + iso-param quality/state ablation), **F7a/F7b/F7c** (aha harness + detector + CPU-green
@@ -907,7 +919,12 @@ build test-first → green-CI → measure → fill the ledger.
    kill/resume drill, step-time measurement (the d20 go/no-go).
 6. **The 8×H100 d20** `[💰 ~$100, deps: P5 pass + user authorization]` — 480.4M, 9.6B tokens,
    18,311 steps, MTP head baked (F2a falsifier passed today: +0.0027 in band), CORE 0.19–0.22
-   pre-registered, $90 abort → d16.
+   pre-registered, $90 abort → d16. **Runs unconditionally** (decision of record, 2026-08-02):
+   the d20-GQA is simultaneously (i) the loop-closure artifact with its pre-registered CORE band,
+   (ii) the Rung-0/1 control-family anchor the KDA multiplier is measured against, and (iii) the
+   insurance run if KDA slips. The Rung-2 family fit decides the flagship *science claim*
+   (whether a d20-scale mini-K3 follows as flagship), not whether the loop closes. This resolves
+   the §5-vs-`k3/SCALING_LADDER.md` §3 ordering question in favor of running both.
 7. **Post-d20 rungs** `[M each, 💰-free once the ckpt exists]` — **F3** (de-confound acceptance on
    the real ckpt) → **F2b** (MTPDrafter on the trained head) → **F5 first-slice** (MLA substrate)
    → **F7 real run** (Countdown zero-RL + random-reward control + pass@8, on the d20 base) →
@@ -1001,11 +1018,14 @@ build test-first → green-CI → measure → fill the ledger.
   convergent evidence is ≥3B or CPT-based).
 - Whether a nanochat `mid_train.py` exists at master (one agent fetched it; the #481 deletion quote
   + current speedrun.sh say deleted) — resolved against deletion, kept uncertain.
-- Whether ClimbMix's win survives *our* recipe (Muon-hybrid, our BPE, MTP head, ratio-20) — that is
-  exactly F12's question.
+- Whether ClimbMix's win survives *our* recipe (Muon-hybrid, our BPE, MTP head, ratio-20) —
+  **answered by F12 (2026-07-31): it does not** at 35M/700M (+0.110 bpb worse); ClimbMix is the d20
+  corpus by operator override resting on nanochat's larger-scale result (RESULTS.md §F12).
 - Whether zero-RL does anything measurable at all on a from-scratch 560M FineWeb base (every
   success story uses Qwen/DeepSeek priors or distills first).
-- K3's Attention Residuals, Gemma-4 MTP acceptance numbers, Track-3 barnacle load-bearingness:
+- K3's Attention Residuals: **[VERIFIED] + measured by us** — learned pseudo-queries, block size 12
+  (FACTS A9); R0 anatomy census confirms which pseudo-queries receive gradient (FACTS A19,
+  `artifacts/k3_anatomy/`). Gemma-4 MTP acceptance numbers, Track-3 barnacle load-bearingness:
   [REPORTED]/unmeasured.
 
 **Claims we still must NOT make until measured:**
@@ -1044,4 +1064,6 @@ build test-first → green-CI → measure → fill the ledger.
   `~/.kimi-code/sessions/wd_scratch_llm_1c6bbaa8f639/session_2986d58f-1e7e-4343-a6ec-74bf7a32c080/agents/main/tool-results/AgentSwarm-tool_iCUaGZw2psVDBRQBiPmxx3m5-4b823469-a2be-4940-8e53-f81706cf0454.txt`
   (infra angle failed on quota; infra content here is repo-verified instead).
 - Build status: `docs/STATUS.md`. Decision record: `docs/adr/ADR-0018-close-the-loop-nanochat-front.md`.
+- K3 track (build & host Kimi K3 from scratch; chartered 2026-07-31): `docs/k3/ROADMAP.md` +
+  `docs/k3/FACTS.md` (claim ledger — tech report wins over secondary sources).
 - Reference oracle (re-own, do not copy): karpathy/nanochat at HEAD.

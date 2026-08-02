@@ -15,10 +15,10 @@ your implementation is correct.
 | CS336 assignment | What you build (load-bearing core) | Source | Status |
 |---|---|---|---|
 | **A1** Basics | BPE · Transformer (RMSNorm·RoPE·SwiGLU·GQA) · AdamW · training loop · sampling | `tokenizer/model/moe/optim/train/sampling.py` | ✅ |
-| **A2** Systems | FlashAttention-2 (Triton) + roofline · KV-cache · DDP/ZeRO-1/FSDP · monitors | `kernels/`, `rollout/`, `utils/` | 🟡 FA2 + KV-cache + monitors + rollout done; DDP/ZeRO/FSDP next |
-| **A3** Scaling | IsoFLOP / Chinchilla fits (compute-optimal N, D) | `scaling/` | ⬜ |
-| **A4** Data | filter → quality-classify → exact + MinHash/LSH dedup | `data/` | ⬜ |
-| **A5** Alignment | SFT · Expert Iteration · GRPO/Dr.GRPO · DPO | `algos/`, `rewards/`, `envs/` | ⬜ |
+| **A2** Systems | FlashAttention-2 (Triton) + roofline · KV-cache · DDP/ZeRO-1/FSDP · monitors | `kernels/`, `rollout/`, `utils/` | ✅ (distributed half shipped 2026-07-03; real SGLang serving rental-gated) |
+| **A3** Scaling | IsoFLOP / Chinchilla fits (compute-optimal N, D) | `scaling/` | ✅ (Stanford-API leaderboard blocked-external) |
+| **A4** Data | filter → quality-classify → exact + MinHash/LSH dedup | `data/` | ✅ |
+| **A5** Alignment | SFT · Expert Iteration · GRPO/Dr.GRPO · DPO | `algos/`, `rewards/`, `envs/` | ✅ (graded GPU runs rental-gated) |
 
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the A1→A5 build spine and
 [`docs/assignment_guides/`](docs/assignment_guides/) for the per-assignment guides — every
@@ -29,12 +29,18 @@ upgrades, opt-in build labs, and interview-awareness items (fact-checked) — is
 training plan** (2026-07-30, 9-angle 2026 research pass — S0→S8, data → tokenizer → pretrain → d20 →
 RL → serve/eval) is [`docs/FRONTIER_2026_END_TO_END_PLAN.md`](docs/FRONTIER_2026_END_TO_END_PLAN.md) —
 read it first; rung-level specs stay in `docs/FRONTIER_2026_TASKSPEC.md` / `docs/FRONTIER_2026_ABLATIONS.md`.
+The newest track (chartered 2026-07-31): **K3** — build & host **Kimi K3** from scratch, reusing this
+repo's substrate (GDN→KDA, MLA→Gated MLA-NoPE, MoE→Stable LatentMoE). Roadmap + verified-facts ledger:
+[`docs/k3/ROADMAP.md`](docs/k3/ROADMAP.md) + [`docs/k3/FACTS.md`](docs/k3/FACTS.md) (K3 tech report
+arXiv:2607.24653 is the spec of record).
 
 **Capstone — DELTA** (the barbell *spike*, sitting on the A2/A5 base): a fused **GatedDeltaNet-2
 decode-step** kernel (target ≥85% of the H100 memory roofline; the "erase/write decoupling is free at
 decode" thesis). Design + dated 4-week plan live in the workspace root —
 [`../DELTA.md`](../DELTA.md) (merged design RFC + 4-week plan) — and are tracked in
 [`docs/STATUS.md`](docs/STATUS.md) and [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) §7.
+(K3 roadmap **K10.2** re-aims the co-designed kernel at **KDA** — per-channel decay — building on
+DELTA's GDN-2 base; see `docs/k3/ROADMAP.md`.)
 
 ## Engineering disciplines (baked into the tests)
 
@@ -65,5 +71,16 @@ src/scratch_llm/
 ├── data/        A4  filtering, dedup, quality classification
 ├── algos/       A5  SFT, Expert Iteration, GRPO/Dr.GRPO, DPO
 ├── rewards/     A5  verifiable-reward grading (r1-zero: format + answer)
-└── envs/        A5  verifiable task environments + the env/grader protocol
+├── envs/        A5  verifiable task environments + the env/grader protocol
+├── k3/          K3  build & host Kimi K3 from scratch (KDA · Gated MLA-NoPE · LatentMoE)
+├── serving/     serving engines (continuous batching · paged KV · CUDA-graph decode)
+├── bench/       roofline/measurement apparatus (gpu_specs · harness · ledger)
+├── eval/        eval report card + optimizer-race harness
+├── quant/       quantization (INT8/INT4 · NVFP4/MXFP4 · FP8-KV)
+├── linear_attn.py  F10 Gated-DeltaNet (KDA base for the K3 track)
+├── mtp.py       F2 multi-token-prediction draft head
+├── chat_cli.py  A6 chat REPL over the serving path
+├── speedrun.py  nanochat-style end-to-end spine (train → SFT → chat preview)
+├── scaling/s3_sweep.py  S3 scaling-sweep driver (plan/run/fit)
+└── data/shards.py       real-corpus shard loading (FineWeb-EDU slice)
 ```

@@ -71,3 +71,6 @@ regime where Triton is both competitive and sufficient. The repo already half-en
   compute-bound at peak (a prefill-attention or training-GEMM differentiator), promote that one kernel
   to CUTLASS/CuTe(DSL) and record it; the policy above stays the default.
 - **Pairs with** ADR-0008 (Hopper-gated serve engine) and the A2 guide §7 FA2-vs-FA3/FA4 hardware notes.
+- **Amendment (2026-08-02):** K10.2 of the K3 roadmap re-aims the DELTA capstone at the **KDA decode
+  kernel** (per-channel decay) — the DELTA GDN-2 kernel is its port base, and its correctness contract
+  inherits from `kda.py`'s three-path equivalence ([`../k3/ROADMAP.md`](../k3/ROADMAP.md) §K10.2).

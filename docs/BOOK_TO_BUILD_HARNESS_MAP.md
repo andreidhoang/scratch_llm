@@ -59,6 +59,32 @@ reading order for the post-hoc mastery pass.
 
 ---
 
+## Part 3 — K3 build/host books → K0–K10 (opens 2026-08-03)
+
+The two Vizuara K3 books (build book 35 capsules · hosting book 40 capsules) are the guided-reading
+layer for the K3 front; the primary sources (tech report arXiv:2607.24653, config.json, FLA kernels)
+are the spec of record. Sequenced against K0–K10 per [`k3/ROADMAP.md`](k3/ROADMAP.md) §1/§3:
+
+| Book span | K-phase | What it feeds |
+|---|---|---|
+| build 01–03 · hosting 01–03 | **K0** orientation | config of record, param accounting (cap 25 "Counting to 2.8 trillion" = the param-count gate) |
+| build 04–06 | **K1** baseline | tokenizer/embeddings/standard block, the O(N²) wall measurement |
+| build 07–12 | **K2** KDA — critical path | deepest section (7 capsules); pairs with the Kimi Linear paper + `fla/ops/kda` oracle |
+| build 13–16 | **K3** Gated MLA, NoPE | see the correction below |
+| build 17–18 | **K4** AttnRes | pseudo-query merge, online-softmax across block reps |
+| build 19–24 | **K5** LatentMoE · **K6** mini-K3 assembly/training | latent router + Quantile Balancing; 3:1 hybrid assembly |
+| build 26–31 | **K7** MXFP4 QAT · **K8** 1M-context | STE fake-quant training path; long-context memory arithmetic |
+| hosting 01–18 · build 32 | **K9** serve the real checkpoint | the one 8×B300 Modal run — we re-measure its numbers ourselves (rental-gated, ADR-0012 amendment) |
+| hosting 19–40 · build 33–35 | **K10** frontier extensions | DSpark/prefix-cache/PD-disagg/EPLB are report-only in the books — reading + design notes |
+
+> ⚠️ **Known correction — build-book capsule 15 "Decoupled RoPE in the MLA layers" contradicts K3.**
+> K3 is **fully NoPE** (positions carried by the KDA layers); read capsule 15 as K2 heritage, build
+> NoPE. FACTS A11/B8 — where the book and the tech report disagree, the tech report wins, and the
+> disagreement is logged in [`k3/FACTS.md`](k3/FACTS.md). K0–K5 need nothing from the books
+> (everything is public already); hosting 01–18 runs in parallel with the K9 rental.
+
+---
+
 ## The 20-day sprint index (which chapter, which day)
 
 | Day | Book · section | Rep (from blank) |

@@ -1,0 +1,48 @@
+[2026-07-31T10:27:55Z] S3 sweep wrapper starting
+Checking for active staging process...
+[2026-07-31T10:27:55Z] staging still running; waiting 30s
+[2026-07-31T10:28:25Z] staging still running; waiting 30s
+[2026-07-31T10:28:55Z] staging still running; waiting 30s
+[2026-07-31T10:29:25Z] staging still running; waiting 30s
+[2026-07-31T10:29:55Z] staging still running; waiting 30s
+[2026-07-31T10:30:25Z] staging still running; waiting 30s
+[2026-07-31T10:30:55Z] staging still running; waiting 30s
+[2026-07-31T10:31:25Z] staging still running; waiting 30s
+[2026-07-31T10:31:55Z] staging still running; waiting 30s
+[2026-07-31T10:32:25Z] staging still running; waiting 30s
+[2026-07-31T10:32:55Z] staging still running; waiting 30s
+[2026-07-31T10:33:25Z] staging still running; waiting 30s
+[2026-07-31T10:33:55Z] staging still running; waiting 30s
+[2026-07-31T10:34:25Z] staging still running; waiting 30s
+[2026-07-31T10:34:55Z] staging still running; waiting 30s
+[2026-07-31T10:35:25Z] staging still running; waiting 30s
+[2026-07-31T10:35:55Z] staging still running; waiting 30s
+[2026-07-31T10:36:25Z] staging still running; waiting 30s
+[2026-07-31T10:36:55Z] staging still running; waiting 30s
+[2026-07-31T10:37:25Z] staging still running; waiting 30s
+[2026-07-31T10:37:55Z] staging still running; waiting 30s
+[2026-07-31T10:38:25Z] staging still running; waiting 30s
+[2026-07-31T10:38:55Z] staging still running; waiting 30s
+[2026-07-31T10:39:25Z] staging still running; waiting 30s
+[2026-07-31T10:39:55Z] staging still running; waiting 30s
+[2026-07-31T10:40:25Z] staging still running; waiting 30s
+[2026-07-31T10:40:55Z] staging still running; waiting 30s
+[2026-07-31T10:41:25Z] staging still running; waiting 30s
+[2026-07-31T10:41:55Z] staging still running; waiting 30s
+[2026-07-31T10:42:25Z] staging still running; waiting 30s
+[2026-07-31T10:42:55Z] staging still running; waiting 30s
+[2026-07-31T10:43:25Z] staging process exited.
+[2026-07-31T10:43:25Z] Running s1 with batch=8
+[s1] depth=4 N=19,990,784 ratio=8 D=159,926,272 tok C=1.92e+16 -> 9762 steps (D / (batch 8 x ctx 2048))
+Traceback (most recent call last):
+  File "/workspace/scratch_llm/scripts/s3_scaling_sweep.py", line 121, in <module>
+    main()
+  File "/workspace/scratch_llm/scripts/s3_scaling_sweep.py", line 97, in main
+    run_sweep(
+  File "/workspace/scratch_llm/src/scratch_llm/scaling/s3_sweep.py", line 270, in run_sweep
+    record = run_point(
+             ^^^^^^^^^^
+  File "/workspace/scratch_llm/src/scratch_llm/scaling/s3_sweep.py", line 228, in run_point
+    raise RuntimeError(
+RuntimeError: s1: instantiated 19991808 params but the grid planned 19990784 — model_config_for_depth drifted from the plan
+[2026-07-31T10:51:45Z] s1 failed at batch=8; aborting sweep

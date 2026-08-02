@@ -100,6 +100,12 @@ xếp thứ tự học; hai lộ trình dưới đây là nội dung. Đây là 
 
 Study-queue bên dưới map vào các série này. Đọc MODEL trước (dựng model), PERFORMANCE sau (làm nó nhanh).
 
+> **Pointer (2026-08-02) — K3 hand-build = hàng đợi mastery CHÍNH.** Thứ tự build tay
+> `situ → kda → gated_mla → latent_moe → attn_res` (`src/scratch_llm/k3/core/`, theo
+> [`../k3/ROADMAP.md`](../k3/ROADMAP.md):56–61) giờ là primary mastery queue, đi trước study-queue
+> dưới; **K2/KDA là "the rung where the mastery happens"** (ROADMAP:156). Phần core/ là hand-built
+> (agents read-only) — khác chế độ delegate của mọi nơi khác.
+
 ## Series 0 — Meta (cách hệ thống vận hành)
 
 | # | Bài | Nội dung | Trạng thái |

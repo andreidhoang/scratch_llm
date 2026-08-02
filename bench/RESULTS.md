@@ -605,7 +605,8 @@ B200 (`B200_day_runbook.md`).
 
 The EV-ranked, pre-registered, iso-FLOP ablation study on a **real trained** nanochat-grade base.
 Predict-before-run (FOP-2/3): each rung's falsifiable number + kill criterion is registered here
-*before* the run; `[FACT]` only once the measured column is filled. Node pointer: **RUN F12 → S3**
+*before* the run; `[FACT]` only once the measured column is filled. Node pointer: **F12 DONE (decision FINAL 2026-08-02: ClimbMix, by operator
+override) → S3 (RUNNING on pod: s1–s4 banked, s5 in flight) → fit-gate → P5**
 (harnesses shipped 2026-07-31, see "Built — F12 + S3" below).
 
 ### Pre-registration — F1 MuonAdamW (2026-07-04, PENDING)
@@ -826,7 +827,8 @@ result (`artifacts/f12_corpus_ablation/climbmix_result.json`).
 iso-FLOP scale on this recipe. However, the operator elected to **override the kill criterion and use
 ClimbMix for S3/d20**, following the nanochat/Karpathy corpus choice. This deviation is logged in
 `docs/RESULTS.md` §F12. Next: **S3 scaling-law calibration on the operator-selected ClimbMix corpus**
-(s1–s7 only; s8 is the paid H100 rehearsal); A9 model card must state ClimbMix's **CC BY-NC 4.0**
+(s1–s8 per the pre-registered grid in `docs/RESULTS.md` §S3; s8 is the largest standing-box point,
+d12 @ ratio-20, ~28 h, droppable if budget trips); A9 model card must state ClimbMix's **CC BY-NC 4.0**
 license.
 
 ---
@@ -1074,7 +1076,7 @@ re-measurement here**:
 **Next → all effort on the d20 gate:** A7 optimizer-embedded ZeRO-2 wiring + P3 CORE suite → A8
 runbook → P5 d12 rehearsal on 1×H100 (LR sweep folded in) → the 8×H100 d20 run.
 
-### Built — F12 corpus-ablation harness + S3 scaling-sweep driver (2026-07-31, CPU-green, runs pending)
+### Built — F12 corpus-ablation harness + S3 scaling-sweep driver (2026-07-31, CPU-green; F12 run DONE 2026-07-31, S3 RUNNING)
 
 **F12 (FineWeb-EDU vs ClimbMix, the d20 corpus decision).** `src/scratch_llm/eval/corpus_ablation.py`
 (`CorpusAblationArm`, `split_held_out` with A0 13-gram decontam + logged overlap rate,
@@ -1095,11 +1097,36 @@ from `model_config_for_depth`, per-budget min-pick + log-log fit via the existin
 `scaling/isoflop.py`, gates a+b ∈ [0.95,1.05] and R² ≥ 0.98, D:N decision rule (< 15 ⇒ re-register
 the d20's 9.6B), nanochat oracle overlay (d20-miniseries / leaderboard / GPT-2 XL / CORE-fit
 ⇒ ≈0.195 at our C). Pre-registration: `docs/RESULTS.md` §S3. Tests: `tests/test_s3_scaling_sweep.py`.
-**Sweep: RUNNING 2026-07-31 (standing RTX 5090, tmux session `s3`, ~2–3 GPU-days).** Operator
-override: runs on **ClimbMix** (not the F12-winning FineWeb-EDU); s7 uses batch=4 (fallback to 2) to
-avoid OOM; `scaling/s3_sweep.py` grid planner fixed to include `qk_norm=True` params so planned N
+**Sweep: RUNNING 2026-07-31 (standing RTX 5090 → pod; tmux session `s3`, ~2–3 GPU-days; s1–s4
+banked, s5 in flight as of 2026-08-02).** Operator
+override: runs on **ClimbMix** (not the F12-winning FineWeb-EDU); per the 2026-08-02 pre-registered
+batch-consistency decision (`docs/RESULTS.md` §S3): **s7/s8 run at batch 4 (fallback 2) with LR held
+fixed** — no mid-grid LR rescale; `scaling/s3_sweep.py` grid planner fixed to include `qk_norm=True` params so planned N
 matches the trained model. d14/d16 mid-scale escalation is trigger-gated (T1/T2/T3), policy of record
 in `docs/FRONTIER_2026_END_TO_END_PLAN.md` §S3(g).
 
 **Order correction (2026-07-31):** F12 runs **before** S3 — the scaling-law constants are
 corpus-dependent, so the fit must use the F12-winning corpus, not a borrowed one.
+
+---
+
+## K3 — measured-claims ledger (track chartered 2026-07-31, spec `docs/k3/ROADMAP.md`)
+
+Designated measured-claims ledger for the K3 track (`docs/k3/ROADMAP.md:69`). Every row is
+**measured by us** (CPU weight-space census over the real checkpoint's 96 shard headers; standing
+RTX 5090 host). Pre-registration + falsifiers: `docs/RESULTS.md` §K3; claim ledger:
+`docs/k3/FACTS.md` (A18/A19). Kimi K3 released 2026-07-27 (FACTS S1): 1.561 TB MXFP4 on disk,
+2,779,931,837,184 total / 104.2B active params.
+
+| date | rung | metric | predicted | measured | note |
+|---|---|---|---|---|---|
+| 2026-07-31 | K3 R0 closure census | census param count == config-derived == HF total | exact match | **EXACT closure, residual 0** (2,779,931,837,184 total; active 104.19B ≈ report's 104.2B) — **measured by us** (CPU weight-space; `k3/param_count.py` + 497,220 tensor shapes via HTTP range reads) | A_log mismatch found: checkpoint carries **[128] in all 69 KDA layers** vs [96] in HF reference code — a Moonshot code-vs-checkpoint mismatch (FACTS A18) |
+| 2026-07-31 | K3 R0 `attnres` census | layers ≥ 1 res_proj weights non-zero; layer 0 ≈ 0 | non-zero | ✓ all 186 non-zero; layer-0 attn-side absmax **1.7e-05** (no-gradient + weight decay); query L2 grows with depth (0→2→3→6) — **measured by us** (CPU weight-space) | confirms exactly which pseudo-queries receive gradient (FACTS A19) |
+| 2026-07-31 | K3 R0 `qb` census | per-layer bias mean ≈ 0 (construction), no collapse | mean ≈ 0 | ✓ mean ≈ 0 all 92 layers; **std drifts up with depth 0.020→0.098** — **measured by us** (CPU weight-space) | balancing is harder deep (FACTS A19) |
+| 2026-07-31 | K3 R0 `decay` census | dt_bias ≪ 0 across KDA layers (default-long-retention) | dt_bias < 0 | ✓ **dt_bias −4.63 ± 0.05 across all 69 KDA layers** (no flips); A_log layer means trend −0.17→+0.29 with depth — **measured by us** (CPU weight-space) | default decay is strongly long-retention everywhere (FACTS A19) |
+
+Census data: `artifacts/k3_anatomy/` (via `scripts/k3_fetch_tensors.py`); gate:
+`tests/test_k3_param_count.py` (exact-equality assertions). R1/R2 ablation rungs are pending
+(`docs/RESULTS.md` §K3) and will be logged here once measured. Forward critical path: K9 = 8×B300
+Modal rental (~$120–170); K10.2 = KDA decode kernel (per-channel decay, on DELTA's GDN-2 base,
+benchmarked vs the FLA oracle).

@@ -227,13 +227,21 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
   plan, with the re-ranked EV order + the S3 scaling-law gate before the d20 run. Read this for
   pipeline integration; rung-level specs stay in `FRONTIER_2026_TASKSPEC.md` /
   `FRONTIER_2026_ABLATIONS.md`.
-- **Data / corpus decision (F12)** — the d20 corpus is **open and gated** until the FineWeb-EDU vs
-  **ClimbMix-400B** ablation verdicts. Current status: see [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md) row F12.
-  Sources: [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md) §5,
+- **Data / corpus decision (F12)** — **DONE; decision FINAL 2026-08-02 = ClimbMix.** The operator
+  overrode the triggered kill criterion (measured: ClimbMix +0.110 bpb worse than FineWeb-EDU at
+  35M/700M, iso-FLOP) and confirmed **ClimbMix** for the S3 sweep and the d20 run, following
+  nanochat's larger-scale result; the d20 run itself becomes the corpus arbiter at our largest scale.
+  Record of record: [`RESULTS.md`](RESULTS.md) §F12 (measurement, override, and FINAL decision all
+  logged). Sources: [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md) §5,
   [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md) §S0,
-  [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md) §3/§10, [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md) §F12,
-  and the pre-registration in [`RESULTS.md`](RESULTS.md) §F12. If ClimbMix wins, the A9 model card must state
-  **CC BY-NC 4.0** and the HF source `nvidia/Nemotron-ClimbMix`.
+  [`FRONTIER_2026_ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md) §3/§10, [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md) §F12.
+  The A9 model card must state **CC BY-NC 4.0** and the HF source `nvidia/Nemotron-ClimbMix`.
+- **[`k3/`](k3/ROADMAP.md)** — the K3 track (chartered 2026-07-31): build & host Kimi K3 from scratch.
+  [`k3/ROADMAP.md`](k3/ROADMAP.md) is the plan of record (K0–K9 rungs; §6 START-HERE = the current
+  node, K2 KDA on the critical path); [`k3/FACTS.md`](k3/FACTS.md) is the claim ledger — every
+  load-bearing claim verified against Moonshot's primary sources, and where a secondary source and the
+  K3 tech report (arXiv:2607.24653) disagree, the tech report wins. [`k3/ABLATIONS.md`](k3/ABLATIONS.md)
+  pre-registers the R-series ablation program (recorded in [`RESULTS.md`](RESULTS.md) §K3).
 - **[`learning/`](learning/INDEX.md)** — the mastery track (Vietnamese): one Feynman/teach-back lesson per
   *shipped and measured* component, tracing exact `src/` functions (line anchors pinned to a commit), a
   hand-worked tensor example, the invariant→test map, and the teach-back gate with collapsed answers. This
@@ -248,7 +256,7 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
   aha + a code trace to `file·func·line` + the teach-back gate), ordered in a first-principles progression.
   It's the map for the deep dive; the full prose lessons in `learning/<series>/` are still written one-per-
   teach-back. This is the delegate-mode answer to "ship first, master after seeing the code" (ADR-0013).
-- **[`mastery/`](file:///Users/danghuyhoang/Desktop/cs336/scratch_llm/mastery/README.md)** — the hands-on re-implementation track: a gitignored workspace that **exactly mirrors the real repository structure** (`mastery/src/mastery_llm/` and `mastery/tests/`). All Python source files are processed via an AST parser to convert function/method bodies into blank stubs raising `NotImplementedError`, while maintaining identical signatures, docstrings, and decorators. Test suites are adapted to import directly from `mastery_llm`. This enables the user to practice coding the entire codebase from scratch, mapping strictly onto the curriculum in [`learning/CURRICULUM.md`](learning/CURRICULUM.md) and executing the PRR (Predict-Run-Reconcile) loop locally.
+- **[`mastery/`](mastery/README.md)** — the hands-on re-implementation track: a gitignored workspace that **exactly mirrors the real repository structure** (`mastery/src/mastery_llm/` and `mastery/tests/`). All Python source files are processed via an AST parser to convert function/method bodies into blank stubs raising `NotImplementedError`, while maintaining identical signatures, docstrings, and decorators. Test suites are adapted to import directly from `mastery_llm`. This enables the user to practice coding the entire codebase from scratch, mapping strictly onto the curriculum in [`learning/CURRICULUM.md`](learning/CURRICULUM.md) and executing the PRR (Predict-Run-Reconcile) loop locally.
 - **Why Lever 2, not Lever 1:** plan + guides are thousands of lines. Inlining them into `CLAUDE.md`
   would pay for *all* of it on *every* turn (§0.1) and trigger context rot (§0.2) — to surface a single
   per-assignment brief the model needs only while working that layer. Progressive disclosure (§1) is exactly
@@ -270,7 +278,8 @@ Code day to day so context stays high-signal.
 The load-bearing rule that governs the rest of this section — codified in CLAUDE.md ("Orient before you
 build"), and applied by every agent as a lead-frontier-lab RE would. Before any engineering work:
 **analyze → reconstruct → reason → build.** Read `git log --oneline -15` + the current-node pointer
-(`performance/PERF_PLAN.md`; for the frontier front, [`docs/FRONTIER_STATUS.md`](FRONTIER_STATUS.md)) +
+(`performance/PERF_PLAN.md`; for the frontier front, [`docs/FRONTIER_STATUS.md`](FRONTIER_STATUS.md);
+for the K3 track, [`docs/k3/ROADMAP.md`](k3/ROADMAP.md) §6 START-HERE) +
 the ledger (`bench/RESULTS.md`) + the one spec governing the active node (frontier entry point:
 [`docs/FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md)); state what the last commits
 established and what is *measured vs merely implemented*; then reason the next task from that state

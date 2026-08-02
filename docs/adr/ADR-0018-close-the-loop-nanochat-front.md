@@ -7,6 +7,11 @@ curriculum (`performance/PERF_PLAN.md`, ADR-0014 model) and DELTA (`../../DELTA.
 
 **Status note (2026-07-30):** see [`../FRONTIER_2026_END_TO_END_PLAN.md`](../FRONTIER_2026_END_TO_END_PLAN.md) for the current refactored pipeline-level plan (S0→S8, re-ranked EV order); this ADR stands as the decision record.
 
+**Plan-of-record note (2026-08-02):** the operative plans are now
+[`../FRONTIER_2026_END_TO_END_PLAN.md`](../FRONTIER_2026_END_TO_END_PLAN.md) + the K3 front's
+[`../k3/ROADMAP.md`](../k3/ROADMAP.md) (K0–K10, K2 KDA = critical path); the `~/.claude/plans/`
+pointer above is historical.
+
 ## Context
 
 CS336 A1–A5 shipped (STATUS: 461 CPU tests, advanced serving stack). Read with claims-honesty

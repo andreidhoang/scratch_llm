@@ -24,6 +24,11 @@
 
 *(rows appended as modules ship — see `docs/EXECUTION_SPEC_CS336_FINISH.md` for the build DAG)*
 
+> **Upcoming (2026-08-02) — K3 core/ hand-build modules** (`situ · kda · gated_mla · latent_moe ·
+> attn_res`, per `docs/k3/ROADMAP.md:56–61`) become mastery-debt rows here as each lands; unlike the
+> delegate-mode rows above these are hand-built from day one, so the debt is the teach-back gate, not
+> the implementation.
+
 ---
 
 ## Raw CUDA C++ fundamentals (PPPM chapters — the Triton Trap gap)

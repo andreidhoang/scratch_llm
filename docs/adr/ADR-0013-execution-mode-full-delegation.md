@@ -66,3 +66,6 @@ reversibly.
   dropped.
 - The `docs/learning/` track, `/master`, and `kernel-tutor` remain fully functional — they are
   pull-based now instead of gating.
+- **Cross-reference (2026-08-02):** `src/scratch_llm/k3/core/` is a per-subpackage **exception to
+  delegate mode** — it is hand-built by the human (agents read-only: adversarial tests + retyped
+  proposals only), per the root `AGENTS.md` boundary and `src/scratch_llm/k3/HANDCRAFTED.md`.

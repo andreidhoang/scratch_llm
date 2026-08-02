@@ -52,7 +52,7 @@ AGENTS.md                   ← the boundary, binding on every agent session
 src/scratch_llm/k3/
 ├── HANDCRAFTED.md          # two-citizenship rules + mastery bars + status table
 ├── config.py               # ✅ K3Config: full-fidelity (from config.json) + mini presets
-├── param_count.py          # ✅ accounting; closes to HF total with residual −2,208 (FACTS A18)
+├── param_count.py          # ✅ accounting; EXACT closure to HF total, residual 0 (FACTS A18)
 ├── core/                   # ⬜ HAND-BUILT ONLY (agents read-only) — serial order:
 │   ├── situ.py             #   1. SiTU-GLU (β1=4 / β2=25, |f| ≤ 100) — warmup
 │   ├── kda.py              #   2. KDA: per-channel Diag(α), scaled-sigmoid g_min=−5, conv+Swish+L2Norm, full-rank gate  [UPGRADE linear_attn.py]
@@ -185,7 +185,8 @@ The deepest rung. Incremental from `linear_attn.py`:
 ### K6 · Assemble & train mini-K3  *(build book 24–26)*
 - `model.py`: the 93-layer pattern in miniature (config below), dense MLP on layer 1, terminal MLA,
   AttnRes wired, Per-Head Muon (`muon.py`) + weight clipping.
-- Train via the `speedrun.py` spine on real shards (FineWeb-EDU slice; F12 winner when decided),
+- Train via the `speedrun.py` spine on real shards (ClimbMix — F12 decision FINAL 2026-08-02,
+  operator override),
   iso-FLOP arms: **mini-K3 vs our d-series dense baseline vs (optional) GDN-hybrid** — this
   *absorbs* ablations F5/F6/F10 into one artifact.
 - **Gates:** overfit-one-batch < 1e-2; loss-at-init ≈ log V; val_bpb parity-vs-baseline at
@@ -255,11 +256,11 @@ The deepest rung. Incremental from `linear_attn.py`:
 | Gap in both books | Where it lives here |
 |---|---|
 | Optimizer: Per-Head Muon + weight clipping (K3's actual optimizer) | `k3/muon.py` (K6), from `optim.py` F1 |
-| Data: curation, dedup, decontamination, corpus ablation | A4 pipeline + F12 (running) |
+| Data: curation, dedup, decontamination, corpus ablation | A4 pipeline + F12 (DONE — decision FINAL 2026-08-02: ClimbMix, operator override) |
 | Distributed training: EP (MoonEP), KDA context parallelism, PP/ZeRO | A2/A6 (`fsdp.py`, `ep_moe.py`) + reading |
 | Post-training: SFT → RL with QAT active throughout | A5 (`algos/`, GRPO) + K7 QAT scope |
 | MTP/EAGLE-3 draft as a buildable artifact | K10.1 (`mtp.py` F2a base) |
-| Scaling-law gate before any real training spend | S3 sweep (running) + Chinchilla fitter |
+| Scaling-law gate before any real training spend | S3 sweep (running, s1–s4 banked) + Chinchilla fitter |
 
 ## 5. Budget & risk
 
@@ -276,16 +277,21 @@ The real cost is K2's calendar time.
 
 ## 6. START-HERE (next session)
 
-1. `pytest -m "not gpu"` green → branch `k3-track`.
-2. K0: write `src/scratch_llm/k3/config.py` + `param_count.py` from FACTS A13; gate = reproduce
-   2,779,931,837,184 / 104.2B.
-3. K2 prep: re-read `linear_attn.py` docstring (the three-path contract), Kimi Linear §3–4, and
-   `fla/ops/kda` — then write the per-channel-decay diff. Reading guide (Vietnamese, section-by-section
+1. `pytest -m "not gpu"` green; K0/K1 banked — `config.py` + `param_count.py` shipped,
+   `test_k3_param_count.py` green (EXACT 2.78T closure, residual 0 — FACTS A18).
+2. K2 (KDA) is the critical path — start there. Proposal of record:
+   [`K2_PROPOSAL_KDA.md`](K2_PROPOSAL_KDA.md); re-read `linear_attn.py` docstring (the
+   three-path contract), Kimi Linear §3–4, and `fla/ops/kda` — then hand-build
+   `core/kda.py` per the per-channel-decay diff. Reading guide (Vietnamese, section-by-section
    with teach-back checkpoints): [`READING_GUIDE_K3_REPORT.md`](READING_GUIDE_K3_REPORT.md).
-4. Aug 3: read build book capsules 01–12 against what we built; log any disagreements in FACTS.md
+3. Aug 3: read build book capsules 01–12 against what we built; log any disagreements in FACTS.md
    (expected: capsule 15 RoPE framing).
-5. Keep the d20 speedrun and F12/S3 on schedule — K3 is the integration front, not a replacement;
-   mini-K3 (K6) is where F5/F6/F10 converge.
-6. Ablation program (R0 anatomy RUNNING — `scripts/k3_fetch_tensors.py`; R1 interaction factorial
+4. Keep the d20 speedrun and S3 on schedule — K3 is the integration front, not a replacement;
+   mini-K3 (K6) is where F5/F6/F10 converge. **Decision of record (2026-08-02):** the d20-GQA run
+   happens *regardless* of the KDA family-fit outcome — it is the control-family anchor and the
+   loop-closure artifact; the family fit decides whether a d20-scale mini-K3 follows as the
+   flagship science claim, not whether d20-GQA runs (E2E §5 item 6, SCALING_LADDER §3).
+5. Ablation program (R0 anatomy census COMPLETE 2026-07-31 — 417 small tensors, all 96 shards,
+   `scripts/k3_fetch_tensors.py`, FACTS A19; R1 interaction factorial
    + R2 decay sweep launch after KDA is PROVEN): [`ABLATIONS.md`](ABLATIONS.md), pre-registered
    in `docs/RESULTS.md §K3`.

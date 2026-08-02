@@ -25,7 +25,7 @@
 7. **Citation-tree mastery.** Traverse to the non-redundant gap; reuse before re-deriving; don't rebuild owned work.
 <!-- FOP:end -->
 
-## ⚡ Three active fronts (2026-07-04) — pick your lane before building
+## ⚡ Four active fronts (2026-07-04; K3 track chartered 2026-07-31) — pick your lane before building
 
 > Execution mode is **`delegate`** (`.claude/execution-mode`,
 > [ADR-0013](docs/adr/ADR-0013-execution-mode-full-delegation.md)): agents implement everything
@@ -49,10 +49,13 @@
 >   ordering mandate is dissolved — the main track no longer queues behind perf.
 > - **Close-the-loop / frontier-ablation front** (2026-07-04, [ADR-0018](docs/adr/ADR-0018-close-the-loop-nanochat-front.md)) —
 >   **✅ LOOP CLOSES:** speedrun spine (tokenizer→pretrain(MuonAdamW)→eval report card→sample) +
->   F1 Muon + train-wiring/F4 + `eval/` shipped, GPU-verified talking sample. **▶ Current node → A1**
->   (real-corpus shards) → A2 → F1-run. **Buildable next-phase DAG (25 rungs, START-HERE block; F1–F11
+>   F1 Muon + train-wiring/F4 + `eval/` shipped, GPU-verified talking sample. **▶ Current node → S3
+>   scaling-law sweep running on the RTX 5090 pod** (s1–s4 banked, fit-gate next) → P5 d12 dress
+>   rehearsal → 8×H100 d20; K3: K0/K1 done, K2 (KDA) is the critical path. **Buildable next-phase DAG
+>   (25 rungs, START-HERE block; F1–F12
 >   re-verified vs the mid-2026 frontier 2026-07-09 — F1/F7/F4 reframed, F8 promoted, F10 linear-hybrid +
->   F11 agentic-RL added; see `FRONTIER_2026_ABLATIONS.md` §10):**
+>   F11 agentic-RL added, **F12 corpus ablation DONE — decision FINAL 2026-08-02 = ClimbMix by operator
+>   override**; see `FRONTIER_2026_ABLATIONS.md` §10):**
 >   [`docs/FRONTIER_2026_TASKSPEC.md`](docs/FRONTIER_2026_TASKSPEC.md) (strategy:
 >   [`docs/FRONTIER_2026_ABLATIONS.md`](docs/FRONTIER_2026_ABLATIONS.md)). **Pipeline-level end-to-end
 >   plan (2026-07-30, 9-angle 2026 research pass) — read first:**
@@ -63,6 +66,16 @@
 >   `src/scratch_llm/{eval,data,algos}/` (additive), `scripts/`, `optim.py`, `train.py`, `speedrun.py`,
 >   `chat*.py`, `mtp.py`, `dsa.py`, additive `model.py`/`moe.py`, the F-rung sections of `bench/RESULTS.md`.
 >   **NEVER** edit perf-owned `mla.py`/`serving/`/`kernels/`/`quant/` — satisfy their Protocols instead.
+> - **K3 track** (chartered 2026-07-31) — build & host **Kimi K3** from scratch. Plan of record:
+>   [`docs/k3/ROADMAP.md`](docs/k3/ROADMAP.md) + [`docs/k3/FACTS.md`](docs/k3/FACTS.md) (claim ledger —
+>   where a secondary source and the K3 tech report **arXiv:2607.24653** disagree, the tech report wins).
+>   Zone: `src/scratch_llm/k3/`. **K2 (KDA) is the critical path; K6 mini-K3 is where F5/F6/F10
+>   converge.** **CRITICAL — the hand-built boundary:** `src/scratch_llm/k3/core/` is hand-built by the
+>   human. **Agents never create, edit, move, or delete files under `k3/core/`** — those modules encode
+>   the mechanisms the human is mastering; a silent bug there is exactly what the human must learn to
+>   catch. For core modules agents may ONLY write adversarial tests in `tests/` (red team, no fixes) and
+>   markdown proposals for the human to retype — never diffs to apply (full rules + per-module mastery
+>   bars: [`src/scratch_llm/k3/HANDCRAFTED.md`](src/scratch_llm/k3/HANDCRAFTED.md)).
 >
 > Shared files (`CLAUDE.md`, `docs/STATUS.md`, `pyproject.toml`, `bench/RESULTS.md`): pull-rebase
 > before every commit, additive edits only, never `git add -A`.
@@ -351,6 +364,9 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
 | **Close-the-loop front — pipeline-level end-to-end plan (read first)** (S0→S8: data → tokenizer → pretrain → S3 scaling-law gate → d20 → midtrain → SFT → RL → serve/eval; re-ranked EV order; 2026-07-30, 9-angle 2026 research pass) | `docs/FRONTIER_2026_END_TO_END_PLAN.md` |
 | **Close-the-loop front — strategy + DAG** (thesis, model tiers, F1–F11 falsifiers, verification, honesty ledger; **§10 = 2026-07-09 frontier re-verification**) | `docs/FRONTIER_2026_ABLATIONS.md` |
 | **Close-the-loop front — buildable task spec** (25 rungs A/F incl. F10 linear-hybrid + F11 agentic-RL, exact interfaces + tests + falsifier + kill + zone; START-HERE current node) | `docs/FRONTIER_2026_TASKSPEC.md` |
+| **K3 track — roadmap** (build & host Kimi K3 from scratch, chartered 2026-07-31; K0–K9 rungs, §6 START-HERE = K2 KDA critical path) | `docs/k3/ROADMAP.md` |
+| **K3 track — claim ledger** (every load-bearing K3 claim verified vs Moonshot primary sources; tech report arXiv:2607.24653 wins disagreements) | `docs/k3/FACTS.md` |
+| **K3 hand/delegate split — the boundary** (`k3/core/` hand-built by the human; agents: adversarial tests + markdown proposals only) | `src/scratch_llm/k3/HANDCRAFTED.md` |
 | Design specs — KV-cache · rollout seam · FA2 roofline · MoE walkthrough | `docs/design/` |
 | **Frontier practice (2026)** — per-pillar modern-default upgrades · build labs · know-it items (fact-checked; + tagged GDM-aligned additions) | `docs/FRONTIER_PRACTICE_2026.md` |
 | Architecture decisions | `docs/adr/` |

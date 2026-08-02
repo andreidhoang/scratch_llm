@@ -34,9 +34,11 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > — 9-angle 2026 research pass folded into the full pipeline (S0 data → S8 serve), re-ranked EV order,
 > new S3 scaling-law-calibration gate before the $100 run, and the updated honesty ledger.
 >
-> **🆕 F12 (ClimbMix-400B vs FineWeb-EDU corpus ablation) — pending, standing-box free; gates the d20 corpus decision.**
-> 35M params / 700M tokens / iso-FLOP, tokenizer retrained per corpus, bpb + CORE. Tracked in
-> `FRONTIER_2026_END_TO_END_PLAN.md` §S0/§3, `FRONTIER_2026_TASKSPEC.md` §F12, and `docs/RESULTS.md` §F12.
+> **✅ F12 (ClimbMix-400B vs FineWeb-EDU corpus ablation) — MEASURED 2026-07-31, decision FINAL 2026-08-02: ClimbMix for S3/d20.**
+> 35M / 700M tok / iso-FLOP, tokenizer retrained per corpus: ClimbMix measured **+0.110 bpb worse**
+> than FineWeb-EDU (falsifier fired; kill criterion triggered) — but the operator overrode the kill
+> line and chose ClimbMix, following nanochat's larger-scale result; the d20 run itself becomes the
+> corpus arbiter. Full record: `docs/RESULTS.md` §F12.
 >
 > **✅ THE LOOP CLOSES (2026-07-04):** F1 Muon · train-wiring/F4 (bf16/compile + NaN guard) · eval
 > report card (`val_bpb`/MC/generative/CORE-style) · `speedrun.py` + `scripts/speedrun.sh` spine all
@@ -49,11 +51,10 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > ✅ 2026-07-13** — `algos/chat_sft.py` (assistant-masked SFT reusing `sft.py` unedited) +
 > `chat_cli.py` (`ChatSession`/`batch_reply` over the public serving path) + speedrun `stage_sft`
 > and chat preview; **the loop now TALKS through the chat template** (overfit-one-chat-batch →
-> greedy reply reproduces the trained answer and stops at `<|eot|>`). **▶ NEXT NODE → RUN the F12
-> corpus ablation (harness ✅ 2026-07-31: `eval/corpus_ablation.py` + `scripts/tok_train.py` +
-> ClimbMix staging in `data/shards.py`) + the S3 scaling sweep (driver ✅: `scaling/s3_sweep.py` +
-> `scripts/s3_scaling_sweep.py` plan/run/fit; pre-registered `RESULTS.md` §S3) → P5 d12 dress
-> rehearsal ($10–15) → 8×H100 d20 (~$100, gated)**. d14/d16 escalation is trigger-gated per E2E
+> greedy reply reproduces the trained answer and stops at `<|eot|>`). **▶ NEXT NODE → S3 scaling
+> sweep fit-gate (sweep RUNNING on the RTX 5090 pod 2026-08-02, s1–s4 banked; driver ✅:
+> `scaling/s3_sweep.py` + `scripts/s3_scaling_sweep.py` plan/run/fit; pre-registered `RESULTS.md`
+> §S3) → P5 d12 dress rehearsal ($10–15) → 8×H100 d20 (~$100, gated)**. d14/d16 escalation is trigger-gated per E2E
 > §S3(g) (T1 fit failure / T2 P5-anchor divergence / T3 science promotion). F1-run DESCOPED 07-17 (Muon+AdamW adopted,
 > commit `f9e8f3b`); F2a MTP ✅ `3b89119` · F6 harness ✅ `98f62e3` (smoke-validated only —
 > `RESULTS.md` §F6) · A7 ZeRO-2 ✅ · launcher ✅ 07-28. **The buildable next-phase DAG (26
@@ -126,17 +127,19 @@ Two orderings, both true: **BUILD** is numeric (each layer rests on the last); *
 (scarcest-skill-first, per [`../STRATEGY.md`](../STRATEGY.md) §8).
 
 ```
-BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ perf A1–A7 (mandate 06-30) → A5 "aha" → DELTA
+BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ K3 K0–K10 (K2 KDA = critical path) → K10.2 capstone · frontier S3 → P5 → d20
         byte ───────────── own every layer of a language model ───────────── RL update
 
  A1 Basics      ████████████ 100%  ✅  BPE · Transformer · AdamW · train · sample
- A2 Systems     ███████████░  ~95% 🟢  distributed half ✅ 2026-07-03 (W1–W4); only rental-tier serving left
- A3 Scaling     ██████████░░  ~85% 🟢  fitter + planner ✅ (W5–W6); Stanford-API leaderboard BLOCKED-EXTERNAL
- A4 Data        ███████████░  ~90% 🟢  extract→filter→quality→MinHash dedup ✅ (W7); full 5000-WET run = SKIP
- A5 Alignment   ███████████░  ~90% 🟢  SFT·EI·GRPO/Dr.GRPO·DPO + grader + envs ✅ (W8); graded runs rental-gated
- DELTA capstone  design ✅      0%  ⬜  GDN-2 decode kernel — base-first, gated on A5 ship + Step-0
+ A2 Systems     ████████████ 100%  ✅  single-GPU + distributed halves ✅ 2026-07-03 (W1–W4); real serving rental-gated
+ A3 Scaling     ████████████ 100%  ✅  fitter + planner ✅ (W5–W6); Stanford-API leaderboard BLOCKED-EXTERNAL
+ A4 Data        ████████████ 100%  ✅  extract→filter→quality→MinHash dedup ✅ (W7); full 5000-WET run = SKIP
+ A5 Alignment   ████████████ 100%  ✅  SFT·EI·GRPO/Dr.GRPO·DPO + grader + envs ✅ (W8); graded runs rental-gated
+ DELTA capstone  design ✅      0%  ⬜  GDN-2 decode kernel — K10.2 re-aims it at KDA (GDN-2 = port base)
 
- ►► TWO ACTIVE FRONTS: perf curriculum (node R4.2) · main-track sprint (W1–W8 ✅ → W9 acceptance/W10 runbooks/W11).
+ ►► FOUR ACTIVE FRONTS: frontier/nanochat (S3 sweep RUNNING on pod → P5 dress rehearsal → d20) · K3
+ hand-build K0–K10 (K2 KDA = critical path) · perf rental days (H100/B200 ISA + 8×H200 serving — code
+ done, hardware-gated) · learning track (K3 core/ order = primary mastery queue).
 ```
 
 **A2 breakdown — CS336 systems (single-GPU half ✅; distributed half ✅ shipped 2026-07-03):**
@@ -209,23 +212,25 @@ tests green. Details: `bench/RESULTS.md` §2026-07-03, node pointer `performance
 > **Clean slate (2026-07-01).** The exploratory Jun-29 perf kernels (GEMV/GEMM/RMSNorm CUDA +
 > `kernels/bench.py`) were removed to build A1–A7 from scratch against `PERF_ENGINEERING_SPEC.md`.
 > Kept: CS336 A2 FlashAttention-2, the `scratch_llm.bench` measurement apparatus, and `bench/RESULTS.md`.
-> Prior work is at git tag `pre-perf-kernel-reset`. All rungs below are genuinely `⬜ not started`.
+> Prior work is at git tag `pre-perf-kernel-reset`. ~~All rungs below are genuinely `⬜ not started`.~~
+> **(Superseded 2026-08-02 — table updated: every sm120-runnable rung shipped 2026-07-04 per the banner
+> above; remaining rows are the rental-days, code compile-verified and hardware-gated.)**
 
 ```
 Assignment  Phase       Rungs                                         Status
 ──────────  ──────────  ────────────────────────────────────────────  ──────
-A1 Infer    1a (sm120)  R0-R3 + 4.1 PagedAttn + 4.2-4.6 frontier     🔵  R0-R4.1 done → R4.2
-A2 Kernel   1b (sm120)  R0-R6 CUDA-core ladder                        ⬜  not started
-            Phase 2     §4.1-4.5 WGMMA+TMA+FP8 (H100)                ⬜  gate: Phase 1b done
-A3 TC       1c (sm120)  R0-R2 WMMA + mma.sync                         ⬜  not started
-            Phase 2     R3-R4 + §4.1 warp-spec (H100)                 ⬜  gate: Phase 2
-            Phase 3     §4.2-4.3 tcgen05/NVFP4 (B200)                 ⬜  gate: Phase 3
-A4 FlashA   1d (sm120)  R0-R3 + §4.3 variant + backward               ⬜  not started
-            Phase 2     R4 FA3-class (H100)                            ⬜  gate: Phase 2
-A5 Quant    1e (sm120)  R0-R4 + §4.3 PTQ                              ⬜  not started
-            Phase 3     §7 NVFP4 native MMA (B200)                    ⬜  gate: Phase 3
-A6 Dist     Phase 4     R0-R1 inside the 8×H200 SERVING DAY (R1-FP8   ⬜  gate: Phase 4
-                        TP×EP · MLA KV · PD-disagg; ADR-0012)
+A1 Infer    1a (sm120)  R0-R3 + 4.1 PagedAttn + 4.2-4.6 frontier     ✅  R0–R4.6 done 2026-07-04
+A2 Kernel   1b (sm120)  R0-R6 CUDA-core ladder                        ✅  done 2026-07-04
+            Phase 2     §4.1-4.5 WGMMA+TMA+FP8 (H100)                🔵  code compile-verified → H100 day
+A3 TC       1c (sm120)  R0-R2 WMMA + mma.sync                         ✅  done 2026-07-04
+            Phase 2     R3-R4 + §4.1 warp-spec (H100)                 🔵  code compile-verified → H100 day
+            Phase 3     §4.2-4.3 tcgen05/NVFP4 (B200)                 🔵  code compile-verified → B200 day
+A4 FlashA   1d (sm120)  R0-R3 + §4.3 variant + backward               ✅  done 2026-07-04/05
+            Phase 2     R4 FA3-class (H100)                            🔵  code compile-verified → H100 day
+A5 Quant    1e (sm120)  R0-R4 + §4.3 PTQ                              ✅  done 2026-07-04
+            Phase 3     §7 NVFP4 native MMA (B200)                    🔵  code compile-verified → B200 day
+A6 Dist     Phase 4     R0-R1 inside the 8×H200 SERVING DAY (R1-FP8   🔵  code-only (gloo-verified, 112
+                        TP×EP · MLA KV · PD-disagg; ADR-0012)             tests) → node day
             Phase 5     R2 pipeline + R3/§4.1 multi-node — OPTIONAL    ⬜  opt-in only
 A7 Cap      Phase 5     Track B kernel suite                           ⬜  gate: A1-A6 done
 ```

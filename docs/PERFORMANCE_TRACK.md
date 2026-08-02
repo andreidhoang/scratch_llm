@@ -152,8 +152,11 @@ signal toward architecture↔kernel co-design.** Full per-rung verdict below in 
   the HBM round-trip that bounds batch-1 decode → it's a real win, not a bandwidth dead-end (the stronger
   "HBM-bounded, fusion/precision can't help" framing was **refuted 0-3**). → **Re-scope DELTA to exactly
   the fp8/nvfp4 state-read/write decode kernel on the GDN-2 two-gate recurrence, benchmarked against FLA's
-  `fused_recurrent` (standard-precision) as the baseline oracle.** With that re-scope it stays the
-  program's **#1 co-designed artifact** married to F10 (see §6) — author it in a DSL (TileLang / CuTe DSL).
+  `fused_recurrent` (standard-precision) as the baseline oracle.** **Re-scoped again per the K3 ROADMAP
+  (2026-07-31, K10.2):** the flagship is now the **KDA decode kernel** (per-channel decay, Kimi K3's
+  linear-attention recurrence), built on DELTA's GDN-2 base and benchmarked vs the FLA oracle — DELTA's
+  correctness contract inherits from `core/kda.py`'s three-path equivalence (`docs/k3/ROADMAP.md`). It stays
+  the program's **#1 co-designed artifact** married to F10 (see §6) — author it in a DSL (TileLang / CuTe DSL).
 - **Serving: wide-EP disaggregated is now the *required* production shape.** `[FACT]` Large-scale MoE
   serving in 2026 = **DeepEP all-to-all + EPLB (expert-parallel load balancing) + Dual-Batch Overlap
   (DBO) for decode + PD-disaggregation + CUDA-graph FULL_AND_PIECEWISE.** PD-disagg is **architecturally
@@ -163,7 +166,9 @@ signal toward architecture↔kernel co-design.** Full per-rung verdict below in 
   the right foundation; the A6 serving day should name the wide-EP stack. **Freshness:** the canonical
   frontier-MoE serving target moved to **DeepSeek-V4** (1.6T Pro / 285B Flash, 1M ctx, Blackwell 8×B200/
   B300) by Apr 2026 — R1-671B's *physics* still teaches (MLA KV, EP-vs-TP, routing), but flag it as the
-  baseline, V4-Flash/Kimi-K2/GLM-5 as the current flag. EAGLE-3.1 + Kimi-K2.6 draft models (TorchSpec)
+  baseline, V4-Flash/Kimi-K2/GLM-5 as the current flag. **Update (2026-07-27):** **Kimi K3** is now the
+  repo's **rebuild-and-serve flagship** (K3 track chartered 2026-07-31, `docs/k3/ROADMAP.md`; K9 = 8×B300
+  Modal rental, ~$120–170). EAGLE-3.1 + Kimi-K2.6 draft models (TorchSpec)
   make draft-model spec-decode a maintained 2026 workflow (→ F2b MTP drafter).
 - **Precision: NVFP4 confirmed the right bet — but the *vendor GEMM* now exists.** `[FACT]` NVFP4 ≫ MXFP4
   (arXiv 2603.08747: Qwen2.5-0.5B WikiText PPL **21.63 vs 36.71**; 7B 6.47 vs 7.31). **Nuance (don't
@@ -234,9 +239,9 @@ Verdict legend: ✅ CONFIRMED high-value · ⚖️ TABLE-STAKES (necessary, do-w
 | **A3 tensor cores** (WMMA→mma.sync→WGMMA→tcgen05, hand-PTX) | ✏️ | The hand-PTX is the *understanding layer* (keep — the SASS you must read). **ADD a CuTe-DSL authoring rung** — FA4 & CUTLASS 4.0 are Python-DSL-authored; 2026 kernels ship in the DSL. |
 | **A4 FlashAttention** (FA2 done, FA3-Hopper deferred) | ✏️ | FA2 = table-stakes. FA3 = *understand the Hopper generation*. **Headline = FA4-class on Blackwell in CuTe DSL** (arXiv 2603.05451; TMEM/2-CTA; 1605 TF/s/71%) — the standing sm120 + B200 are Blackwell. |
 | **A5 quantization** (NVFP4/MXFP4/FP8-KV/AWQ) | ✅→⚖️ | NVFP4 numerics = the right Blackwell bet (✅, NVFP4≫MXFP4 verified). But **the tcgen05/NVFP4 *GEMM* is vendor-served (CUTLASS 4.0)** → reframe A3§4.3/A5R3 as understand+beat-MXFP4+use-the-primitive, not reimplement (⚖️). |
-| **A6 8×H200 R1-serving day** | ✅✏️ | Physics still teaches (MLA KV · EP-vs-TP · routing · PD-disagg). But **R1-671B is dated** — name **DeepSeek-V4-Flash (285B, Blackwell) / Kimi-K2 / GLM-5** as the current flag; R1 = the teaching baseline. Add the DeepEP/EPLB/DBO stack. |
+| **A6 8×H200 R1-serving day** | ✅✏️ | Physics still teaches (MLA KV · EP-vs-TP · routing · PD-disagg). But **R1-671B is dated** — name **DeepSeek-V4-Flash (285B, Blackwell) / Kimi-K2 / GLM-5** as the current flag; R1 = the teaching baseline. **Kimi K3 (released 2026-07-27) is now the repo's rebuild-and-serve flagship** (`docs/k3/ROADMAP.md`; K9 = 8×B300 Modal rental, ~$120–170). Add the DeepEP/EPLB/DBO stack. |
 | **A7 capstone** (WGMMA GEMM · FP8 FA3 attn · NVFP4 GEMM + OSS PR) | ⚖️✅ | The three kernels reproduce vendor-served frontier (⚖️) — the **OSS PR is the hiring artifact** (a merged PR to FlashInfer/vLLM/CUTLASS). Reframe two of the three toward CuTe-DSL/FA4-class + point the capstone at **DELTA as the payload**. |
-| **DELTA** (GDN-2 **low-precision** fused *decode* kernel) | ✅ **#1 — re-scoped** | GDN-2 is a live NVIDIA arch (2605.22791) beating all linear-attn baselines. **⚠ FLA already ships a standard-precision GDN-2 `fused_recurrent` decode kernel** — so DELTA is **only** scarce as the **fp8/nvfp4 recurrent-*state* decode path** (absent everywhere). **Re-scope to exactly that + benchmark vs FLA's `fused_recurrent` baseline.** So-scoped it's the #1 co-designed artifact with F10 — author in a DSL (TileLang/CuTe). |
+| **DELTA → KDA** (GDN-2-based **low-precision** fused *decode* kernel) | ✅ **#1 — re-scoped** | GDN-2 is a live NVIDIA arch (2605.22791) beating all linear-attn baselines. **⚠ FLA already ships a standard-precision GDN-2 `fused_recurrent` decode kernel** — so DELTA is **only** scarce as the **fp8/nvfp4 recurrent-*state* decode path** (absent everywhere). **Re-scoped per K3 ROADMAP K10.2 (2026-07-31): the flagship is now the KDA decode kernel (per-channel decay) on DELTA's GDN-2 base, benchmarked vs the FLA oracle.** So-scoped it's the #1 co-designed artifact with F10 — author in a DSL (TileLang/CuTe). |
 
 **Blackwell / sm120 correctness note (verified):** on datacenter Blackwell (sm100) the Hopper **WGMMA
 (`wgmma.mma_async`) is deprecated**, replaced by **`tcgen05.mma` (UMMA) + Tensor Memory (TMEM, 256 KB/SM)**
@@ -248,8 +253,9 @@ value is the **primitives** (TMA · warp-spec · pipelining · online-softmax), 
 
 **One-line perf thesis (2026):** the durable signal is the *roofline/predict-the-number discipline* (§0)
 plus **architecture↔kernel co-design** `[INFERENCE — comp evidence did not survive verification, RQ6
-unanswered]` — the DELTA GDN-2 **low-precision** decode kernel (re-scoped, vs FLA's standard-precision
-baseline) married to the F10 model-side Gated-DeltaNet is the one artifact here that no surveyed library
+unanswered]` — the **KDA decode kernel** (per-channel decay; re-scoped from DELTA's GDN-2 low-precision
+base, benchmarked vs the FLA `fused_recurrent` oracle — K3 ROADMAP K10.2, `docs/k3/ROADMAP.md`) married
+to the F10 model-side Gated-DeltaNet is the one artifact here that no surveyed library
 ships. Everything else is table-stakes fluency (A2/A5-GEMM, now vendor-served by CUTLASS 4.x) or a
 reproduction whose hiring value is the landed **OSS PR**, not the kernel. **Honest caveat:** whether this
 niche co-design out-signals a broadly-useful OSS PR (FP8 attention / NVFP4 GEMM / Wide-EP) for the
@@ -263,4 +269,6 @@ highest-paying roles is an *open question* — the research found **no verifiabl
 - Per-deliverable specs: `docs/design/PERF_*_SPEC.md` (+ the existing `L2_*_SPEC.md`)
 - Per-pillar frontier defaults: [`FRONTIER_PRACTICE_2026.md`](FRONTIER_PRACTICE_2026.md)
 - The assignment spine + DELTA: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7, `../../DELTA.md`
+- **The perf critical path going forward: [`k3/ROADMAP.md`](k3/ROADMAP.md)** — K9 8×B300 Modal rental
+  (~$120–170) and K10.2 KDA decode kernel (per-channel decay, on DELTA's GDN-2 base, vs the FLA oracle).
 - Build status: [`STATUS.md`](STATUS.md) · Constitution + FOP + Mode boundary: [`../CLAUDE.md`](../CLAUDE.md)
