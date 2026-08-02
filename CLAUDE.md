@@ -29,7 +29,7 @@
 
 > Execution mode is **`delegate`** (`.claude/execution-mode`,
 > [ADR-0013](docs/adr/ADR-0013-execution-mode-full-delegation.md)): agents implement everything
-> end-to-end; mastery is post-hoc via the study queue / mastery-debt ledger. Two agent fronts run
+> end-to-end; mastery is post-hoc via the study queue / mastery-debt ledger. Agent fronts run
 > concurrently on this checkout ([ADR-0014](docs/adr/ADR-0014-cs336-main-track-delivery-sprint.md)):
 >
 > - **Perf front** — the `performance/` curriculum. **✅ ALL sm120-runnable rungs A1–A6 COMPLETE

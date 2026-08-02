@@ -59,7 +59,9 @@ is the policy A5 fine-tunes and A2's systems make A5's rollouts cheap, so A1/A2 
 with **A1 ✅ done**, the **next artifact to *ship* is the A5 RL "aha"** (the scarcest 2026 cluster,
 highest-EV, CPU-scaffolded + one ~$30–100 burst), with the **A2 distributed finish + OSS Rung-1 in
 parallel** (the A2 harness *is* DELTA's Phase-1 — §7), then **DELTA base-first**, and **A3/A4 as thin
-slices only** (least scarce). The canonical sequence is **`../STRATEGY.md` §8** + **§7 below** — they win
+slices only** (least scarce). *(Historical, 2026-06: this ship-order has since played out — A2
+distributed ✅, A3/A4 ✅; and DELTA's kernel payload is re-aimed at **KDA** per the K3 roadmap K10.2,
+2026-07-31. The live critical path is K3 K0–K10 + S3 → P5 → d20 — see `docs/STATUS.md`.)* The canonical sequence is **`../STRATEGY.md` §8** + **§7 below** — they win
 over any "linear A1→A5" phrasing. (You still *master* each assignment in numeric order; you *prioritize
 shipping* by EV.)
 
