@@ -170,13 +170,64 @@ min-pick).
 
 | quantity | prediction (pre-registered) | measured | status |
 |---|---|---|---|
-| exponent sum a+b | ∈ [0.95, 1.05] (forced by C = 6ND) | — | pending |
-| log-log fit R² (bpb) | ≥ 0.98 | — | pending |
-| compute-optimal D:N | ≥ 15 ⇒ d20 stays ratio-20 (9.6B, deliberate inference-aware overtrain); < 15 ⇒ re-register D before P5 | — | pending |
-| nanochat CORE-fit at d20's C = 2.77e19 | ≈ 0.195 — inside the pre-registered 0.19–0.22 band | — | pending |
+| exponent sum a+b | ∈ [0.95, 1.05] (forced by C = 6ND) | **1.0000** (a=0.4515, b=0.5485) | pass *(near-vacuous — recorded D = ratio×N = C/6N exactly, so the sum is identity; see measured note)* |
+| log-log fit R² (bpb) | ≥ 0.98 | **R²_N = 0.7709, R²_D = 0.8324** | **FAIL — gate raised, no extrapolation reported (trigger T1)** |
+| compute-optimal D:N | ≥ 15 ⇒ d20 stays ratio-20 (9.6B, deliberate inference-aware overtrain); < 15 ⇒ re-register D before P5 | 26.94 on the failed fit (78.24 in the w/o-s7 sensitivity arm) — **not a usable point estimate**; decision taken on the pre-registered fitted-interval rule, see below | **HOLD ratio-20 (9.6B) — by default rule + s6-vs-s7 evidence, not by fit** |
+| nanochat CORE-fit at d20's C = 2.77e19 | ≈ 0.195 — inside the pre-registered 0.19–0.22 band | **0.1949** (oracle overlay, independent of our fit) | pass |
 
 **Kill:** s5–s6 (59M, ≤2.4B tokens) cannot beat the toy-corpus loss floor by a clear margin ⇒
-data/recipe bug; stop, do not scale.
+data/recipe bug; stop, do not scale. **Not triggered** — s5 0.9676 / s6 0.9498 bpb, far clear of
+any toy-corpus floor; recipe healthy.
+
+### Measured — S3 sweep s1–s7 (2026-08-02, ClimbMix, standing RTX 5090, 12.09 GPU-h total)
+
+| rung | depth | params | ratio | tokens | C | val_bpb | val_loss | wall |
+|---|---|---|---|---|---|---|---|---|
+| s1 | 4 | 19.99M | 8 | 159.9M | 1.92e16 | 1.2553 | 3.5523 | 0.14 h |
+| s2 | 4 | 19.99M | 20 | 399.8M | 4.80e16 | 1.1772 | 3.3314 | 0.34 h |
+| s3 | 4 | 19.99M | 40 | 799.7M | 9.59e16 | 1.1408 | 3.2283 | 0.68 h |
+| s4 | 8 | 59.26M | 8 | 474.0M | 1.69e17 | 1.0124 | 2.8652 | 0.81 h |
+| s5 | 8 | 59.26M | 20 | 1.185B | 4.21e17 | 0.9676 | 2.7382 | 2.04 h |
+| s6 | 8 | 59.26M | 40 | 2.370B | 8.43e17 | 0.9498 | 2.6879 | 4.06 h |
+| s7 | 12 | 135.29M | 8 | 1.082B | 8.79e17 | 0.9402 | 2.6608 | 4.01 h (batch 4) |
+
+Batch per the pre-registered consistency decision: s1–s6 batch 8, s7 batch 4 (LR fixed, no
+grad accumulation). Figures: `artifacts/s3_scaling_sweep/figs/fig1–fig4`.
+
+**R² gate failure — cause and verdict.** The gate raised `ValueError: log-log R²=0.7709 < 0.98`
+(T1 semantics), so no N\*(C)/D\*(C) extrapolation is quoted. The cause is **geometric, in the
+grid itself**: because recorded D = ratio×N and ratios cycle 8→20→40 within each depth ray,
+the min-picked D zigzags (0.16→0.40→0.80→0.47→1.19→2.37→1.08B) as budgets cross depth
+boundaries — no power law can fit that, by construction. The a+b=1.0000 pass is likewise
+near-vacuous (identity of the C=6ND wiring), not evidence of a clean law. This is a **grid
+design limitation, not a data/recipe bug**: bpb descends cleanly and monotonically along
+every ray, and s7 passes pre-registered validity check (1) — it lands *below* the d8-ray
+log-log extrapolation at its C (0.9402 vs ≈0.9487), i.e. no batch-attributable excess.
+Sensitivity arm (2): without s7, a=0.3655/b=0.6345, R² 0.7310/0.8912, ratio@d20 = 78.24 —
+wildly unstable, confirming the ladder cannot support extrapolation to C = 2.77e19 (~33×).
+
+**What the data does support (fitted-interval evidence only):** the one genuine iso-FLOP
+allocation comparison is **s6 vs s7** (C 8.43e17 vs 8.79e17, 1.043×): the larger model at
+ratio 8 **beats** the smaller model at ratio 40 by −0.0096 bpb. Combined with within-ray
+monotone improvement, the compute-optimal allocation at ~9e17 sits at **ratio ≤ 8** and
+drifting downward with scale — qualitatively Chinchilla-consistent (optimal N grows with C),
+but at far lower D:N than the registered 20.
+
+**D:N decision for d20 (HOLD, per rule 3 of the batch-consistency pre-registration).** The
+decision rule is evaluated over the fitted interval, not the broken extrapolation: nothing in
+[s1, s7] shows ratio-20 *hurting* at any budget (s2/s5 beat their ratio-8 siblings at equal N),
+and the registered 9.6B-token budget was already a **deliberate inference-aware overtrain**
+(Sardana 2401.00448), knowingly above the training-optimal ratio. **Decision: HOLD at
+ratio 20 / 9.6B tokens.** The honest caveat: our ladder cannot certify 20 as optimal, and the
+s6-vs-s7 crossing suggests the training-optimal ratio at d20's C is likely single-digit —
+acceptable for an inference-serving artifact, recorded here so P5 can re-anchor.
+
+**Trigger status (E2E §S3(g)).** **T1 has formally fired** (fit failure ⇒ d14 rung). d14 is a
+free-but-slow standing-box run (multi-day at d12-scale+) or a paid spot run; per the mission
+guardrails no paid work without explicit human go-ahead, and the free d14 blocks P5 prep by
+days. **Surfaced for human decision: run d14 (free, slow), rent for d14 (paid), or accept the
+HOLD-on-interval-evidence rationale above and proceed to P5.** T2/T3 not evaluated (P5 and
+F8/F10 respectively, both downstream).
 
 **d14/d16 escalation:** trigger-gated per E2E §S3(g) (T1 fit failure ⇒ d14; T2 P5-anchor
 divergence > 0.01 bpb ⇒ d16; T3 F8/F10 sweep-scale win + RULER pass ⇒ d14 confirm; none ⇒ skip,

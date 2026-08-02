@@ -22,7 +22,7 @@ the 2026 frontier's *contested* claims.
 
 ## Current next node
 
-> **S3 scaling-law sweep s1–s7 (free, standing box, ClimbMix corpus by operator override)** → **P5 d12 dress rehearsal ($10–15)** → **8×H100 d20 (~$100, gated on P5 + user go-ahead)**
+> **S3 scaling-law sweep s1–s7 ✅ DONE (2026-08-02, 12.09 GPU-h, ClimbMix corpus by operator override)** → **human decision: T1/d14 escalation (free-slow vs paid vs accept-and-proceed)** → **P5 d12 dress rehearsal ($10–15, gated on human go-ahead)** → **8×H100 d20 (~$100, gated on P5 + user go-ahead)**
 
 See `FRONTIER_2026_TASKSPEC.md` Next-node marker for exact commands and prerequisites.
 
@@ -30,6 +30,14 @@ F12 completed 2026-07-31: measured **KEEP FineWeb-EDU** (ClimbMix bpb 1.30205 �
 iso-FLOP; kill criterion triggered). **Operator override:** S3/d20 will use **ClimbMix** anyway,
 following the nanochat/Karpathy corpus choice; deviation logged in `docs/RESULTS.md` §F12 and
 `bench/RESULTS.md` §Frontier ablations.
+
+S3 completed 2026-08-02: all seven rungs landed (bpb 1.2553 → 0.9402). The pre-registered R² gate
+**raised** (R²_N 0.7709 / R²_D 0.8324 < 0.98 — grid-geometry zigzag of recorded D across depth
+boundaries, not a recipe bug), so no scaling-law extrapolation is quoted; a+b = 1.0000 is
+near-vacuous by C=6ND construction. d20 D:N **HOLDS at ratio-20 (9.6B tokens)** on fitted-interval
+evidence (s6-vs-s7 iso-FLOP: bigger-N/ratio-8 wins by −0.0096 bpb) plus the deliberate
+inference-aware overtrain registration. **Trigger T1 (d14 escalation) formally fired** — surfaced
+for human decision; no paid GPU work without explicit go-ahead.
 
 ---
 
@@ -115,14 +123,19 @@ following the nanochat/Karpathy corpus choice; deviation logged in `docs/RESULTS
 |---|---|---|---|---|---|
 | s1 | 4 | 19.99M | 159.9M | 1.92e16 | ✅ bpb 1.2553 (batch 8) |
 | s2 | 4 | 19.99M | 399.8M | 4.80e16 | ✅ bpb 1.1772 (batch 8) |
-| s3 | 4 | 19.99M | 799.7M | 9.59e16 | 🔄 Running (batch 8) |
-| s4 | 8 | 59.26M | 474.0M | 1.69e17 | ⬜ Pending |
-| s5 | 8 | 59.26M | 1.18B | 4.21e17 | ⬜ Pending |
-| s6 | 8 | 59.26M | 2.37B | 8.43e17 | ⬜ Pending |
-| s7 | 12 | 135.29M | 1.08B | 8.79e17 | ⬜ Pending (batch 4/2) |
-| s8 | 12 | 135.29M | 2.71B | 2.20e18 | ⬜ P5 dress rehearsal |
+| s3 | 4 | 19.99M | 799.7M | 9.59e16 | ✅ bpb 1.1408 (batch 8) |
+| s4 | 8 | 59.26M | 474.0M | 1.69e17 | ✅ bpb 1.0124 (batch 8) |
+| s5 | 8 | 59.26M | 1.18B | 4.21e17 | ✅ bpb 0.9676 (batch 8) |
+| s6 | 8 | 59.26M | 2.37B | 8.43e17 | ✅ bpb 0.9498 (batch 8) |
+| s7 | 12 | 135.29M | 1.08B | 8.79e17 | ✅ bpb 0.9402 (batch 4) |
+| s8 | 12 | 135.29M | 2.71B | 2.20e18 | ⬜ P5 dress rehearsal (paid, gated on human go-ahead) |
 
-Output: fit `N*(C)` and `D*(C)`, confirm `a+b≈1`, decide d20 D:N re-registration.
+**DONE 2026-08-02 (12.09 GPU-h):** fit `N*(C)`/`D*(C)` raised the pre-registered R² gate
+(R²_N 0.7709 / R²_D 0.8324 < 0.98 — grid-geometry zigzag, not a recipe bug; a+b = 1.0000
+near-vacuous). No extrapolation quoted. d20 D:N **HOLD at ratio-20 (9.6B)** on fitted-interval
+evidence (s6-vs-s7 iso-FLOP favors bigger-N by −0.0096 bpb) + the inference-aware overtrain
+registration. **T1 (d14) formally fired — surfaced for human decision.** Full writeup:
+`docs/RESULTS.md` §S3, `bench/RESULTS.md` §Frontier ablations.
 
 Owner: `FRONTIER_2026_END_TO_END_PLAN.md` §S3 + `scaling/isoflop.py`.
 
@@ -154,6 +167,7 @@ Owner: `FRONTIER_2026_END_TO_END_PLAN.md` §S3 + `scaling/isoflop.py`.
 | 2026-08-02 | S3 s1–s2 landed: bpb 1.2553 / 1.1772 | Grid fix verified on GPU; sweep continuing s3→s7 |
 | 2026-08-02 | `FRONTIER_2026_ARCH_SCALING.md` added | One law per recipe backbone; per-architecture anchors, not re-sweeps; MoE the sole mini-fit exception |
 | 2026-08-02 | `stage_pretrain` device policy pinned (qk_norm on; SDPA on cuda) + stale checkpoint-chain test updated | Green CI restored after the S3 grid fix |
+| 2026-08-02 | S3 sweep s1–s7 DONE (12.09 GPU-h); R² gate raised (0.7709/0.8324 < 0.98), T1 fired; d20 D:N HOLD ratio-20 on interval evidence | Grid-geometry D zigzag breaks the power-law fit by construction; s6-vs-s7 iso-FLOP favors bigger-N; no extrapolation quoted; d14 decision escalated to human |
 
 ---
 

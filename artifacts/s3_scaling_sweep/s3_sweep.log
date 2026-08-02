@@ -12,3 +12,33 @@ Checking for active staging process...
 [2026-08-02T03:26:33Z] s2 completed with batch=8
 [2026-08-02T03:26:33Z] Running s3 with batch=8
 [s3] depth=4 N=19,991,808 ratio=40 D=799,672,320 tok C=9.59e+16 -> 48809 steps (D / (batch 8 x ctx 2048))
+[s3] val_bpb=1.1408 val_loss=3.2283 wall=0.68 h -> artifacts/s3_scaling_sweep/results.json
+[2026-08-02T04:07:29Z] s3 completed with batch=8
+[2026-08-02T04:07:29Z] Running s4 with batch=8
+[s4] depth=8 N=59,255,296 ratio=8 D=474,042,368 tok C=1.69e+17 -> 28934 steps (D / (batch 8 x ctx 2048))
+[s4] val_bpb=1.0124 val_loss=2.8652 wall=0.81 h -> artifacts/s3_scaling_sweep/results.json
+[2026-08-02T04:56:26Z] s4 completed with batch=8
+[2026-08-02T04:56:26Z] Running s5 with batch=8
+[s5] depth=8 N=59,255,296 ratio=20 D=1,185,105,920 tok C=4.21e+17 -> 72334 steps (D / (batch 8 x ctx 2048))
+[s5] val_bpb=0.9676 val_loss=2.7382 wall=2.04 h -> artifacts/s3_scaling_sweep/results.json
+[2026-08-02T06:58:49Z] s5 completed with batch=8
+[2026-08-02T06:58:49Z] Running s6 with batch=8
+[s6] depth=8 N=59,255,296 ratio=40 D=2,370,211,840 tok C=8.43e+17 -> 144667 steps (D / (batch 8 x ctx 2048))
+[s6] val_bpb=0.9498 val_loss=2.6879 wall=4.06 h -> artifacts/s3_scaling_sweep/results.json
+[2026-08-02T11:02:35Z] s6 completed with batch=8
+[2026-08-02T11:02:35Z] Running s7 with batch=4
+[s7] depth=12 N=135,288,576 ratio=8 D=1,082,308,608 tok C=8.79e+17 -> 132118 steps (D / (batch 4 x ctx 2048))
+[s7] val_bpb=0.9402 val_loss=2.6608 wall=4.01 h -> artifacts/s3_scaling_sweep/results.json
+[2026-08-02T15:03:32Z] s7 completed with batch=4
+[2026-08-02T15:03:32Z] S3 sweep run complete; fitting scaling law
+Traceback (most recent call last):
+  File "/workspace/scratch_llm/scripts/s3_scaling_sweep.py", line 121, in <module>
+    main()
+  File "/workspace/scratch_llm/scripts/s3_scaling_sweep.py", line 114, in main
+    report = fit_scaling_law(records)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch_llm/src/scratch_llm/scaling/s3_sweep.py", line 466, in fit_scaling_law
+    check_r_squared(min(r2_n, r2_d))
+  File "/workspace/scratch_llm/src/scratch_llm/scaling/s3_sweep.py", line 317, in check_r_squared
+    raise ValueError(
+ValueError: R² gate failed: log-log R²=0.7709 < 0.98 — no clean power law at our scale; report the non-fit instead of extrapolating (trigger T1: add the d14 rung)

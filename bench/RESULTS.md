@@ -831,7 +831,43 @@ ClimbMix for S3/d20**, following the nanochat/Karpathy corpus choice. This devia
 d12 @ ratio-20, ~28 h, droppable if budget trips); A9 model card must state ClimbMix's **CC BY-NC 4.0**
 license.
 
+### Measured — S3 scaling-law sweep s1–s7 (2026-08-02, `scaling/s3_sweep.py`, standing RTX 5090, ClimbMix)
+
+**Hypothesis.** Our recipe (Muon+AdamW, ClimbMix by operator override, vocab 32,768 untied) admits a
+clean power-law fit `N_opt ∝ C^a`, `D_opt ∝ C^b` in bpb at sweep scale (R² ≥ 0.98), and the implied
+compute-optimal D:N either confirms or re-registers the d20's 9.6B-token budget.
+
+| rung | depth | params | ratio | C | val_bpb | wall |
+|---|---|---|---|---|---|---|
+| s1 | 4 | 19.99M | 8 | 1.92e16 | 1.2553 | 0.14 h |
+| s2 | 4 | 19.99M | 20 | 4.80e16 | 1.1772 | 0.34 h |
+| s3 | 4 | 19.99M | 40 | 9.59e16 | 1.1408 | 0.68 h |
+| s4 | 8 | 59.26M | 8 | 1.69e17 | 1.0124 | 0.81 h |
+| s5 | 8 | 59.26M | 20 | 4.21e17 | 0.9676 | 2.04 h |
+| s6 | 8 | 59.26M | 40 | 8.43e17 | 0.9498 | 4.06 h |
+| s7 | 12 | 135.29M | 8 | 8.79e17 | 0.9402 | 4.01 h (batch 4) |
+
+Total 12.09 GPU-h. Batch: s1–s6 batch 8, s7 batch 4 (pre-registered consistency decision, LR fixed).
+
+| quantity | pre-registered | measured | verdict |
+|---|---|---|---|
+| a+b | ∈ [0.95, 1.05] | 1.0000 (a=0.4515, b=0.5485) | pass, near-vacuous (C=6ND identity) |
+| log-log R² | ≥ 0.98 | R²_N 0.7709 / R²_D 0.8324 | **FAIL — gate raised, T1 fired; no extrapolation quoted** |
+| compute-optimal D:N @ d20 | decision rule only | 26.94 on failed fit / 78.24 w/o-s7 — unusable | **HOLD ratio-20 (9.6B)** on fitted-interval evidence + inference-aware registration |
+| nanochat CORE oracle @ 2.77e19 | ≈ 0.195 | 0.1949 | pass (overlay, fit-independent) |
+
+**Why R² fails:** grid geometry — recorded D = ratio×N zigzags across depth boundaries
+(0.16→0.40→0.80→0.47→1.19→2.37→1.08B), so no power law fits by construction. Not a recipe bug:
+bpb descends monotonically on every ray; s7 lands below the d8-ray extrapolation (0.9402 vs
+≈0.9487), no batch-attributable excess. **Interval evidence:** s6-vs-s7 iso-FLOP (1.043×) favors
+the bigger model at ratio 8 by −0.0096 bpb ⇒ training-optimal D:N at ~9e17 is ≤ 8 and drifting
+down; d20's ratio-20 stands as a *deliberate inference-aware overtrain* (Sardana 2401.00448),
+honestly uncertified by this ladder. **T1 (d14 escalation) formally fired** — surfaced for human
+decision (free-but-slow vs paid vs accept-and-proceed-to-P5); no paid work without go-ahead.
+Full writeup: `docs/RESULTS.md` §S3. Figures: `artifacts/s3_scaling_sweep/figs/fig1–fig4`.
+
 ---
+
 
 ## Perf track (A4 — flash attention)
 
