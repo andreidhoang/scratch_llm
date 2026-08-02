@@ -89,3 +89,26 @@ our scale*, never as 2.8T-transfer claims (that transfer is what K9/their papers
 Rung 1. The addition this methodology mandates: **Rung 2's 5-point family fit becomes an
 explicit deliverable between R1 and the d20 decision** — the attention architecture is chosen
 by the curve, not by the single d12 arm. Everything else stays as chartered.
+
+## 4. Reconciliation with `FRONTIER_2026_ARCH_SCALING.md` (same repo, F12/S3 front)
+
+The sister doc (landed 2026-07-31, commit 7803bbc) answers "must S3 be re-run per
+architecture?" with: **one law per recipe backbone; mild architecture variants move the law's
+OFFSET, not its exponents; attention variants are compared by iso-FLOP anchor pairs against
+the S3 reference points; MoE is the exception (compute model changes → small joint grid);
+every small-scale win is trigger-gated at d14 (E2E §S3(g) T3).** This ladder prescribes
+per-family fits — apparent tension, resolved as follows (the operating rule):
+
+1. **Default = shared-slope prior.** The dense-transformer literature and Kimi Linear's own
+   fits (MLA −0.0536 vs KDA −0.0527 — offset-dominant) support estimating each family's
+   OFFSET from S3's shared reference law + 2 anchor points (d12, d20), with slope-equality
+   explicitly tested. This is the cheap path and is statistically better at our narrow span.
+2. **Escalation = full per-family fit (Rung 2), in two cases only:** (a) the shared-slope
+   test is rejected — MiniMax-01's softmax-vs-lightning exponents (−0.0798 vs −0.0763) prove
+   radical mixers CAN move slopes; (b) the multiplier is decision-critical — and the GQA-vs-KDA
+   attention decision IS decision-critical, so it keeps the 4-point per-family fit regardless.
+3. **LatentMoE/MoE arms follow ARCH_SCALING's MoE exception:** C = 6·N_active·D while
+   capacity ∝ N_total — the dense law does not apply; axis-C conclusions use the small joint
+   grid, not the dense reference curve.
+4. **The d14 trigger gate binds here too:** no small-scale K3-arm win touches the frozen d20
+   recipe without the d14/d20 confirmation run — that run IS Rung 3 in §3 above.
