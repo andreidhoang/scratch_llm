@@ -110,7 +110,9 @@ completed and wrote its result.
 do **not** stage ClimbMix for the d20.
 
 **Verdict: KEEP FineWeb-EDU for d20 (measurement-only).** ClimbMix does not beat the banked corpus at iso-FLOP on
-this recipe/scale; the CC BY-NC 4.0 license note is moot because the corpus flip does not happen.
+this recipe/scale. *(Measurement-only verdict of record — superseded as the operating decision by
+the operator override below: the corpus flip DID happen by override, so the CC BY-NC 4.0 license
+note is NOT moot; the A9 model card must state it.)*
 
 **User override (2026-07-31).** Despite the F12 kill criterion being triggered, the operator elected to
 stage **ClimbMix** for the S3 scaling-law sweep and the d20 run, following the nanochat/Karpathy corpus
@@ -124,9 +126,19 @@ stands unchanged — ClimbMix measured +0.110 bpb worse at 35M/700M with our rec
 choice rests on nanochat's larger-scale result, not on a scale-stable verdict of ours; (2) the d20
 CORE band must be re-anchored against the *current* published ClimbMix curve (d24-class 0.257–0.269
 at ~4e19 FLOPs) before P5, per E2E §S4(e) — **DONE 2026-08-02: re-anchored band 0.23–0.25 (central
-≈0.24), see §S4-pre below**; (3) the d20 run itself becomes the corpus arbiter at our
-largest scale — its bpb/CORE vs the S3-fit prediction and the nanochat overlay is the final,
-self-measured verdict.
+≈0.24), see §S4-pre below**; (3) ~~the d20 run itself becomes the corpus arbiter at our
+largest scale~~ — **struck (Amendment 2026-08-03):** the d20 trains on ClimbMix *only* (the
+confirmation arm was declined), so it CANNOT arbitrate the corpus choice — there is no FWE arm to
+compare against. The d20 validates the *recipe* against the re-anchored CORE band; the corpus
+choice rests on nanochat's larger-scale result, full stop.
+
+**Amendment 2026-08-03 (epistemic status of the +0.110 delta).** The +0.1101 bpb delta is DECISIVE
+for the *sign* of the effect at 35M/700M single-seed — the kill criterion fired correctly. It is
+NOT evidence about the effect at d20 scale: magnitude large, single-seed, scale-limited. No bpb
+seed-noise floor exists anywhere in this program, so any "below noise" characterization (previously
+in §S4-pre) is struck. **Pre-registered here — the pending S3-noise measurement:** 3 seeds at s1
+scale (~0.5 GPU-h) to establish the bpb seed-noise floor, before any future small-scale
+corpus/architecture verdict quotes a delta against noise.
 
 **Artifacts:** `data/shards.py` (FineWeb-EDU arm), new ClimbMix staging path,
 `scripts/tok_train.py` per-corpus BPE, `eval/corpus_ablation.py` (or reuse `eval/optimizer_race.py`),
@@ -172,9 +184,9 @@ min-pick).
 | quantity | prediction (pre-registered) | measured | status |
 |---|---|---|---|
 | exponent sum a+b | ∈ [0.95, 1.05] (forced by C = 6ND) | **1.0000** (a=0.4515, b=0.5485) | pass *(near-vacuous — recorded D = ratio×N = C/6N exactly, so the sum is identity; see measured note)* |
-| log-log fit R² (bpb) | ≥ 0.98 | **R²_N = 0.7709, R²_D = 0.8324** | **FAIL — gate raised, no extrapolation reported (trigger T1)** |
+| log-log fit R² (bpb) | ≥ 0.98 | **R²_N = 0.7709, R²_D = 0.8324** | **FAIL — gate tripped (< 0.98 ⇒ fit rejected), no extrapolation reported (trigger T1)** |
 | compute-optimal D:N | ≥ 15 ⇒ d20 stays ratio-20 (9.6B, deliberate inference-aware overtrain); < 15 ⇒ re-register D before P5 | 26.94 on the failed fit (78.24 in the w/o-s7 sensitivity arm) — **not a usable point estimate**; decision taken on the pre-registered fitted-interval rule, see below | **HOLD ratio-20 (9.6B) — by default rule + s6-vs-s7 evidence, not by fit** |
-| nanochat CORE-fit at d20's C = 2.77e19 | ≈ 0.195 — inside the pre-registered 0.19–0.22 band | **0.1949** (oracle overlay, independent of our fit) | pass |
+| nanochat CORE-fit at d20's C = 2.77e19 | ≈ 0.195 — inside the pre-registered 0.19–0.22 band | **0.1949** — arithmetic evaluation of the *published* fit, not a measurement (oracle overlay, independent of our fit) | n/a (oracle self-check) |
 
 **Kill:** s5–s6 (59M, ≤2.4B tokens) cannot beat the toy-corpus loss floor by a clear margin ⇒
 data/recipe bug; stop, do not scale. **Not triggered** — s5 0.9676 / s6 0.9498 bpb, far clear of
@@ -210,9 +222,13 @@ wildly unstable, confirming the ladder cannot support extrapolation to C = 2.77e
 **What the data does support (fitted-interval evidence only):** the one genuine iso-FLOP
 allocation comparison is **s6 vs s7** (C 8.43e17 vs 8.79e17, 1.043×): the larger model at
 ratio 8 **beats** the smaller model at ratio 40 by −0.0096 bpb. Combined with within-ray
-monotone improvement, the compute-optimal allocation at ~9e17 sits at **ratio ≤ 8** and
-drifting downward with scale — qualitatively Chinchilla-consistent (optimal N grows with C),
-but at far lower D:N than the registered 20.
+monotone improvement, the compute-optimal allocation at ~9e17 sits at **ratio ≤ 8**
+~~and drifting downward with scale~~ — *(Amendment 2026-08-03: "≤8 at ~9e17" is INDICATIVE,
+possibly batch-confounded — s7 ran batch 4 vs s6's batch 8 at fixed LR, and the pre-registered
+validity check was one-sided (only HIGH landings were attributed to batch). "Drifting downward
+with scale" is struck: a single pair cannot support a trend. Matched-batch rerun pre-registered:
+d12@r8 at batch 8, ~4 GPU-h, before P5.)* Qualitatively Chinchilla-consistent (optimal N grows
+with C), but at far lower D:N than the registered 20.
 
 **D:N decision for d20 (HOLD, per rule 3 of the batch-consistency pre-registration).** The
 decision rule is evaluated over the fitted interval, not the broken extrapolation: nothing in
@@ -220,7 +236,8 @@ decision rule is evaluated over the fitted interval, not the broken extrapolatio
 and the registered 9.6B-token budget was already a **deliberate inference-aware overtrain**
 (Sardana 2401.00448), knowingly above the training-optimal ratio. **Decision: HOLD at
 ratio 20 / 9.6B tokens.** The honest caveat: our ladder cannot certify 20 as optimal, and the
-s6-vs-s7 crossing suggests the training-optimal ratio at d20's C is likely single-digit —
+s6-vs-s7 crossing suggests the training-optimal ratio at d20's C is likely single-digit
+(indicative only — batch-confounded, see the Amendment 2026-08-03 above) —
 acceptable for an inference-serving artifact, recorded here so P5 can re-anchor.
 
 **Trigger status (E2E §S3(g)).** **T1 has formally fired** (fit failure ⇒ d14 rung). d14 is a
@@ -229,6 +246,64 @@ guardrails no paid work without explicit human go-ahead, and the free d14 blocks
 days. **Surfaced for human decision: run d14 (free, slow), rent for d14 (paid), or accept the
 HOLD-on-interval-evidence rationale above and proceed to P5.** T2/T3 not evaluated (P5 and
 F8/F10 respectively, both downstream).
+
+**Amendment 2026-08-03 (T2 re-anchored).** T2 as written in E2E §S3(g) references "the S3-fit
+prediction", which does not exist post-T1 (the fit was rejected). T2's anchor is re-based on the
+measured d12 ray — s7: d12@r8 bpb 0.9402 (batch-4 caveat noted) — extended within-ray to ratio 20:
+**P5 expected band 0.89–0.92 bpb** (indicative, fitted-interval estimate, not an extrapolation).
+T2 fires if |P5 measured − band| > 0.01 bpb (or CORE oracle-divergence > 0.02) ⇒ d16.
+
+## S3.5 · Calibration re-fit — pre-registration (2026-08-03, per `FRONTIER_2026_SCALING_PROGRAM.md`)
+
+**Why.** T1 fired: the S3 grid cannot produce a law (§S3 above). The K3 front has a hard
+dependency on a certified calibration law (the family fit is the attention-architecture
+decision). This re-fit is the redesigned second — and final — attempt; if its gates fail,
+the d20 D:N decision stays HOLD-by-economics permanently.
+
+**Preconditions (stage 0–1 of the program doc).** P5 locks recipe-v1 (LR*/wd*) first. If LR*
+moves outside ×[0.7, 1.4] of the S3 recipe LR, s2+s5 are re-run at recipe-v1 before the fit.
+The matched-batch d12@r8 rerun (batch 8, ~4 GPU-h — registered above) runs in the same stage.
+**Recipe-surface parity check before anything trains** (tokenizer, untied, qk_norm, schedule,
+mtp_depth — see the open decision below).
+
+**Points (recipe-v1, full production schedule shape per point, pinned val set, logged batch
+per the S3 batch-consistency precedent — largest that fits, LR held fixed):**
+
+| point | N | D | C | role |
+|---|---|---|---|---|
+| d12-r20 (= ladder s8, re-homed from P5) | 135.29M | 2.706B | 2.20e18 | completes the d12 ray |
+| d14-r8 | ~193.6M | 1.549B | 1.80e18 | new depth, leverage toward d20 |
+| d14-r20 (optional, if box time allows) | ~193.6M | 3.872B | 4.50e18 | span extends to ~235× |
+
+Plus s1–s7 (recipe-v0, flagged per the stage-1 verdict) and the P5 d12@r8 confirmation point
+(recipe-v1) ⇒ 9–10 points vs 5 fit parameters.
+
+**Estimator (fixed in advance).** Joint parametric `L(N,D) = E + A·N^(−α) + B·D^(−β)`;
+Huber loss (δ = 1e-3) on **log-space residuals, summed not averaged**; L-BFGS-B from a grid
+of initializations (Besiroglu corrections). D is the recorded token count, never the C/(6N)
+bridge; a+b reported as a diagnostic, not enforced.
+
+**Acceptance gates (ALL four required; they replace the bare R² gate):**
+1. R² ≥ 0.98 (necessary, not sufficient);
+2. bootstrap (≥1000 resamples over runs) 90% prediction-interval half-width at C = 2.77e19
+   **≤ 0.02 bpb**;
+3. leave-one-out swing of ratio@(2.77e19) **≤ 2×** (S3 today: 2.9×);
+4. no structured residual trend vs depth (the S3 zigzag signature).
+
+**Outcomes.** Pass ⇒ D:N at the d20's C quoted *with its interval* (measured answer replacing
+HOLD-by-economics, or HOLD confirmed inside the interval — both are wins) and the d20 run
+becomes the law's pre-registered holdout test (measured bpb must land inside the PI).
+Fail ⇒ report; D:N stays HOLD-by-economics; **no third attempt**.
+
+**Decision of record (2026-08-03, operator-delegated): option (a) — the d20 runs
+mtp_depth = 0.** The d20 spec said "MTP head baked into pretrain (F2a)", but the speedrun
+spine never sets `mtp_depth` (default 0 — S3 ran without it), and every certified constant
+(480.4M / 2.77e19 / 18,311 steps / the 0.89–0.92 T2 band) assumes mtp_depth=0. Enabling it
+would add ≈ +14·d² params (d20: ≈ +22.9M ⇒ N ≈ 503M), shifting C, step-time, cost, and the
+anchor band days before a paid run; F2a's measured falsifier was neutral (+0.0027 nats), so
+no training gain is forgone. Option (b) (enable + re-derive N/C/cost/band before P5) was
+rejected: the d20's value is comparability with the anchor chain, and (a) is the reversible
+choice. F2a/F2b retarget to a post-d20 run.
 
 ## S4-pre · d20 CORE band re-anchor (2026-08-02 — pre-P5, per E2E §S4(e) + §F12 consequence 2)
 
@@ -253,9 +328,16 @@ materially above that fit. E2E §S4(e) therefore requires re-anchoring before P5
 - (B) *Curve step:* take the current ClimbMix curve at 4e19 (0.257–0.269) and step down to
   2.77e19 using the fit's own slope (Δ = −0.008 over 0.69× C — the curve is flat here) =
   **0.247–0.259**.
+- *(Amendment 2026-08-03: the "two methods, identical result" agreement is overstated — (A) and
+  (B) are algebraically the same computation, so this is NOT independent corroboration. Arithmetic
+  slip noted in (B): the fit's own slope gives fit(4e19) ≈ 0.204 and fit(2.77e19) ≈ 0.194, i.e.
+  Δ ≈ −0.010, not −0.008 — which would give 0.249–0.261. The headline band 0.23–0.25 stands on
+  method (A) plus the −0.01..−0.02 recipe discount — itself unverified until P5 measures it.)*
 - **Recipe discount (ours vs their leaderboard stack):** we train ratio-20 (deliberate
   overtrain vs their optimal ≈8–10.5), bf16 not FP8, first-run recipe maturity; and our own
-  F12 measured ClimbMix *worse* than FWE at 35M (single-seed, below noise, but no evidence we
+  F12 measured ClimbMix *worse* than FWE at 35M (single-seed, scale-limited — decisive for the
+  sign at that scale, silent about d20 scale; no bpb seed-noise floor exists in the program — the
+  pending S3-noise measurement is pre-registered in §F12; and no evidence we
   yet reproduce nanochat's ClimbMix edge). Discount **−0.01..−0.02**.
 
 **Re-anchored band (supersedes 0.19–0.22): CORE 0.23–0.25, central ≈ 0.24.**

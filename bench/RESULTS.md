@@ -606,7 +606,10 @@ B200 (`B200_day_runbook.md`).
 The EV-ranked, pre-registered, iso-FLOP ablation study on a **real trained** nanochat-grade base.
 Predict-before-run (FOP-2/3): each rung's falsifiable number + kill criterion is registered here
 *before* the run; `[FACT]` only once the measured column is filled. Node pointer: **F12 DONE (decision FINAL 2026-08-02: ClimbMix, by operator
-override) → S3 (RUNNING on pod: s1–s4 banked, s5 in flight) → fit-gate → P5**
+override) → S3 ✅ DONE 2026-08-02 (s1–s7, 12.09 GPU-h; R² gate tripped ⇒ fit rejected, T1 fired; D:N HOLD ratio-20/9.6B) → human decision: T1/d14 escalation → P5**
+*(historicized 2026-08-03: this pointer previously read "S3 (RUNNING on pod: s1–s4 banked, s5 in
+flight)" — that was the state at that date; the final results are in the "Measured — S3 scaling-law
+sweep s1–s7" section below)*
 (harnesses shipped 2026-07-31, see "Built — F12 + S3" below).
 
 ### Pre-registration — F1 MuonAdamW (2026-07-04, PENDING)
@@ -696,7 +699,10 @@ serving API; **measured falsifier waits for the F1-trained ckpt** — prose <10%
 attention-mass recall **0.9915** vs random-init **0.2999**, margin 0.69 — the test has teeth) ·
 F9 QK-clip (observer `last_max_logits`/`max_logits_running` per head + `apply_qk_clip`
 √(τ/S_max); GQA case: full factor on W_q only, siblings untouched; **the F1 GPU run MUST set
-`track_attn_logits=True` — F9's falsifier (S_max<30 under qk_norm, γ≡1) rides that run**) ·
+`track_attn_logits=True` — F9's falsifier (S_max<30 under qk_norm, γ≡1) rides that run**;
+*(Amendment 2026-08-03: the F1 run was killed at step 4,880 before any S_max was recorded and no
+later run carried `track_attn_logits` — **the S_max falsifier is PENDING, never observed**; it must
+ride the next instrumented run, P5 or later)*) ·
 F10.1 Gated-DeltaNet (CPU-measured: chunkwise==recurrent==float64-ref ≤1e-5 incl. ragged tail +
 chunk-size independence; state **1024×** smaller than GQA-8 KV @ T=4096 bf16 — 2 KB vs 2 MB).
 
@@ -852,7 +858,7 @@ Total 12.09 GPU-h. Batch: s1–s6 batch 8, s7 batch 4 (pre-registered consistenc
 | quantity | pre-registered | measured | verdict |
 |---|---|---|---|
 | a+b | ∈ [0.95, 1.05] | 1.0000 (a=0.4515, b=0.5485) | pass, near-vacuous (C=6ND identity) |
-| log-log R² | ≥ 0.98 | R²_N 0.7709 / R²_D 0.8324 | **FAIL — gate raised, T1 fired; no extrapolation quoted** |
+| log-log R² | ≥ 0.98 | R²_N 0.7709 / R²_D 0.8324 | **FAIL — gate tripped (< 0.98 ⇒ fit rejected), T1 fired; no extrapolation quoted** |
 | compute-optimal D:N @ d20 | decision rule only | 26.94 on failed fit / 78.24 w/o-s7 — unusable | **HOLD ratio-20 (9.6B)** on fitted-interval evidence + inference-aware registration |
 | nanochat CORE oracle @ 2.77e19 | ≈ 0.195 | 0.1949 | pass (overlay, fit-independent) |
 
@@ -860,8 +866,11 @@ Total 12.09 GPU-h. Batch: s1–s6 batch 8, s7 batch 4 (pre-registered consistenc
 (0.16→0.40→0.80→0.47→1.19→2.37→1.08B), so no power law fits by construction. Not a recipe bug:
 bpb descends monotonically on every ray; s7 lands below the d8-ray extrapolation (0.9402 vs
 ≈0.9487), no batch-attributable excess. **Interval evidence:** s6-vs-s7 iso-FLOP (1.043×) favors
-the bigger model at ratio 8 by −0.0096 bpb ⇒ training-optimal D:N at ~9e17 is ≤ 8 and drifting
-down; d20's ratio-20 stands as a *deliberate inference-aware overtrain* (Sardana 2401.00448),
+the bigger model at ratio 8 by −0.0096 bpb ⇒ training-optimal D:N at ~9e17 is ≤ 8 ~~and drifting
+down~~ *(Amendment 2026-08-03: indicative, possibly batch-confounded — s7 ran batch 4 vs s6's batch
+8 at fixed LR and the pre-registered validity check was one-sided; "drifting down" struck as
+unsupported by a single pair; matched-batch rerun pre-registered: d12@r8 at batch 8, ~4 GPU-h,
+before P5)*; d20's ratio-20 stands as a *deliberate inference-aware overtrain* (Sardana 2401.00448),
 honestly uncertified by this ladder. **T1 (d14 escalation) formally fired** — surfaced for human
 decision (free-but-slow vs paid vs accept-and-proceed-to-P5); no paid work without go-ahead.
 Full writeup: `docs/RESULTS.md` §S3. Figures: `artifacts/s3_scaling_sweep/figs/fig1–fig4`.
@@ -1142,16 +1151,18 @@ from `model_config_for_depth`, per-budget min-pick + log-log fit via the existin
 `scaling/isoflop.py`, gates a+b ∈ [0.95,1.05] and R² ≥ 0.98, D:N decision rule (< 15 ⇒ re-register
 the d20's 9.6B), nanochat oracle overlay (d20-miniseries / leaderboard / GPT-2 XL / CORE-fit
 ⇒ ≈0.195 at our C). Pre-registration: `docs/RESULTS.md` §S3. Tests: `tests/test_s3_scaling_sweep.py`.
-**Sweep: RUNNING 2026-07-31 (standing RTX 5090 → pod; tmux session `s3`, ~2–3 GPU-days; s1–s4
-banked, s5 in flight as of 2026-08-02).** Operator
-override: runs on **ClimbMix** (not the F12-winning FineWeb-EDU); per the 2026-08-02 pre-registered
+**Sweep: DONE 2026-08-02 (s1–s7, 12.09 GPU-h — final measured results in "Measured — S3
+scaling-law sweep s1–s7" above; the state before completion was: s1–s4 banked, s5 in flight as of
+2026-08-02).** Operator
+override: runs on **ClimbMix** (not the F12-measurement winner FineWeb-EDU); per the 2026-08-02 pre-registered
 batch-consistency decision (`docs/RESULTS.md` §S3): **s7/s8 run at batch 4 (fallback 2) with LR held
 fixed** — no mid-grid LR rescale; `scaling/s3_sweep.py` grid planner fixed to include `qk_norm=True` params so planned N
 matches the trained model. d14/d16 mid-scale escalation is trigger-gated (T1/T2/T3), policy of record
 in `docs/FRONTIER_2026_END_TO_END_PLAN.md` §S3(g).
 
 **Order correction (2026-07-31):** F12 runs **before** S3 — the scaling-law constants are
-corpus-dependent, so the fit must use the F12-winning corpus, not a borrowed one.
+corpus-dependent, so the fit must use the operator-selected corpus (ClimbMix — the F12 measurement
+favored FWE; override FINAL 2026-08-02), not a borrowed one.
 
 ---
 

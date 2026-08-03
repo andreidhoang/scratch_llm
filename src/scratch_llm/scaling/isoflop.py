@@ -54,6 +54,64 @@ def isoflop_min(runs: Sequence[Mapping[str, float]]) -> list[tuple[float, float]
     return [(c, by_budget[c]["parameters"]) for c in sorted(by_budget)]
 
 
+@dataclass(frozen=True)
+class SmoothPick:
+    """One budget's quadratic min-pick: the interpolated vertex N, or the nearer endpoint's
+    argmin (``clamped=True``) when the vertex falls outside the sampled log-N range."""
+
+    budget: float
+    n_opt: float
+    clamped: bool
+
+
+def isoflop_min_smooth(runs: Sequence[Mapping[str, float]]) -> list[SmoothPick]:
+    """Chinchilla Approach-2 min-pick: per budget, fit a quadratic in log N to (log N, loss)
+    and take the interpolated vertex's N as N_opt — the IsoFLOP minimum usually sits BETWEEN
+    sampled sizes, and the raw argmin (``isoflop_min``) quantizes it to the nearest sample.
+
+    Replicate runs at the same N (e.g. multiple seeds) are collapsed to their mean loss before
+    the fit — averaging on the loss axis, never picking a lucky seed. Two fallbacks, both by
+    construction not extrapolations: a budget with <3 distinct N degrades to the raw argmin
+    (``clamped=False``, the documented small-sample behavior), and a vertex outside the sampled
+    log-N range (or a non-convex fit, whose "vertex" is a maximum) clamps to the nearer
+    endpoint's argmin with ``clamped=True`` so the fitter can flag it.
+    """
+    by_budget: dict[float, list[Mapping[str, float]]] = {}
+    for run in runs:
+        by_budget.setdefault(run["compute_budget"], []).append(run)
+
+    picks: list[SmoothPick] = []
+    for budget in sorted(by_budget):
+        losses_by_n: dict[float, list[float]] = {}
+        for run in by_budget[budget]:
+            losses_by_n.setdefault(run["parameters"], []).append(run["final_loss"])
+        ns = sorted(losses_by_n)
+        mean_loss = {n: float(np.mean(losses_by_n[n])) for n in ns}
+
+        if len(ns) < 3:  # too few sizes to fit a quadratic — raw argmin fallback
+            picks.append(SmoothPick(budget, min(ns, key=lambda n: mean_loss[n]), clamped=False))
+            continue
+
+        log_n = np.log(np.asarray(ns, dtype=np.float64))
+        losses = np.asarray([mean_loss[n] for n in ns], dtype=np.float64)
+        a2, a1, _ = np.polyfit(log_n, losses, 2)
+        # loss = a2·x² + a1·x + a0 in x = log N ⇒ vertex at x* = −a1/(2·a2); a2 ≤ 0 is a
+        # maximum (or degenerate line), never a usable minimum.
+        x_vertex = -a1 / (2.0 * a2) if a2 > 0 else None
+        if x_vertex is not None and log_n[0] <= x_vertex <= log_n[-1]:
+            picks.append(SmoothPick(budget, float(np.exp(x_vertex)), clamped=False))
+            continue
+        # Out-of-range (or non-convex) vertex: clamp to the nearer endpoint's argmin and flag.
+        if x_vertex is None:
+            endpoint = ns[0] if mean_loss[ns[0]] <= mean_loss[ns[-1]] else ns[-1]
+        elif x_vertex < log_n[0]:
+            endpoint = ns[0]
+        else:
+            endpoint = ns[-1]
+        picks.append(SmoothPick(budget, endpoint, clamped=True))
+    return picks
+
+
 def fit_powerlaw(xs: Sequence[float], ys: Sequence[float]) -> PowerLaw:
     """Fit ``y = coeff · x^exponent`` by linear regression on ``(log x, log y)``.
 

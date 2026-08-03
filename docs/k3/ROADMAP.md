@@ -188,13 +188,16 @@ The deepest rung. Incremental from `linear_attn.py`:
 - Train via the `speedrun.py` spine on real shards (ClimbMix — F12 decision FINAL 2026-08-02,
   operator override),
   iso-FLOP arms: **mini-K3 vs our d-series dense baseline vs (optional) GDN-hybrid** — this
-  *absorbs* ablations F5/F6/F10 into one artifact.
+  *absorbs* ablations F5/F6/F10 into one artifact. Fidelity bound on that absorption: mini-K3's
+  active fraction is 38.4% (142.1M/370.3M) vs K3's 3.75% (104.19B/2779.93B), and expert
+  inter/latent is 192/512 = 0.375 vs 3072/3584 = 0.857 — sparsity-axis conclusions transfer
+  only qualitatively.
 - **Gates:** overfit-one-batch < 1e-2; loss-at-init ≈ log V; val_bpb parity-vs-baseline at
   iso-FLOP pre-registered in `docs/RESULTS.md §K3` **before** the run; report card generated.
 - ~2 weeks + 1–2 rental days ($10–100 tier, reuses P5/d20 runbooks).
 
-**Mini-K3 reference config (d12, ~0.3–0.4B total / ~0.15B active — exact numbers fall out of K0's
-`param_count.py`):**
+**Mini-K3 reference config (d12, 370,303,424 total / 142,107,072 active — exact, gate-pinned by
+`tests/test_k3_param_count.py` via K0's `param_count.py`):**
 
 | Field | mini-K3 | K3 (record) | Ratio kept |
 |---|---|---|---|
@@ -260,7 +263,7 @@ The deepest rung. Incremental from `linear_attn.py`:
 | Distributed training: EP (MoonEP), KDA context parallelism, PP/ZeRO | A2/A6 (`fsdp.py`, `ep_moe.py`) + reading |
 | Post-training: SFT → RL with QAT active throughout | A5 (`algos/`, GRPO) + K7 QAT scope |
 | MTP/EAGLE-3 draft as a buildable artifact | K10.1 (`mtp.py` F2a base) |
-| Scaling-law gate before any real training spend | S3 sweep (running, s1–s4 banked) + Chinchilla fitter |
+| Scaling-law gate before any real training spend | S3 sweep DONE (s1–s7, 2026-08-02): R² gate tripped (0.7709/0.8324 < 0.98, T1 fired), d20 D:N HOLD ratio-20; fit-gate before P5 |
 
 ## 5. Budget & risk
 

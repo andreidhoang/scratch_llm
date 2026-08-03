@@ -38,8 +38,9 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > **✅ F12 (ClimbMix-400B vs FineWeb-EDU corpus ablation) — MEASURED 2026-07-31, decision FINAL 2026-08-02: ClimbMix for S3/d20.**
 > 35M / 700M tok / iso-FLOP, tokenizer retrained per corpus: ClimbMix measured **+0.110 bpb worse**
 > than FineWeb-EDU (falsifier fired; kill criterion triggered) — but the operator overrode the kill
-> line and chose ClimbMix, following nanochat's larger-scale result; the d20 run itself becomes the
-> corpus arbiter. Full record: `docs/RESULTS.md` §F12.
+> line and chose ClimbMix, following nanochat's larger-scale result (the d20 trains on ClimbMix only
+> — confirmation arm declined — so it validates the recipe against the re-anchored band; it cannot
+> arbitrate the corpus choice). Full record: `docs/RESULTS.md` §F12.
 >
 > **✅ THE LOOP CLOSES (2026-07-04):** F1 Muon · train-wiring/F4 (bf16/compile + NaN guard) · eval
 > report card (`val_bpb`/MC/generative/CORE-style) · `speedrun.py` + `scripts/speedrun.sh` spine all
@@ -52,10 +53,12 @@ Green-CI baseline: `ruff check` + `ruff format --check` + `pyright` + `pytest -m
 > ✅ 2026-07-13** — `algos/chat_sft.py` (assistant-masked SFT reusing `sft.py` unedited) +
 > `chat_cli.py` (`ChatSession`/`batch_reply` over the public serving path) + speedrun `stage_sft`
 > and chat preview; **the loop now TALKS through the chat template** (overfit-one-chat-batch →
-> greedy reply reproduces the trained answer and stops at `<|eot|>`). **▶ NEXT NODE → S3 scaling
-> sweep fit-gate (sweep RUNNING on the RTX 5090 pod 2026-08-02, s1–s4 banked; driver ✅:
-> `scaling/s3_sweep.py` + `scripts/s3_scaling_sweep.py` plan/run/fit; pre-registered `RESULTS.md`
-> §S3) → P5 d12 dress rehearsal ($10–15) → 8×H100 d20 (~$100, gated)**. d14/d16 escalation is trigger-gated per E2E
+> greedy reply reproduces the trained answer and stops at `<|eot|>`). **▶ NEXT NODE → human decision:
+> T1/d14 escalation (free-slow vs paid vs proceed-to-P5)** — S3 scaling sweep s1–s7 ✅ DONE
+> 2026-08-02 (12.09 GPU-h, ClimbMix, RTX 5090 pod; bpb 1.2553→0.9402; R² gate tripped
+> 0.7709/0.8324 < 0.98 → no extrapolation quoted; D:N HOLD ratio-20/9.6B on fitted-interval
+> evidence; driver ✅: `scaling/s3_sweep.py` + `scripts/s3_scaling_sweep.py` plan/run/fit; measured
+> `RESULTS.md` §S3) → P5 d12 dress rehearsal ($10–15) → 8×H100 d20 (~$100, gated)**. d14/d16 escalation is trigger-gated per E2E
 > §S3(g) (T1 fit failure / T2 P5-anchor divergence / T3 science promotion). F1-run DESCOPED 07-17 (Muon+AdamW adopted,
 > commit `f9e8f3b`); F2a MTP ✅ `3b89119` · F6 harness ✅ `98f62e3` (smoke-validated only —
 > `RESULTS.md` §F6) · A7 ZeRO-2 ✅ · launcher ✅ 07-28. **The buildable next-phase DAG (26
@@ -138,7 +141,7 @@ BUILD ▸ A1 ─► A2 ─► A3 ─► A4 ─► A5 ─► DELTA      SHIP ▸ 
  A5 Alignment   ████████████ 100%  ✅  SFT·EI·GRPO/Dr.GRPO·DPO + grader + envs ✅ (W8); graded runs rental-gated
  DELTA capstone  design ✅      0%  ⬜  GDN-2 decode kernel — K10.2 re-aims it at KDA (GDN-2 = port base)
 
- ►► FOUR ACTIVE FRONTS: frontier/nanochat (S3 sweep RUNNING on pod → P5 dress rehearsal → d20) · K3
+ ►► FOUR ACTIVE FRONTS: frontier/nanochat (S3 sweep ✅ DONE 2026-08-02 — T1/d14 human decision → P5 dress rehearsal → d20) · K3
  hand-build K0–K10 (K2 KDA = critical path) · perf rental days (H100/B200 ISA + 8×H200 serving — code
  done, hardware-gated) · learning track (K3 core/ order = primary mastery queue).
 ```

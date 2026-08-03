@@ -218,14 +218,14 @@ manifold, not the base exponents.
 
 ## §4 — The post-S3 rung DAG
 
-- **Rung 0 — S3 fit (in progress).** s1 done (val_bpb 1.2553, C = 1.92e16); s2–s7 running
-  sequentially on the standing box (tmux `s3`). On completion:
-  `uv run python scripts/s3_scaling_sweep.py fit --out-dir artifacts/s3_scaling_sweep` →
-  `fit.json` / `fit.md`; gates a+b ∈ [0.95, 1.05] and R² ≥ 0.98 fire loudly; the D:N rule
-  decides whether the d20's 9.6B-token registration stands; the nanochat CORE-fit oracle at
-  the d20's C (≈0.195) cross-checks the 0.19–0.22 band *(superseded 2026-08-02: band re-anchored
-  to 0.23–0.25 vs the current ClimbMix curve — `docs/RESULTS.md` §S4-pre)*. Results → `docs/RESULTS.md` §S3 +
-  `bench/RESULTS.md`.
+- **Rung 0 — S3 fit (DONE 2026-08-02, gate fired).** s1–s7 landed (bpb 1.2553 → 0.9402,
+  12.09 GPU-h); the pre-registered R² gate **tripped** (0.7709/0.8324 < 0.98 ⇒ fit rejected,
+  T1 fired; grid-geometry D-zigzag, not a recipe bug). No extrapolation quoted; D:N HOLD
+  ratio-20 on fitted-interval evidence; the nanochat CORE-fit oracle cross-checks the
+  re-anchored 0.23–0.25 band (`docs/RESULTS.md` §S4-pre). The redesigned re-fit is **S3.5** —
+  gates pre-registered in `docs/RESULTS.md` §S3.5, program of record
+  `FRONTIER_2026_SCALING_PROGRAM.md` §3 (joint Huber estimator + bootstrap/LOO gates replacing
+  the bare R² gate). Results → `docs/RESULTS.md` §S3 + `bench/RESULTS.md`.
 - **Rung 1 — Anchor protocol (spec for every architecture variant).**
   1. Matched N (same depth knob), matched D (ratio 20), matched seed, same
      corpus/tokenizer/optimizer/precision as the S3 reference points.
@@ -243,8 +243,10 @@ manifold, not the base exponents.
   per E2E §S3(g), never a scheduled spend). Small-scale rankings can flip; the d14 is the
   flip detector.
 - **Rung 3 — MoE joint mini-fit (conditional).** Only if F6's mechanism gates pass (§3.4).
-- **Rung 4 — P5 → d20.** P5 d12 dress rehearsal ($10–15, rental, human go-ahead) validates
-  the recipe on sm90 + the single Muon LR + CORE-vs-public-checkpoint + kill/resume drill.
+- **Rung 4 — P5 → d20.** P5 d12 dress rehearsal ($10–15, cap $20, rental, human go-ahead) per
+  the pinned protocol of record (`FRONTIER_2026_D20_CERTAINTY_PLAN.md` §6, revised 2026-08-03:
+  LR sweep + ratio-8 confirmation vs the 0.89–0.92 bpb band + 3-point d8 width probe + sm90
+  compile re-validation + kill/resume drill + step-time).
   Then the 8×H100 d20 ($100 cap). **Architecture freeze = before P5** (status board:
   "Attention: Full GQA/MHA (frozen at P5)"). The freeze re-opens only for a T3-confirmed d14
   win whose serving-cost argument survives the re-anchored CORE band. Nothing else re-opens

@@ -161,7 +161,9 @@ falsifiable experiment; the discipline *is* the hireable skill.
 commit `f9e8f3b`; the iso-FLOP race harness stays for F12). **F12 DONE 2026-07-31** — kill fired
 (ClimbMix bpb 1.30205 ≥ FineWeb-EDU 1.19197 at iso-FLOP, Δ=+0.1101); **operator OVERRIDE → ClimbMix
 anyway** (nanochat's larger-scale result), decision FINAL 2026-08-02 (`docs/RESULTS.md` §F12). Next:
-**S3 scaling sweep RUNNING on the RTX 5090 pod (s1–s4 banked, s5 in flight, ClimbMix) → fit-gate →
+**S3 scaling sweep s1–s7 ✅ DONE 2026-08-02 (12.09 GPU-h, ClimbMix) — R² gate tripped
+(0.7709/0.8324 < 0.98 ⇒ fit rejected, no extrapolation quoted), T1 fired, D:N HOLD ratio-20/9.6B on
+fitted-interval evidence → human decision: T1/d14 escalation (free-slow vs paid vs proceed-to-P5) →
 P5 d12 dress rehearsal ($10–15) → 8×H100 d20 (gated)** per
 `FRONTIER_2026_END_TO_END_PLAN.md` and the taskspec Next-node marker; Tier-1 science (F8 / F10.2 /
 F7-reframed / F11) follows on the standing box. Advance the pointer as rungs ship.
@@ -433,7 +435,9 @@ minimize · 🆕 MISSING (add).
   FineWeb-EDU 1.19197; CORE 0.0551 vs 0.0510). The pre-registered falsifier was **NOT confirmed** and
   the kill criterion **fired** — the measurement-only verdict was KEEP FineWeb-EDU. **Operator
   OVERRIDE (2026-07-31, FINAL 2026-08-02):** ClimbMix staged for S3/d20 anyway, following nanochat's
-  larger-scale head-to-head; the d20 run itself becomes the corpus arbiter at our scale. Full record:
+  larger-scale head-to-head; ~~the d20 run itself becomes the corpus arbiter at our scale~~ *(struck
+  2026-08-03: the d20 trains on ClimbMix only — confirmation arm declined — so it cannot arbitrate
+  the corpus choice; it validates the recipe against the re-anchored band)*. Full record:
   `docs/RESULTS.md` §F12 (lines 100-131).
 - *DoD.* A reproducible corpus-ablation harness: shard builders for FineWeb-EDU (existing `data/shards.py`)
   and ClimbMix-400B (new staging path); per-corpus BPE trained via `scripts/tok_train.py`; iso-FLOP

@@ -18,10 +18,10 @@ Retyping is the mechanism, not overhead.
 | Module | Mechanism (why it's silent-bug-prone) | Mastery bar | Status |
 |---|---|---|---|
 | `situ.py` | SiTU-GLU softcaps β1=4 / β2=25 — bf16 saturation → activation outliers | delete-test + bound proof \|f\| ≤ 100 | ⬜ NOT STARTED |
-| `kda.py` | delta rule + per-channel Diag(α) + scaled-sigmoid g_min=−5 — wrong decay floor still trains, forgets badly at long context | delete-test + chunkwise≡recurrent≡f64 + FLA parity explained | ⬜ NOT STARTED |
-| `gated_mla.py` | weight-absorption identity + NoPE — wrong fold looks correct, wastes cache | delete-test + absorbed≡naive proof | ⬜ NOT STARTED |
+| `kda.py` | delta rule + per-channel Diag(α) + scaled-sigmoid g_min=−5 — wrong decay floor still trains, forgets badly at long context; A_log semantics trap: the real checkpoint carries [128] per-dim decay tensors in every KDA layer and the released code's per-head framing does not explain them (FACTS A18) | delete-test + chunkwise≡recurrent≡f64 + FLA parity explained + loads the real checkpoint's [128] A_log with verified semantics (pre-flight: resolve the released-code mapping) | ⬜ NOT STARTED |
+| `gated_mla.py` | weight-absorption identity + NoPE — wrong fold looks correct, wastes cache; gate placement: the sigmoid gate is taken pre-W_o from the layer input x_t — moving it post-W_o still trains, silently (K2_PROPOSAL_KDA §3; K3 report Eqs. 6–7) | delete-test + absorbed≡naive proof + gate-source probe (gate must read x_t, pre-W_o) | ⬜ NOT STARTED |
 | `latent_moe.py` | sigmoid router + Quantile Balancing — wrong bias sign/delay → slow expert collapse | delete-test + load convergence q=mk/n | ⬜ NOT STARTED |
-| `attn_res.py` | learned pseudo-queries + online-softmax merge — drift between block/full forms | delete-test + block≡full equivalence | ⬜ NOT STARTED |
+| `attn_res.py` | learned pseudo-queries + online-softmax merge — merge bookkeeping (running max/normalizer) wrong but still trains; a wrong source list is silent: FACTS A19(a) measured single-source pseudo-queries receiving zero gradient and decaying to ~0 (drop the embedding source and nothing complains) — block≡full catches neither | delete-test + block≡full equivalence + merge-bookkeeping probe + pseudo-query gradient-flow probe | ⬜ NOT STARTED |
 
 **Delete test:** the human can `rm` the file and rewrite it from its own derivation docstring
 (repo convention: intent + invariant + interview question, like `linear_attn.py`). Only then

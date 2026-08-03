@@ -13,18 +13,23 @@ import json
 import math
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from scratch_llm.model import TransformerLM
+from scratch_llm.scaling.isoflop import isoflop_min
 from scratch_llm.scaling.s3_sweep import (
     CONTEXT_LENGTH,
     D20_COMPUTE_FLOPS,
     GRID_SPEC,
+    GRID_SPEC_V2,
     VOCAB_SIZE,
     SweepRecord,
     append_result,
+    average_seed_replicates,
     build_grid,
+    build_grid_v2,
     fit_scaling_law,
     load_results,
     nanochat_core_fit,
@@ -36,19 +41,31 @@ from scratch_llm.speedrun import model_config_for_depth
 
 # Measured once by instantiation (vocab 32768, ctx 2048, untied embeddings, qk_norm=True),
 # then frozen. qk_norm adds per-layer parameters that the real GPU training path enables.
-EXPECTED_N = {4: 19_991_808, 8: 59_255_296, 12: 135_288_576}
+# Depths 6/14/16 are the v2 grid's additions — model_config_for_depth is generic over depth
+# (d_model = 64·depth, head_dim 128), no registry extension needed.
+EXPECTED_N = {
+    4: 19_991_808,
+    6: 35_789_184,
+    8: 59_255_296,
+    12: 135_288_576,
+    14: 195_228_544,
+    16: 269_521_920,
+}
 
 
 def _record(
     point: str,
     depth: int,
     n_params: int,
-    ratio: int,
+    ratio: float,
     tokens: int,
     compute: float,
     val_bpb: float,
+    *,
+    seed: int = 0,
+    target_compute: float | None = None,
 ) -> SweepRecord:
-    return SweepRecord(
+    rec = SweepRecord(
         point=point,
         depth=depth,
         n_params=n_params,
@@ -58,7 +75,11 @@ def _record(
         val_loss=2.0,  # nats/token — carried in the record, not the fit axis
         val_bpb=val_bpb,
         wall_s=60.0,
+        seed=seed,
     )
+    if target_compute is not None:
+        rec["target_compute"] = target_compute
+    return rec
 
 
 def _planted_isoflop_records(
@@ -137,7 +158,8 @@ def test_results_json_round_trip(tmp_path: Path) -> None:
     append_result(path, rec2)
     loaded = load_results(path)
     assert loaded == [rec1, rec2]
-    # The on-disk schema is the spec'd record shape.
+    # The on-disk schema is the spec'd record shape (seed included — dual-seed fits average
+    # replicates of one (point, budget) on the bpb axis before min-picking).
     row = json.loads(path.read_text())[0]
     assert set(row) == {
         "point",
@@ -149,6 +171,7 @@ def test_results_json_round_trip(tmp_path: Path) -> None:
         "val_loss",
         "val_bpb",
         "wall_s",
+        "seed",
     }
 
 
@@ -227,3 +250,179 @@ def test_oracle_overlay_and_fit_outputs(tmp_path: Path) -> None:
     md = md_path.read_text()
     assert "RE-REGISTER" in md  # the planted ratio-8 law trips the <15 decision rule
     assert "0.1708" in md and "0.2626" in md and "0.718" in md and "0.256525" in md
+
+
+# -----------------------------------------------------------------------------------------------
+# v2 amendment: exact-C budget planner, depths 6/14/16, quadratic min-pick, dual-seed averaging.
+# -----------------------------------------------------------------------------------------------
+
+
+def test_v2_depths_instantiate_near_policy_counts() -> None:
+    """Depths 6/14/16 — the v2 grid's additions — instantiate through the generic
+    ``model_config_for_depth`` (d_model = 64·depth, head_dim 128; no registry extension).
+    Counts are frozen from instantiation and within ±5% of the policy table's d14 ≈ 193.6M /
+    d16 ≈ 268.4M."""
+    for depth in (6, 14, 16):
+        cfg = model_config_for_depth(depth, VOCAB_SIZE, CONTEXT_LENGTH)
+        assert cfg.d_model == 64 * depth and cfg.n_layers == depth
+        cfg = replace(cfg, qk_norm=True, use_sdpa=True)
+        n = sum(p.numel() for p in TransformerLM(cfg).parameters())
+        assert n == EXPECTED_N[depth]
+    assert EXPECTED_N[14] == pytest.approx(193.6e6, rel=0.05)
+    assert EXPECTED_N[16] == pytest.approx(268.4e6, rel=0.05)
+
+
+def test_build_grid_v2_exact_c_planner() -> None:
+    batch = 32
+    grid = build_grid_v2(batch_size=batch)
+    # Every budget has exactly its three planned sizes, systematically named b<budget>_d<depth>.
+    assert (
+        [g.point for g in grid]
+        == [f"b{i}_d{d}" for i, (_, depths) in enumerate(GRID_SPEC_V2, start=1) for d in depths]
+        == [
+            "b1_d4",
+            "b1_d6",
+            "b1_d8",
+            "b2_d6",
+            "b2_d8",
+            "b2_d12",
+            "b3_d8",
+            "b3_d12",
+            "b3_d14",
+            "b4_d8",
+            "b4_d12",
+            "b4_d14",
+            "b5_d12",
+            "b5_d14",
+            "b5_d16",
+        ]
+    )  # regression lock on the spec'd budget × size assignment
+    flat_spec = [(c, d) for c, depths in GRID_SPEC_V2 for d in depths]
+    for (target_c, depth), g in zip(flat_spec, grid, strict=True):
+        assert g.depth == depth and g.target_compute == target_c
+        assert g.n_params == EXPECTED_N[depth]  # exact instantiated N, never table values
+        # D is a whole number of optimizer steps (batch × ctx tokens each), nearest-step
+        # rounding of the ideal D = C_target/(6N).
+        assert g.tokens == g.steps * batch * CONTEXT_LENGTH
+        assert g.steps == max(1, round(target_c / (6.0 * g.n_params) / (batch * CONTEXT_LENGTH)))
+        # The effective C is RECOMPUTED from the rounded D — exactly self-consistent...
+        assert g.compute == 6.0 * g.n_params * g.tokens
+        # ...and coincides with the target within one step's worth of FLOPs (nearest-step
+        # rounding actually keeps it within half a step; the gate is the full step).
+        assert abs(g.compute - target_c) <= 6.0 * g.n_params * batch * CONTEXT_LENGTH
+        # The plan-frozen steps are what the run path must use; another batch re-plans.
+        assert g.planned_steps(batch, CONTEXT_LENGTH) == g.steps
+        with pytest.raises(ValueError, match="planned for batch"):
+            g.planned_steps(2 * batch, CONTEXT_LENGTH)
+    # Cross-size coincidence within a budget: the per-size effective C's spread is under one
+    # step's worth of the largest size's C.
+    for target_c, _ in GRID_SPEC_V2:
+        at_budget = [g for g in grid if g.target_compute == target_c]
+        assert len(at_budget) == 3
+        spread = max(g.compute for g in at_budget) - min(g.compute for g in at_budget)
+        one_step_c = 6.0 * max(g.n_params for g in at_budget) * batch * CONTEXT_LENGTH
+        assert spread <= one_step_c
+    assert set(grid[0].to_dict()) == {
+        "point",
+        "depth",
+        "n_params",
+        "target_compute",
+        "tokens",
+        "steps",
+        "batch_size",
+        "compute",
+    }
+
+
+def test_average_seed_replicates() -> None:
+    b1d4_s0 = _record("b1_d4", 4, 100, 20.0, 2000, 1.2e6, 1.00, seed=0)
+    b1d4_s1 = _record("b1_d4", 4, 100, 20.0, 2000, 1.2e6, 1.10, seed=1)
+    solo = _record("b1_d8", 8, 200, 20.0, 4000, 4.8e6, 0.95, seed=1)
+    # A pre-amendment record without a seed field is treated as seed 0 and left as-is.
+    legacy = cast(SweepRecord, {k: v for k, v in solo.items() if k != "seed"})
+    avg = average_seed_replicates([b1d4_s0, b1d4_s1, legacy])
+    assert len(avg) == 2  # the (b1_d4, budget) seeds collapse; the singleton stands
+    merged = next(r for r in avg if r["point"] == "b1_d4")
+    assert merged["val_bpb"] == pytest.approx(1.05)  # the seed MEAN on the loss axis
+    assert merged["n_params"] == 100 and merged["tokens"] == 2000  # replicates share scaffolding
+    assert next(r for r in avg if r["point"] == "b1_d8") == legacy
+
+
+def test_fit_averages_seeds_before_min_pick() -> None:
+    # Two budgets x three sizes x two seeds. Each single seed's raw argmin is off the planted
+    # per-budget winner; the seed-mean bpb picks it at both budgets.
+    ns = (1e7, 2e7, 4e7)
+    bpb = {  # (budget, seed) -> per-size bpb
+        (1e16, 0): (1.00, 1.03, 1.05),  # seed 0 alone would argmin N1
+        (1e16, 1): (1.06, 1.01, 1.05),  # seed 1 alone would argmin N2
+        (1e17, 0): (1.00, 1.02, 1.04),  # seed 0 alone would argmin N1
+        (1e17, 1): (1.08, 1.06, 1.00),  # seed 1 alone would argmin N3
+    }  # seed means: [1.03, 1.02, 1.05] -> N2 at 1e16; [1.04, 1.04, 1.02] -> N3 at 1e17
+    records = [
+        _record(
+            f"b{bi}_n{ni}",
+            4,
+            int(n),
+            20.0,
+            int(c / (6.0 * n)),
+            c,
+            bpb[(c, seed)][ni],
+            seed=seed,
+        )
+        for bi, c in enumerate((1e16, 1e17), start=1)
+        for seed in (0, 1)
+        for ni, n in enumerate(ns)
+    ]
+    report = fit_scaling_law(records, smooth=False)
+    assert report.n_opts == [2e7, 4e7]  # the seed-mean pick at BOTH budgets
+    # Proof the averaging did it: seed 0's records alone argmin to N1 at both budgets.
+    runs0 = [
+        {
+            "compute_budget": float(r["compute"]),
+            "final_loss": r["val_bpb"],
+            "parameters": float(r["n_params"]),
+            "tokens": float(r["tokens"]),
+        }
+        for r in records
+        if r["seed"] == 0
+    ]
+    assert [n for _, n in isoflop_min(runs0)] == [1e7, 1e7]
+
+
+def test_fit_v2_records_group_by_target_budget() -> None:
+    """v2 records: the sizes of one budget share ``target_compute`` while their effective C
+    differs by the step rounding. The fit must group budgets on target_compute — keyed on
+    effective C, every size would become its own one-point budget and the smooth pick would
+    degenerate to the raw fallback."""
+    k_n = math.sqrt(1.0 / 48.0)  # vertex D:N = 8 — the same planted law as the v1 tests
+    budgets = (1e17, 4e17, 8.5e17)
+    records: list[SweepRecord] = []
+    for bi, c in enumerate(budgets, start=1):
+        n_opt = k_n * c**0.5
+        for di, mult in enumerate((0.5, 1.0, 2.0)):
+            n = int(n_opt * mult)
+            tokens = int(c / (6.0 * n)) - 7 * di  # per-size step-rounding jitter: C_eff ≠ C_k
+            bpb = 1.0 + math.log2(n / n_opt) ** 2
+            records.append(
+                _record(
+                    f"b{bi}_m{di}",
+                    4,
+                    n,
+                    tokens / n,
+                    tokens,
+                    6.0 * n * tokens,
+                    bpb,
+                    target_compute=c,
+                )
+            )
+    effs_at_b1 = {r["compute"] for r in records if r.get("target_compute") == 1e17}
+    assert len(effs_at_b1) == 3  # the jitter really does make effective C distinct per size
+
+    report = fit_scaling_law(records)  # smooth by default
+    assert report.budgets == list(budgets)  # grouped on target C, not the jittered effective C
+    assert report.clamped_budgets == []  # the planted vertex is interior at every budget
+    assert report.smooth is True
+    assert report.n_law.exponent == pytest.approx(0.5, abs=1e-6)
+    assert report.n_law.exponent + report.d_law.exponent == pytest.approx(1.0, abs=1e-6)
+    assert report.r2_n == pytest.approx(1.0, abs=1e-9)
+    assert report.to_dict()["min_pick"] == {"smooth": True, "clamped_budgets": []}

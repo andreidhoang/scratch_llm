@@ -14,6 +14,9 @@
 > | [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md) | Buildable file→test spec | "Which file do I edit and what test do I write?" |
 > | `bench/RESULTS.md` + `docs/RESULTS.md` | Measurement ledger | "What did we actually measure?" |
 > | `deploy/runbooks/d20_speedrun_8xH100.md` | Paid-run script | "How do I launch the $100 d20?" |
+| [`FRONTIER_2026_ARCH_SCALING.md`](FRONTIER_2026_ARCH_SCALING.md) | Architecture × scaling doctrine | "Does a variant need a re-sweep or an anchor?" |
+| [`FRONTIER_2026_D20_CERTAINTY_PLAN.md`](FRONTIER_2026_D20_CERTAINTY_PLAN.md) | d20 certainty + P5 protocol of record | "What is certified vs borrowed vs undefined?" |
+| [`FRONTIER_2026_SCALING_PROGRAM.md`](FRONTIER_2026_SCALING_PROGRAM.md) | Fit engineering + S3.5 → K3 family fit | "How do we produce a law that passes its own gates?" |
 
 ---
 
@@ -53,10 +56,10 @@ See [`END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md) for the full S0→S
 
 | Stage | What | Key file | Status |
 |---|---|---|---|
-| **S0 Data** | FineWeb-EDU / ClimbMix shards, tokenizer 32k, decontamination | `data/shards.py`, `data/decontaminate.py` | A1 ✅, A0 ✅; F12 decides corpus |
+| **S0 Data** | FineWeb-EDU / ClimbMix shards, tokenizer 32k, decontamination | `data/shards.py`, `data/decontaminate.py` | A1 ✅, A0 ✅; F12 DONE — kill fired, operator OVERRIDE → **ClimbMix FINAL 2026-08-02** |
 | **S1 Architecture** | Dense d20: 480.4M, 20L/1280d/10h, full GQA/MHA, untied embeddings | `model.py` | Locked at P5 |
-| **S2 Pretraining** | Muon+AdamW, bf16, MTP head baked in, `C = 6ND` | `train.py`, `optim.py`, `mtp.py` | Muon ADOPTED; F2a ✅ |
-| **S3 Scaling law** | IsoFLOP ladder s1–s8, fit `N*(C)`, `D*(C)`, `a+b≈1` gate | `scaling/isoflop.py`, `scripts/s3_scaling_sweep.py` | Pending |
+| **S2 Pretraining** | Muon+AdamW, bf16, `C = 6ND`; **no MTP head** (decision of record 2026-08-03: d20 runs `mtp_depth=0`; F2a/F2b retarget post-d20) | `train.py`, `optim.py`, `mtp.py` | Muon ADOPTED; F2a ✅ (post-d20) |
+| **S3 Scaling law** | IsoFLOP ladder s1–s8, fit `N*(C)`, `D*(C)`, `a+b≈1` gate | `scaling/isoflop.py`, `scripts/s3_scaling_sweep.py` | ✅ DONE 2026-08-02 (s1–s7, 12.09 GPU-h) — R² gate tripped ⇒ fit rejected, T1 fired, no extrapolation; D:N HOLD ratio-20 (9.6B); d14 escalation = human decision |
 | **S4 Distributed pretrain / d20** | 8×H100 ZeRO-2, ~9.6B tokens, report card | `utils/dist_train.py`, runbook | A7 ✅, A8 ✅; gated on P5 |
 | **S5 Midtrain** | Chat-shaped continued pretrain (A4, optional) | `data/chat_adapters.py` | Spec done, unbuilt |
 | **S6 SFT** | Assistant-only masked CE on chat template | `algos/chat_sft.py` | ✅ CPU-green |
@@ -102,11 +105,11 @@ See [`ABLATIONS.md`](FRONTIER_2026_ABLATIONS.md) for full rung cards and citatio
 
 See [`FRONTIER_STATUS.md`](FRONTIER_STATUS.md) for the live version.
 
-> **F12 corpus ablation (free, standing box)** → **S3 scaling sweep (free)** → **P5 d12 dress rehearsal ($10–15)** → **8×H100 d20 (~$100, gated on P5 + user go-ahead)**
+> ~~**F12 corpus ablation**~~ ✅ DONE (kill fired; operator OVERRIDE → **ClimbMix FINAL 2026-08-02**) → ~~**S3 scaling sweep**~~ ✅ DONE 2026-08-02 (R² gate tripped ⇒ fit rejected, T1 fired; D:N HOLD ratio-20/9.6B) → **human decision: T1/d14 escalation (free-slow vs paid vs proceed-to-P5)** → **P5 d12 dress rehearsal ($10–15)** → **8×H100 d20 (~$100, gated on P5 + user go-ahead)**
 
-F12 is the highest-EV free experiment because data quality often beats optimizer changes at fixed
-compute. S3 calibrates our own scaling law so the d20 D:N ratio is evidence-based, not Chinchilla
-folklore.
+F12 was the highest-EV free experiment because data quality often beats optimizer changes at fixed
+compute; S3 calibrated our own scaling ladder so the d20 D:N ratio rests on our fitted-interval
+evidence, not Chinchilla folklore (the power-law fit itself was rejected — R² gate tripped).
 
 ---
 
@@ -146,7 +149,7 @@ These are non-negotiable engineering facts that drive every decision:
 | RL "aha" | Reward↑ + length growth = success | GRPO clipping-bias artifact; random rewards recover gain | Dr.GRPO / GSPO |
 | Attention frontier | MLA is converged | MLA is legacy; hybrid/DSA/sparse are contested | V4, Kimi Linear, MiniMax |
 | d20 ratio | Chinchilla ~20 tok/param | Ratio-20 deliberate overtrain for served artifact | nanochat fit, Sardana 2401.00448 |
-| Data | FineWeb-EDU fixed | ClimbMix may win; F12 decides | nanochat 324e69c |
+| Data | FineWeb-EDU fixed | F12 decided (kill fired — ClimbMix +0.110 bpb worse at 35M/700M); operator OVERRIDE → **ClimbMix FINAL 2026-08-02** | nanochat 324e69c; `docs/RESULTS.md` §F12 |
 
 ---
 

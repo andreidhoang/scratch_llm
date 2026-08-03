@@ -9,8 +9,8 @@ Conventions (each one verified against the reference code, not assumed):
 
 - **No biases anywhere.** Every nn.Linear in the text model is bias=False; the KDA short
   convs are created without a bias argument (fla default). Evidence for conv bias=False:
-  with it, the total overshoots the HF count by 2,543,616; without it, the residual is
-  2,208 params (0.00000008%) — see below.
+  with it, the total overshoots the HF count by 2,543,616; without it (and with the
+  census-measured A_log shape, below) the closure is exact.
 - **Untied embeddings** (tie_word_embeddings=false): embed_tokens and lm_head are separate
   V×H matrices.
 - **AttnRes**: per decoder layer, 2 RMSNorm(H) + 2 Linear(H→1); model level, 1 RMSNorm(H) +
@@ -22,12 +22,16 @@ Conventions (each one verified against the reference code, not assumed):
   embedding table is not (sparse lookup). This convention reproduces 104.2B to 4 digits:
   104.19B.
 
-Closure status (k3_full): computed total 2,779,931,834,976 vs HF safetensors metadata
-2,779,931,837,184 → residual 2,208 params (0.00000008%), attributed to vision pos-emb /
-buffer conventions. Cross-checks that close EXACTLY: non-routed-expert params = 57.19B
-(HF API: "BF16 57.2B"); vision encoder alone = 401.2M (tech report: "401M"); activated =
-104.19B (report: "104.2B"). Tensor-level closure (diff against the 96 shard headers via
-HTTP range reads) is a K9 pre-flight task — see deploy/runbooks/k3_8xb300_modal.md.
+Closure status (k3_full): EXACT — computed total 2,779,931,837,184 == HF safetensors metadata
+total, residual 0, pinned by tests/test_k3_param_count.py. The pre-census residual of 2,208
+(0.00000008%) was A_log: the HF reference code constructs it per-head ([num_heads=96]) but the
+checkpoint measurably carries per-dim [128] tensors in all 69 KDA layers (R0 census), and
+69×(128−96) = 2,208 exactly — only a_log_size=128 closes the accounting. Do NOT "fix"
+a_log_size back to 96: [128] is what the checkpoint carries. The released code's per-head
+framing does not explain the [128] shapes; how A_log maps to the per-channel decay Diag(α) is
+OPEN — a pre-flight requirement for the core/kda.py hand-build (docs/k3/FACTS.md A18).
+Cross-checks that also close EXACTLY: non-routed-expert params = 57.19B (HF API: "BF16 57.2B");
+vision encoder alone = 401.2M (tech report: "401M"); activated = 104.19B (report: "104.2B").
 """
 
 from __future__ import annotations

@@ -72,8 +72,15 @@ S_t = (I − β_t k_t k_tᵀ) · Diag(α_t) · S_{t−1}  +  β_t k_t v_tᵀ
   reciprocal rescale < e^80, inside BF16 range (K3 §2.1.1). This is the number R2's P4
   sub-prediction attacks (e^160 > BF16 max ≈ e^88 at g_min ≤ −10).
 
-**A_log:** per-head `[n_heads]`, NOT per-channel. (The R0 census's [128]-vs-[96] puzzle resolved
-2026-08-02: the per-channel tensor is `dt_bias [H·d_k]`; `A_log` is per-head in the released code.)
+**A_log:** checkpoint of record: **per-dim `[128]` (= head_dim) in all 69 KDA layers** (R0 census;
+FACTS A18 — `param_count.py` closes EXACT, residual 0, only with `a_log_size=128`). The
+2026-08-02 "resolution" stated here ("the per-channel tensor is `dt_bias [H·d_k]`; `A_log` is
+per-head `[n_heads]` in the released code") is **RETRACTED 2026-08-03**: per-head-96 is exactly
+what the census falsified — it leaves the pre-census residual 69×(128−96) = 2,208 unclosed. The
+released code's per-head framing does not explain the [128] shapes; how A_log maps to the
+per-channel decay Diag(α) (broadcast / interpolation per channel group?) is **OPEN — pre-flight
+for the hand-build**: resolve by direct read of `modeling_kimi_linear.py` checkpoint loading
+before `core/kda.py`.
 Init: K3 paper §2.1.1 says A^h = 0; K3 released code defaults `log(U(1,16))` (Mamba lineage);
 fla uses 0 under `safe_gate=True`. **Proposal: init 0 in k3 mode, `log(U(1,16))` in kimi_linear
 mode** — and note R0's measured A_log means drift only −0.17 → +0.29 with depth, so the choice
@@ -154,7 +161,9 @@ Mastery bar (HANDCRAFTED.md): delete-test + chunkwise≡recurrent≡f64 + FLA pa
 ## 7. mini-K3 instantiation (from ROADMAP K6 table — the shapes your module must accept)
 
 hidden 1024 · 16 heads × 64 (d_k = d_v = 64) · conv k=4 · g_min = −5 · full-rank gate ·
-β per head · A_log per head init 0 (k3 mode). New parameter tensors per layer vs GDN:
+β per head · A_log per head init 0 (k3 mode — our mini-scale choice; the real checkpoint carries
+[128] per-dim and its mapping is OPEN, §2 — resolve before loading real weights). New parameter
+tensors per layer vs GDN:
 `f_a_proj 1024×64`, `f_b_proj 64×1024`, `dt_bias [1024]`, 3 depthwise convs `[1024, 1, 4]`,
 `g_proj 1024×1024`; dropped: none (q/k/v/out same widths at expand_v=1). `param_count.py`
 owns the exact accounting; K0's closure discipline applies.

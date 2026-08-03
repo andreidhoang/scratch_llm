@@ -60,7 +60,7 @@ Side effect: census param count closes FACTS A18 to tensor level.
 |---|---|---|
 | `qb` | `gate.e_score_correction_bias` (92 × 896) | What load-balancing equilibrium did QB actually reach at 2.8T? (Ground truth for R1-axis-3 and the Tier-2 QB arm.) |
 | `attnres` | `{self_attention,mlp,output_attn}_res_proj.weight` (187 × 7168) | Depth-reuse map: which depths does a frontier model retrieve from, per sublayer? First public map at this scale. |
-| `decay` | `self_attn.A_log` (69 × 96), `self_attn.dt_bias` (69 × 12288) | What decay timescales did 2.8T training choose, per layer/head/channel? Constrains the g_min question (R2). |
+| `decay` | `self_attn.A_log` (69 × 128 — per-dim, census-measured; this table said 69 × 96 pre-correction 2026-08-03 — the per-head framing does not explain the [128] shapes, semantics OPEN, FACTS A18), `self_attn.dt_bias` (69 × 12288) | What decay timescales did 2.8T training choose, per layer/head/channel? Constrains the g_min question (R2). |
 
 **First observations (measured by us, 2026-07-31, smoke = layers 0–1; full census COMPLETE — FACTS A19):**
 
@@ -165,7 +165,11 @@ skeleton; 1 run).
 ## Budget & sequencing
 
 ~15 training runs + short continuations: **$150–300** on the P5/d20 rental tier; S3
-scaling-law calibration gates the exact token budgets (existing discipline). Sequence:
+scaling-law calibration gates the exact token budgets (existing discipline). **Arm horizon
+(pinned 2026-08-03, post-S3):** with the S3 fit rejected, budgets are set by registration,
+not by a fitted law — every R1/R2 arm runs **d12 @ ratio-20 (≈2.71B tokens, C ≈ 2.2e18)**
+with the control family's full production schedule shape (same warmup fraction, same decay
+form); ~9–11 GPU-h per arm on the standing box, free-box-first before any rental. Sequence:
 **R0 now** (script shipped + verified live 2026-07-31; census COMPLETE — 417 tensors, all 96
 shards, FACTS A19) → `core/kda.py`
 hand-built + PROVEN → K6 wiring (mini-K3 on the speedrun spine) → **R1 → R2** → Tier 2.

@@ -24,8 +24,10 @@ fi
 node="$(grep -m1 '^Phase:' performance/PERF_PLAN.md 2>/dev/null || true)"
 [ -n "$node" ] && echo "perf node → ${node#Phase: } (source: performance/PERF_PLAN.md)"
 # Close-the-loop / frontier-ablation front (ADR-0018): the buildable next rung for a fresh session.
-fnode="$(grep -m1 'Next-node:' docs/FRONTIER_2026_TASKSPEC.md 2>/dev/null | sed -E 's/.*Next-node: *//; s/ *-->.*//' || true)"
-[ -n "$fnode" ] && echo "frontier node → ${fnode} (source: docs/FRONTIER_2026_TASKSPEC.md — START HERE block + §0)"
+# The marker is an HTML comment opening line ('<!-- Next-node: …', ~3.7KB single line at :32) — anchor
+# on the line prefix so prose mentions (e.g. :4) can't match, and inject only the first 200 chars + pointer.
+fnode="$(grep -m1 '^<!-- Next-node:' docs/FRONTIER_2026_TASKSPEC.md 2>/dev/null | sed -E 's/^<!-- Next-node: *//' | cut -c1-200 || true)"
+[ -n "$fnode" ] && echo "frontier node → ${fnode}… → see docs/FRONTIER_2026_TASKSPEC.md:32 (START HERE block + §0)"
 # Learning track (teach-back mastery): the next Bài to master so a /master session resumes seamlessly.
 lnode="$(grep -m1 '^Learning-node:' docs/learning/PROGRESS.md 2>/dev/null | sed -E 's/^Learning-node: *//' || true)"
 [ -n "$lnode" ] && echo "learning node → ${lnode} (source: docs/learning/PROGRESS.md — 89-Bài teach-back ledger; ✅=owned, don't re-derive)"

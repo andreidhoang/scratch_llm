@@ -20,6 +20,7 @@ from scratch_llm.scaling.isoflop import (
     compute_from_params_tokens,
     fit_powerlaw,
     isoflop_min,
+    isoflop_min_smooth,
     nonembed_params,
     propose_shape,
     tokens_from_compute_params,
@@ -57,6 +58,80 @@ def test_isoflop_min_nine_budgets_on_course_data() -> None:
     at_6e18 = [r for r in runs if r["compute_budget"] == 6e18]
     manual = min(at_6e18, key=lambda r: r["final_loss"])["parameters"]
     assert pairs[0][1] == manual == 762093419
+
+
+def _u_curve_runs(
+    budget: float, log10_ns: tuple[float, ...], log10_vertex: float
+) -> list[dict[str, float]]:
+    """Synthetic IsoFLOP budget: loss = 2 + (log10 N − log10 N*)² — an exact quadratic in
+    log N with its vertex at N* = 10^log10_vertex."""
+    return [
+        {
+            "compute_budget": budget,
+            "parameters": 10.0**lg,
+            "final_loss": 2.0 + (lg - log10_vertex) ** 2,
+            "tokens": budget / (6.0 * 10.0**lg),
+        }
+        for lg in log10_ns
+    ]
+
+
+def test_isoflop_min_smooth_lands_nearer_vertex_than_argmin() -> None:
+    # Vertex at N* = 1e7, sampled asymmetrically at 10^6.5 / 10^7.2 / 10^7.8 — the raw argmin
+    # quantizes to the nearest sample (10^7.2), the quadratic vertex interpolates back to 1e7.
+    runs = _u_curve_runs(1e17, (6.5, 7.2, 7.8), 7.0) + _u_curve_runs(1e18, (7.0, 7.4, 8.0), 7.5)
+    picks = isoflop_min_smooth(runs)
+    assert [p.budget for p in picks] == [1e17, 1e18]  # one pick per budget, sorted ascending
+    assert all(not p.clamped for p in picks)
+    assert picks[0].n_opt == pytest.approx(1e7, rel=1e-6)  # exact: planted quadratic in log N
+    assert picks[1].n_opt == pytest.approx(10.0**7.5, rel=1e-6)
+    # The whole point: the raw argmin sits off-vertex, the smooth pick does not.
+    raw_n = dict(isoflop_min(runs))
+    assert raw_n[1e17] == pytest.approx(10.0**7.2)
+    assert abs(np.log10(picks[0].n_opt) - 7.0) < abs(np.log10(raw_n[1e17]) - 7.0)
+
+
+def test_isoflop_min_smooth_averages_replicate_seeds_before_fitting() -> None:
+    # Two "seeds" per N with loss noise that flips the per-seed argmin off the vertex; the mean
+    # loss keeps the planted quadratic, so the smooth pick still lands on N* = 1e7.
+    runs = []
+    for seed, jitter in ((0, -0.30), (1, 0.30)):
+        for run in _u_curve_runs(1e17, (6.5, 7.2, 7.8), 7.0):
+            noise = jitter if run["parameters"] == 10.0**6.5 else 0.0
+            runs.append({**run, "final_loss": run["final_loss"] + noise, "seed": float(seed)})
+    # Seed 0's raw argmin is the jittered 10^6.5 (1.95 < 2.04); the jitters cancel in the mean,
+    # so the averaged quadratic is untouched and the vertex is recovered exactly.
+    picks = isoflop_min_smooth(runs)
+    assert len(picks) == 1 and not picks[0].clamped
+    assert picks[0].n_opt == pytest.approx(1e7, rel=1e-6)
+
+
+def test_isoflop_min_smooth_falls_back_to_argmin_with_few_sizes() -> None:
+    runs = _u_curve_runs(1e17, (6.5, 7.2), 7.0)  # 2 distinct N — no quadratic to fit
+    picks = isoflop_min_smooth(runs)
+    assert len(picks) == 1
+    assert picks[0].clamped is False  # the documented small-sample fallback, not a clamp
+    assert picks[0].n_opt == 10.0**7.2  # the raw argmin (loss 2.04 < 2.25)
+    assert dict(isoflop_min(runs))[1e17] == picks[0].n_opt
+
+
+def test_isoflop_min_smooth_clamps_out_of_range_vertex_and_flags() -> None:
+    # Vertex at 1e9 but the sampled window ends at 1e8 — extrapolating the quadratic past the
+    # samples is not a measurement: clamp to the nearer endpoint's argmin and flag it.
+    runs = _u_curve_runs(1e17, (6.0, 7.0, 8.0), 9.0)
+    picks = isoflop_min_smooth(runs)
+    assert len(picks) == 1
+    assert picks[0].clamped is True
+    assert picks[0].n_opt == 10.0**8.0  # the nearer endpoint = the raw argmin here
+    assert dict(isoflop_min(runs))[1e17] == picks[0].n_opt
+    # A non-convex fit (inverted U — its "vertex" is a maximum) clamps + flags the same way.
+    concave = [
+        {**run, "final_loss": 4.0 - run["final_loss"]}
+        for run in _u_curve_runs(1e18, (6.0, 7.0, 8.0), 7.0)
+    ]
+    concave_pick = isoflop_min_smooth(concave)
+    assert len(concave_pick) == 1 and concave_pick[0].clamped is True
+    assert concave_pick[0].n_opt in (10.0**6.0, 10.0**8.0)  # an endpoint, never the maximum
 
 
 def test_fit_powerlaw_recovers_exact_law() -> None:

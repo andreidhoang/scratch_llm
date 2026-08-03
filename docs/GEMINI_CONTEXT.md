@@ -24,9 +24,17 @@
    tests/benches, review — never the rep itself. In `delegate` mode (current since 2026-07-03):
    kernel implementation is delegated to agents; oracle tests + adversarial review still gate.
    Boundary details: `src/scratch_llm/kernels/CLAUDE.md`.
-3. **Green-CI before done:** `ruff check src tests` · `ruff format --check src tests` · `pyright` ·
+3. **k3/core boundary (same as every agent — root `AGENTS.md` §THE BOUNDARY, which binds every
+   agent session):** agents never create, edit, move, or delete files under
+   `src/scratch_llm/k3/core/` — those modules encode the mechanisms the human is mastering; a
+   silent bug there is exactly what the human must learn to catch. For core modules agents may
+   ONLY: (a) write adversarial tests in `tests/` after the human authors a module (red team, no
+   fixes); (b) write proposals as markdown for the human to retype — never as diffs to apply.
+   Full rules + per-module mastery bars: `src/scratch_llm/k3/HANDCRAFTED.md`; everything outside
+   `core/` follows the paired/delegated split defined there.
+4. **Green-CI before done:** `ruff check src tests` · `ruff format --check src tests` · `pyright` ·
    `pytest -m "not gpu"` (the pre-commit hook enforces this on `git commit`; don't bypass).
-4. **Context hygiene:** reset between unrelated tasks; rebuild context from the durable state above,
+5. **Context hygiene:** reset between unrelated tasks; rebuild context from the durable state above,
    not from chat history; write conclusions/code to files before long-running commands; no
    placeholder/mock code.
 

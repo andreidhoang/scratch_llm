@@ -29,7 +29,7 @@
 > **Reference oracle available:** the venv vendors `transformers/models/{deepseek_v2,deepseek_v3,
 > deepseek_v32,glm4_moe,nanochat,qwen3}` — read these as implementation oracles (re-own, don't copy).
 
-<!-- Next-node: ⚡ d20 SPRINT (2026-07-17 pivot, user decision): F1-run DESCOPED mid-flight (killed at 3.8%, run healthy — optimizer ADOPTED = Muon+AdamW per nanochat/Moonlight/K2 evidence, RESULTS.md §Decision; harness stays shipped; LR sweep folds into P5). ALL effort → the d20 gate: A7 optimizer-embedded ZeRO-2 ✅ (`utils/dist_train.py`, 07-18, systems-verified ACCEPT 12/12 incl. single-proc byte-identity + 3-rank oracle; gloo/CPU, NCCL shares the path) + P3 CORE 22-task suite ✅ (`eval/core_suite.py` + `bench/core_eval.py`, fidelity-verified byte-identical to nanochat core.yaml). A8 ✅ (07-19, systems-verified ACCEPT: `deploy/runbooks/d20_speedrun_8xH100.md` 345L + consolidated full-gather ckpt `consolidated_state_dict`/`load_consolidated`/`save_consolidated_checkpoint` — bitwise round-trip incl. cross-topology W2→W1; suite 864/0). **ALL BUILDABLE d20-GATE RUNGS DONE** — incl. the last launcher wiring (07-28): `--checkpoint-every` threaded through `speedrun.stage_pretrain` → `work_dir/pretrain_ckpt.pt` (optimizer-state intra-stage snapshots, consolidated under torch.distributed via train()'s existing path; `tests/test_speedrun.py`, ruff+pyright green). F12 DONE 2026-07-31: measured KEEP FineWeb-EDU (ClimbMix bpb 1.30205 ≥ FWE 1.19197 at iso-FLOP; kill triggered; logged in `docs/RESULTS.md` §F12 + `bench/RESULTS.md` §Frontier ablations). **Operator override:** S3/d20 will use **ClimbMix** anyway (nanochat/Karpathy corpus choice); decision **FINAL 2026-08-02** (confirmation arm declined; d20 CORE band must be re-anchored vs the published ClimbMix curve before P5 — `docs/RESULTS.md` §F12 lines 120-127). NEXT: **S3 scaling sweep s1–s7 DONE (2026-08-02, 12.09 GPU-h, ClimbMix corpus)** — bpb 1.2553→0.9402 across C 1.92e16→8.79e17; the pre-registered R² gate RAISED (R²_N 0.7709 / R²_D 0.8324 < 0.98, grid-geometry D-zigzag across depth boundaries — no extrapolation quoted; a+b=1.0000 near-vacuous by C=6ND); d20 D:N **HOLD ratio-20 (9.6B)** on fitted-interval evidence (s6-vs-s7 iso-FLOP favors bigger-N/ratio-8 by −0.0096 bpb) + inference-aware overtrain registration (Sardana 2401.00448); **trigger T1 (d14) formally fired — HUMAN DECISION REQUIRED** (free-but-slow d14 vs paid d14 vs accept-and-proceed; no paid GPU without explicit go-ahead). Full writeup `docs/RESULTS.md` §S3 + `bench/RESULTS.md` §Frontier ablations → then (GPU $ + user go-ahead) **P5 d12 dress rehearsal 1×H100** (~$10–15: LR sweep for the single Muon LR + compile-on-sm90 re-validation + CORE-vs-public-checkpoint + ckpt kill/resume drill) → **the 8×H100 d20** (~$100, 480.4M, 9.6B tok, CORE 0.23–0.25 re-anchored 2026-08-02 (supersedes 0.19–0.22)). Runbook = `deploy/runbooks/d20_speedrun_8xH100.md`. P1 flash-attn ✅ (SDPA shipped 07-16, GPU-measured 07-17) · P2 parquet path ✅ PROVEN at 0.7B/sub-hour (10B variant = same code, --target-tokens 1e10, build on the rental box or pre-staged) · corpus + calibration banked on stopped vast box 43676999. Shipped 07-16/17: SDPA backend · parquet bulk shards · crash-safe F1 driver · launch calibration (B=16, 18.2 GiB, 0.283 s/step). ⚠ 07-16 refactor stands: d20 = 480.4M @ 32768 · anchor CORE 0.2219 · D = 9.6B. · UPDATE this line when a rung ships -->
+<!-- Next-node: ⚡ d20 SPRINT (2026-07-17 pivot, user decision): F1-run DESCOPED mid-flight (killed at 3.8%, run healthy — optimizer ADOPTED = Muon+AdamW per nanochat/Moonlight/K2 evidence, RESULTS.md §Decision; harness stays shipped; LR sweep folds into P5). ALL effort → the d20 gate: A7 optimizer-embedded ZeRO-2 ✅ (`utils/dist_train.py`, 07-18, systems-verified ACCEPT 12/12 incl. single-proc byte-identity + 3-rank oracle; gloo/CPU, NCCL shares the path) + P3 CORE 22-task suite ✅ (`eval/core_suite.py` + `bench/core_eval.py`, fidelity-verified byte-identical to nanochat core.yaml). A8 ✅ (07-19, systems-verified ACCEPT: `deploy/runbooks/d20_speedrun_8xH100.md` 345L + consolidated full-gather ckpt `consolidated_state_dict`/`load_consolidated`/`save_consolidated_checkpoint` — bitwise round-trip incl. cross-topology W2→W1; suite 864/0). **ALL BUILDABLE d20-GATE RUNGS DONE** — incl. the last launcher wiring (07-28): `--checkpoint-every` threaded through `speedrun.stage_pretrain` → `work_dir/pretrain_ckpt.pt` (optimizer-state intra-stage snapshots, consolidated under torch.distributed via train()'s existing path; `tests/test_speedrun.py`, ruff+pyright green). F12 DONE 2026-07-31: measured KEEP FineWeb-EDU (ClimbMix bpb 1.30205 ≥ FWE 1.19197 at iso-FLOP; kill triggered; logged in `docs/RESULTS.md` §F12 + `bench/RESULTS.md` §Frontier ablations). **Operator override:** S3/d20 will use **ClimbMix** anyway (nanochat/Karpathy corpus choice); decision **FINAL 2026-08-02** (confirmation arm declined; d20 CORE band re-anchored 2026-08-02 → 0.23–0.25 vs the published ClimbMix curve, commit `2caa3c6` — `docs/RESULTS.md` §S4-pre). NEXT: **S3 scaling sweep s1–s7 DONE (2026-08-02, 12.09 GPU-h, ClimbMix corpus)** — bpb 1.2553→0.9402 across C 1.92e16→8.79e17; the pre-registered R² gate tripped (R² 0.7709/0.8324 < 0.98 ⇒ fit rejected; grid-geometry D-zigzag across depth boundaries — no extrapolation quoted; a+b=1.0000 near-vacuous by C=6ND); d20 D:N **HOLD ratio-20 (9.6B)** on fitted-interval evidence (s6-vs-s7 iso-FLOP favors bigger-N/ratio-8 by −0.0096 bpb) + inference-aware overtrain registration (Sardana 2401.00448); **trigger T1 (d14) formally fired — HUMAN DECISION REQUIRED** (free-but-slow d14 vs paid d14 vs accept-and-proceed; no paid GPU without explicit go-ahead). Full writeup `docs/RESULTS.md` §S3 + `bench/RESULTS.md` §Frontier ablations → then (GPU $ + user go-ahead) **P5 d12 dress rehearsal 1×H100** (~$10–15: LR sweep for the single Muon LR + compile-on-sm90 re-validation + CORE-vs-public-checkpoint + ckpt kill/resume drill) → **the 8×H100 d20** (~$100, 480.4M, 9.6B tok, CORE 0.23–0.25 re-anchored 2026-08-02 (supersedes 0.19–0.22)). Runbook = `deploy/runbooks/d20_speedrun_8xH100.md`. P1 flash-attn ✅ (SDPA shipped 07-16, GPU-measured 07-17) · P2 parquet path ✅ PROVEN at 0.7B/sub-hour (10B variant = same code, --target-tokens 1e10, build on the rental box or pre-staged) · corpus + calibration banked on stopped vast box 43676999. Shipped 07-16/17: SDPA backend · parquet bulk shards · crash-safe F1 driver · launch calibration (B=16, 18.2 GiB, 0.283 s/step). ⚠ 07-16 refactor stands: d20 = 480.4M @ 32768 · anchor CORE 0.2219 · D = 9.6B. · UPDATE this line when a rung ships -->
 
 > ▶ **START HERE (fresh session).** The loop is **CLOSED** (F1 Muon · train-wiring/F4 · eval report
 > card · speedrun spine shipped, GPU-verified talking sample). **A1 real-corpus shards ✅ 2026-07-09**
@@ -44,12 +44,14 @@
 > template (`chat.py` + `SpeedrunConfig.chat`) · F3 acceptance harness (`eval/spec_acceptance.py` +
 > CLI; measured falsifier awaits a trained ckpt) · F8.1 DSA core (`dsa.py`, top-k==dense + indexer
 > recall 0.99 vs 0.30 random) · F9 QK-clip guard (observer + `apply_qk_clip` + train wiring — **run
-> F1 with `track_attn_logits=True`; its falsifier rides that run**) · F10.1 Gated-DeltaNet
+> F1 with `track_attn_logits=True`; its falsifier rides that run** — *F1 died step 4,880 with no
+> S_max recorded; falsifier PENDING, rides the next instrumented run, P5 or later*) · F10.1 Gated-DeltaNet
 > (`linear_attn.py`, chunkwise==recurrent==ref, state 1024× < GQA-8 KV @4k). A4's truncated spec is
-> now COMPLETE in §A (ids-only shards; mask reconstructed at SFT collate). **Next node → the S3
-> scaling sweep is RUNNING on the RTX 5090 pod** (s1–s4 banked, s5 in flight as of 2026-08-02,
-> ClimbMix corpus; F12 DONE — kill fired, operator OVERRIDE → ClimbMix, FINAL 2026-08-02) →
-> **fit-gate → P5 d12 dress rehearsal ($10–15) → d20**; K3 track: **K2 KDA critical path** per
+> now COMPLETE in §A (ids-only shards; mask reconstructed at SFT collate). **Next node → human
+> decision: T1/d14 escalation (free-slow vs paid vs proceed-to-P5)** — S3 scaling sweep s1–s7 ✅
+> DONE 2026-08-02 (12.09 GPU-h, ClimbMix corpus; R² gate tripped → no extrapolation quoted; D:N
+> HOLD ratio-20/9.6B on fitted-interval evidence; F12 DONE — kill fired, operator OVERRIDE →
+> ClimbMix, FINAL 2026-08-02) → **P5 d12 dress rehearsal ($10–15) → d20**; K3 track: **K2 KDA critical path** per
 > [`k3/ROADMAP.md`](k3/ROADMAP.md). Full order + deps in §0; near-term picks in §E.
 >
 > **Build protocol — every rung, no exceptions:** ① pre-register the rung's falsifier in
@@ -71,7 +73,7 @@ the frontier ablation study (the differentiating research). `[S/M/L]` = effort.
 | 1 | **A1** real-corpus shards | A | M | — | FineWeb-EDU → memmap uint16 token shards (the toy corpus can't make a d20) |
 | 2 | **A0** decontamination gate | A | M | A1 | n-gram-overlap strip of eval sets (GSM8K/MMLU/Countdown/report-card) from train shards |
 | 3 | **A2** checkpoint chaining | A | M | — | config-carrying save/resume — the rental safety-net + stage spine A4/A5/A6 hang off |
-| 4 | **F1-run** iso-FLOP Muon vs AdamW | B | M | A2 | the **pending headline** — tokens-to-match + NS overhead on the real loop |
+| 4 | **F1-run** iso-FLOP Muon vs AdamW — **DESCOPED 2026-07-17** (Muon+AdamW ADOPTED, `f9e8f3b`) | B | M | A2 | ~~the **pending headline**~~ — descoped mid-flight; the tokens-to-match + NS-overhead harness stays shipped for reuse |
 | 5 | **A3** chat specials + template | A | S | — | `<\|bos\|>/<\|user\|>/<\|assistant\|>/<\|eot\|>` + `render_conversation` (unlocks chat) |
 | 6 | **F2a** MTP train head | B | L | — | DeepSeek-V3 D=1 aux head — additive/byte-identical; bake into the single d20 pretrain |
 | 7 | **F3** de-confound serving | B | S | A2 | re-run n-gram acceptance on a *trained* ckpt → restore the falsified prompt-dependence |
@@ -120,7 +122,7 @@ $100 8×H100 run:
   AdamW/Muon loops can exceed the entire comm budget; wire √(B/B_ref) LR scaling +
   warmup→constant→warmdown. Our Muon ≠ nanochat's Muon (no RMS-match/Polar Express): their LRs do
   **not** transfer 1:1 — a divergence at hour 2 costs ~$50.
-- **P5 · a $10–15 d12 dress rehearsal on 1×H100** — real loader, 1–2 B tokens, compile-on-sm90 test
+- **P5 · a $10–15 (cap $20) d12 dress rehearsal on 1×H100** — protocol of record: `FRONTIER_2026_D20_CERTAINTY_PLAN.md` §6 (revised 2026-08-03): LR sweep d12@ratio-4 ×{0.5,0.7,1.0,1.4,2.0} + winner confirmation @ratio-8 vs band 0.89–0.92 bpb + 3-point d8 width probe + compile-on-sm90 + kill/resume drill + step-time (supersedes the earlier "1–2 B tokens" sizing below) — real loader, compile-on-sm90 test
   (the bf16+compile NaN is an sm120 fact, untested on Hopper), checkpoint kill/resume, CORE harness,
   loss curve vs nanochat's published d12.
 - **P6 · node-quality + abort guardrails** — nccl-tests busbw ≥ 350 GB/s gate before committing the
@@ -227,7 +229,7 @@ Midtrain (A4) is **descoped from the paid run** until built (`speedrun.py` raise
 
 ## §B — Track B: the frontier ablation study
 
-### F1-run · Iso-FLOP Muon vs AdamW `[M]` — the pending headline
+### F1-run · Iso-FLOP Muon vs AdamW `[M]` — ~~the pending headline~~ **DESCOPED 2026-07-17** (Muon+AdamW ADOPTED per nanochat/Moonlight/K2 evidence, `f9e8f3b`; harness shipped, spec kept for reuse)
 - **Interfaces:** NEW `eval/optimizer_race.py` (pure metric fns `tokens_to_match`/`token_saving_fraction` + the A/B driver); `train.py` additive val-eval hook + `TrainConfig.eval_every` (default byte-identical); `optim.py` `Muon(profile_ns=False)` NS wall-time instrument (additive, off); NEW `bench/optimizer_race.py` CLI → appends the row to `RESULTS.md`; NEW `tests/test_optimizer_race.py`.
 - **DoD:** pure-metric unit tests; both arms hold `C=6ND` constant; the additive hook is a no-op on the default path (identical loss history). **Measured falsifier:** at N≈35M / D≈700M (C≈1.5e17) on sm120, same seed/LR/cosine, only the optimizer differs → Muon `tokens_to_match ≤ 0.85·D` (≥15% saving) or ≥0.02 nats lower at iso-FLOP; NS overhead <1%. **Kill:** saving <5% AND nats_lower <0.02, or divergence at the reused AdamW LR.
 - **⚠ Recalibrated 2026-07-09** (`FRONTIER_2026_ABLATIONS.md` §10 + `bench/RESULTS.md` F1 pre-run note): Muon is **deflated + scale-dependent** (1.4×@0.1B→1.1×@1.2B vs a *tuned* AdamW; `2509.02046`) and superseded by MuonH (`2606.16899`). **New mandatory arm: an independently LR-tuned AdamW baseline** — the `tokens_to_match ≤ 0.85·D` bar is *only* meaningful against it (an untuned baseline is a fake win). Predict the **1.1–1.4× band**, not a fixed ≥15%. The tuned-baseline *methodology* is the hireable artifact.
@@ -276,7 +278,7 @@ Midtrain (A4) is **descoped from the paid run** until built (`speedrun.py` raise
 ### F9 · MuonClip guard `[S]` — deps F1-run
 - **Interfaces:** `model.py` additive per-head max-logit observer in `MultiHeadSelfAttention`, gated by `ModelConfig.track_attn_logits=False` (byte-identical off); `optim.py` `apply_qk_clip()` (post-step per-head W_q/W_k rescale by `min(1,τ/S_max)`); `train.py` wire after `optimizer.step()`, off by default.
 - **Config:** `track_attn_logits`, `TrainConfig.qk_clip=False`, `qk_clip_tau=100.0`.
-- **DoD:** qk_norm=True bounds max logit (<~30) and < qk_norm=False; `apply_qk_clip` rescales only over-τ heads (exact `√(τ/S_max)`, others byte-identical); no-op under τ; re-forward logit ≤ τ. **Measured falsifier:** with qk_norm=True on the F1 run (N≤1B), max per-head logit <30 at every step → QK-Clip γ==1 (confirms qk_norm suffices sub-1B). **Kill:** sustained S_max>30 (qk_norm insufficient earlier than claimed).
+- **DoD:** qk_norm=True bounds max logit (<~30) and < qk_norm=False; `apply_qk_clip` rescales only over-τ heads (exact `√(τ/S_max)`, others byte-identical); no-op under τ; re-forward logit ≤ τ. **Measured falsifier:** with qk_norm=True on the F1 run (N≤1B), max per-head logit <30 at every step → QK-Clip γ==1 (confirms qk_norm suffices sub-1B). *(F1-run descoped 2026-07-17, died step 4,880 — S_max never observed; the falsifier rides the next instrumented run, P5 or later.)* **Kill:** sustained S_max>30 (qk_norm insufficient earlier than claimed).
 - **Zone:** do NOT edit the shared `scaled_dot_product_attention` — add the observer in `MultiHeadSelfAttention` only.
 
 ### F8.1 · DSA core mechanism `[M]` — stretch
@@ -370,7 +372,9 @@ Midtrain (A4) is **descoped from the paid run** until built (`speedrun.py` raise
 ## §E — First actions
 
 1. **A1 + A2** (the foundation + the rental safety-net) — start here; both `[M]`, no deps.
-2. **F1-run** — the *pending headline* Muon-vs-AdamW number; `[M]`, needs A2, runs on the standing box.
+2. ~~**F1-run**~~ — **DESCOPED 2026-07-17** (Muon+AdamW ADOPTED per nanochat/Moonlight/K2 evidence,
+   `f9e8f3b`): the *pending headline* Muon-vs-AdamW number is off the critical path; the `[M]`
+   harness stays shipped and can run on idle GPU time.
 3. **A3 + F2a** in parallel (chat surface + the MTP head to bake into the d20 pretrain).
 
 Every rung: pre-register its falsifier in `bench/RESULTS.md` §Frontier ablations **before** running,

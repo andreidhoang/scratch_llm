@@ -10,6 +10,7 @@
 > - Integrated entry point → [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md)
 > - Architecture × scaling-law program (when a re-sweep is/isn't needed) → [`FRONTIER_2026_ARCH_SCALING.md`](FRONTIER_2026_ARCH_SCALING.md)
 > - d20 certainty plan (what's certified vs borrowed vs undefined; P5/d14 protocol) → [`FRONTIER_2026_D20_CERTAINTY_PLAN.md`](FRONTIER_2026_D20_CERTAINTY_PLAN.md)
+> - Scaling-law program of record (post-S3 fit-engineering redesign; S3.5 gates → K3 family fit) → [`FRONTIER_2026_SCALING_PROGRAM.md`](FRONTIER_2026_SCALING_PROGRAM.md)
 
 ---
 
@@ -23,7 +24,7 @@ the 2026 frontier's *contested* claims.
 
 ## Current next node
 
-> **S3 scaling-law sweep s1–s7 ✅ DONE (2026-08-02, 12.09 GPU-h, ClimbMix corpus by operator override)** → **human decision: T1/d14 escalation (free-slow vs paid vs accept-and-proceed)** → **P5 d12 dress rehearsal ($10–15, gated on human go-ahead)** → **8×H100 d20 (~$100, gated on P5 + user go-ahead)**
+> **S3 scaling-law sweep s1–s7 ✅ DONE (2026-08-02, 12.09 GPU-h, ClimbMix corpus by operator override)** → **decisions CLOSED 2026-08-03: T1 = A (accept HOLD → P5) + d20 runs mtp_depth=0 (`docs/RESULTS.md` §S3.5)** → matched-batch d12@r8 rerun (free, ~4 GPU-h — §S3 amendment) → **P5 d12 dress rehearsal ($10–15, cap $20, gated on paid go-ahead)** → **8×H100 d20 (~$100, gated on P5 + user go-ahead)**
 
 See `FRONTIER_2026_TASKSPEC.md` Next-node marker for exact commands and prerequisites.
 
@@ -33,8 +34,8 @@ following the nanochat/Karpathy corpus choice; deviation logged in `docs/RESULTS
 `bench/RESULTS.md` §Frontier ablations.
 
 S3 completed 2026-08-02: all seven rungs landed (bpb 1.2553 → 0.9402). The pre-registered R² gate
-**raised** (R²_N 0.7709 / R²_D 0.8324 < 0.98 — grid-geometry zigzag of recorded D across depth
-boundaries, not a recipe bug), so no scaling-law extrapolation is quoted; a+b = 1.0000 is
+**tripped** (R² 0.7709/0.8324 < 0.98 ⇒ fit rejected — grid-geometry zigzag of recorded D across
+depth boundaries, not a recipe bug), so no scaling-law extrapolation is quoted; a+b = 1.0000 is
 near-vacuous by C=6ND construction. d20 D:N **HOLDS at ratio-20 (9.6B tokens)** on fitted-interval
 evidence (s6-vs-s7 iso-FLOP: bigger-N/ratio-8 wins by −0.0096 bpb) plus the deliberate
 inference-aware overtrain registration. **Trigger T1 (d14 escalation) formally fired** — surfaced
@@ -82,7 +83,7 @@ for human decision; no paid GPU work without explicit go-ahead.
 | Attention | Full GQA/MHA (frozen at P5) |
 | Optimizer | Muon+AdamW (ADOPTED, commit `f9e8f3b`) |
 | Precision | bf16 (compile NaN on sm120 → validated on sm90/H100 in P5) |
-| MTP head | Baked into pretrain (F2a, additive, neutral bpb) |
+| MTP head | **Not in d20** — decision of record 2026-08-03 (option a): `mtp_depth=0`, all certified constants stand; F2a/F2b retarget post-d20 (`docs/RESULTS.md` §S3.5) |
 
 ---
 
@@ -113,8 +114,8 @@ for human decision; no paid GPU work without explicit go-ahead.
 | F3 | De-confound serving | ✅ Harness shipped; awaits trained ckpt | d20 ckpt | Prose acceptance <10%; code/JSON 40–60% | ABLATIONS §F3 |
 | F5 | MLA for real | ⬜ First-slice pending | 0.2–0.5B, standing box | +0.02 val loss vs GQA-8; KV ≥3×; kill >0.05 | ABLATIONS §F5 |
 | F6 | MoE balancing | Harness ✅ (`98f62e3`); smoke 30-step (vacuous); real run ≥1B pending | 30–300M, standing box | BIAS_FREE ≤ SEQ_AUX val CE; entropy >0.9·log N | ABLATIONS §F6 |
-| F9 | QK-clip / logit guard | ✅ Shipped; rides instrumented runs | Sub-1B | Max logit <~30 with qk_norm | ABLATIONS §F9 |
-| F12 | ClimbMix vs FineWeb-EDU corpus | ✅ **DONE — KEEP FineWeb-EDU** | 35M/700M, standing box | ClimbMix bpb 1.30205 ≥ FWE bpb 1.19197; kill triggered | ABLATIONS §F12 |
+| F9 | QK-clip / logit guard | ⚠️ Instrument shipped; **S_max falsifier PENDING** — no instrumented run has reported S_max (F1 died step 4,880; the S3 sweep did not carry `track_attn_logits`). Must ride the next instrumented run (P5 or later) | Sub-1B | Max logit <~30 with qk_norm | ABLATIONS §F9 |
+| F12 | ClimbMix vs FineWeb-EDU corpus | ✅ **DONE** — kill fired (+0.110 bpb, FWE better) but **OPERATOR OVERRIDE: ClimbMix FINAL 2026-08-02** for S3/d20 | 35M/700M, standing box | ClimbMix bpb 1.30205 ≥ FWE bpb 1.19197; kill triggered, overridden | ABLATIONS §F12 |
 
 ---
 
@@ -129,7 +130,7 @@ for human decision; no paid GPU work without explicit go-ahead.
 | s5 | 8 | 59.26M | 1.18B | 4.21e17 | ✅ bpb 0.9676 (batch 8) |
 | s6 | 8 | 59.26M | 2.37B | 8.43e17 | ✅ bpb 0.9498 (batch 8) |
 | s7 | 12 | 135.29M | 1.08B | 8.79e17 | ✅ bpb 0.9402 (batch 4) |
-| s8 | 12 | 135.29M | 2.71B | 2.20e18 | ⬜ P5 dress rehearsal (paid, gated on human go-ahead) |
+| s8 | 12 | 135.29M | 2.71B | 2.20e18 | ⬜ Re-homed to S3.5 stage 2 (free box, post-P5 recipe-v1) — `FRONTIER_2026_SCALING_PROGRAM.md` §3 |
 
 **DONE 2026-08-02 (12.09 GPU-h):** fit `N*(C)`/`D*(C)` raised the pre-registered R² gate
 (R²_N 0.7709 / R²_D 0.8324 < 0.98 — grid-geometry zigzag, not a recipe bug; a+b = 1.0000
@@ -168,9 +169,13 @@ Owner: `FRONTIER_2026_END_TO_END_PLAN.md` §S3 + `scaling/isoflop.py`.
 | 2026-08-02 | S3 s1–s2 landed: bpb 1.2553 / 1.1772 | Grid fix verified on GPU; sweep continuing s3→s7 |
 | 2026-08-02 | `FRONTIER_2026_ARCH_SCALING.md` added | One law per recipe backbone; per-architecture anchors, not re-sweeps; MoE the sole mini-fit exception |
 | 2026-08-02 | `stage_pretrain` device policy pinned (qk_norm on; SDPA on cuda) + stale checkpoint-chain test updated | Green CI restored after the S3 grid fix |
-| 2026-08-02 | S3 sweep s1–s7 DONE (12.09 GPU-h); R² gate raised (0.7709/0.8324 < 0.98), T1 fired; d20 D:N HOLD ratio-20 on interval evidence | Grid-geometry D zigzag breaks the power-law fit by construction; s6-vs-s7 iso-FLOP favors bigger-N; no extrapolation quoted; d14 decision escalated to human |
+| 2026-08-02 | F12 decision FINAL: operator OVERRIDE → **ClimbMix** for S3/d20 | Measurement-only verdict was KEEP FineWeb-EDU (+0.110 bpb at 35M/700M); override follows nanochat's larger-scale result; confirmation arm declined; A9 model card must state ClimbMix's CC BY-NC 4.0 license |
+| 2026-08-02 | S3 sweep s1–s7 DONE (12.09 GPU-h); R² gate tripped (0.7709/0.8324 < 0.98 ⇒ fit rejected), T1 fired; d20 D:N HOLD ratio-20 on interval evidence | Grid-geometry D zigzag breaks the power-law fit by construction; s6-vs-s7 iso-FLOP favors bigger-N; no extrapolation quoted; d14 decision escalated to human |
 | 2026-08-02 | d20 CORE band re-anchored 0.19–0.22 → **0.23–0.25 (central 0.24)** | Band was calibrated to the FWE-era nanochat fit; current ClimbMix curve sits +0.052..+0.064 above it at matched C (real recipe progress, 3–8× noise floor); GPT-2 XL parity is the stretch case, not base case |
 | 2026-08-02 | `FRONTIER_2026_D20_CERTAINTY_PLAN.md` added | One-page answer to "how are size/data/HPs defined": N anchored, D deliberate-overtrain (uncertified, d14 is the repair option), HPs undefined until the P5 sweep; decision matrix recommends accept-HOLD → P5 |
+| 2026-08-03 | `FRONTIER_2026_SCALING_PROGRAM.md` added; §S3.5 gates pre-registered in `docs/RESULTS.md`; P5 sweep protocol pinned (horizon/tie-break/confirmation/3-point width probe; $20 cap) | Senior-review pass: post-S3 fit-engineering redesign (joint Huber estimator, bootstrap+LOO gates, recipe-v0→v1 reconciliation, s8 re-homed to free-box stage 2) and the path to the K3 family-fit attention decision |
+| 2026-08-03 | ⚠ MTP recipe-surface drift flagged — **human decision required before P5** | d20 spec says "MTP baked into pretrain (F2a)" but `speedrun.py` never sets `mtp_depth` (default 0; S3 ran without it); certified constants (480.4M / 2.77e19 / T2 band) assume mtp_depth=0 — options registered in `docs/RESULTS.md` §S3.5 |
+| 2026-08-03 | **Decisions CLOSED: T1 = A (accept HOLD → P5) and d20 runs mtp_depth=0** (F2a/F2b retarget post-d20) | Operator-delegated senior-review calls: hyperparameters are the only unbounded unknown and only P5 closes them; the d20's value is anchor comparability and every certified constant assumes mtp_depth=0 — records in `docs/RESULTS.md` §S3.5 + `FRONTIER_2026_D20_CERTAINTY_PLAN.md` §8 |
 
 ---
 
@@ -183,4 +188,4 @@ When a rung ships or a doc changes:
 3. Do **not** duplicate rung-card detail here — link to the owner doc.
 4. Keep this file <300 lines so it loads fast.
 
-*Last updated: 2026-08-02*
+*Last updated: 2026-08-03*

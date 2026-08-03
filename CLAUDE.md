@@ -50,9 +50,10 @@
 > - **Close-the-loop / frontier-ablation front** (2026-07-04, [ADR-0018](docs/adr/ADR-0018-close-the-loop-nanochat-front.md)) —
 >   **✅ LOOP CLOSES:** speedrun spine (tokenizer→pretrain(MuonAdamW)→eval report card→sample) +
 >   F1 Muon + train-wiring/F4 + `eval/` shipped, GPU-verified talking sample. **▶ Current node → S3
->   scaling-law sweep running on the RTX 5090 pod** (s1–s4 banked, fit-gate next) → P5 d12 dress
->   rehearsal → 8×H100 d20; K3: K0/K1 done, K2 (KDA) is the critical path. **Buildable next-phase DAG
->   (25 rungs, START-HERE block; F1–F12
+>   sweep s1–s7 ✅ DONE 2026-08-02** (12.09 GPU-h, ClimbMix; R² gate tripped → T1 fired; D:N HOLD
+>   ratio-20/9.6B) → **human decision: T1/d14 escalation (free-slow vs paid vs proceed-to-P5)** →
+>   P5 d12 dress rehearsal → 8×H100 d20; K3: K0/K1 done, K2 (KDA) is the critical path. **Buildable next-phase DAG
+>   (26 rungs, START-HERE block; F1–F12
 >   re-verified vs the mid-2026 frontier 2026-07-09 — F1/F7/F4 reframed, F8 promoted, F10 linear-hybrid +
 >   F11 agentic-RL added, **F12 corpus ablation DONE — decision FINAL 2026-08-02 = ClimbMix by operator
 >   override**; see `FRONTIER_2026_ABLATIONS.md` §10):**
@@ -263,7 +264,8 @@ guides tag every deliverable LOAD-BEARING / COURSE-ROTE / SKIP). **Build-order i
 builds on the last); ship-order is EV-ranked.** With A1 ✅ done, the next artifact to *ship* is the
 **A5 RL "aha"** (scarcest 2026 cluster, highest-EV), with the A2 systems finish + OSS Rung-1 in parallel,
 then DELTA on that base — the one canonical sequence is **`../STRATEGY.md` §8** (it wins over any other
-doc's ordering). "Production" means: green CI,
+doc's ordering). *(The 2026-06-30 perf-first ordering mandate behind this ship-order is dissolved — see
+the `docs/IMPLEMENTATION_PLAN.md` DISCHARGED note.)* "Production" means: green CI,
 tests as executable spec, design docs and ADRs for non-obvious decisions, reproducible runs.
 GPU steps are **developed on the standing GPU** (rented out only for what this card can't do), never silently dropped (see "Develop on the GPU").
 
@@ -290,8 +292,9 @@ EP-MoE/MFU gloo-verified) + design notes A1–A7 + H100/B200/8×H200 runbooks + 
 CS336-A2 distributed half ✅ shipped 2026-07-03 (ZeRO-1 · FSDP · one-pager · comms algebra, W1–W4) + A3 ✅ (W5–W6).
 Repo green (ruff/pyright 0 · CPU + GPU suites). Rentals: 3 capability-tier sessions
 ([ADR-0012](docs/adr/ADR-0012-inference-rental-tiers.md) — H100 · 8×H200 serving day · B200).
-The A5 RL "aha" + **Capstone DELTA** stay gated behind the perf curriculum (ordering mandate
-2026-06-30). See [`docs/STATUS.md`](docs/STATUS.md) and `../STRATEGY.md` §8.
+*(Historical: the A5 RL "aha" + **Capstone DELTA** were gated behind the perf curriculum under the
+2026-06-30 ordering mandate — mandate dissolved 2026-07-03 into the two-front split; see the
+`docs/IMPLEMENTATION_PLAN.md` DISCHARGED note.)* See [`docs/STATUS.md`](docs/STATUS.md) and `../STRATEGY.md` §8.
 
 ## Engineering disciplines (how labs silently screen — bake these into tests)
 
@@ -363,7 +366,7 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
 | **Build status** — what's built / tested / green (single source of truth) | `docs/STATUS.md` |
 | **Close-the-loop front — pipeline-level end-to-end plan (read first)** (S0→S8: data → tokenizer → pretrain → S3 scaling-law gate → d20 → midtrain → SFT → RL → serve/eval; re-ranked EV order; 2026-07-30, 9-angle 2026 research pass) | `docs/FRONTIER_2026_END_TO_END_PLAN.md` |
 | **Close-the-loop front — strategy + DAG** (thesis, model tiers, F1–F11 falsifiers, verification, honesty ledger; **§10 = 2026-07-09 frontier re-verification**) | `docs/FRONTIER_2026_ABLATIONS.md` |
-| **Close-the-loop front — buildable task spec** (25 rungs A/F incl. F10 linear-hybrid + F11 agentic-RL, exact interfaces + tests + falsifier + kill + zone; START-HERE current node) | `docs/FRONTIER_2026_TASKSPEC.md` |
+| **Close-the-loop front — buildable task spec** (26 rungs A/F incl. F10 linear-hybrid + F11 agentic-RL + F12 corpus ablation, exact interfaces + tests + falsifier + kill + zone; START-HERE current node) | `docs/FRONTIER_2026_TASKSPEC.md` |
 | **K3 track — roadmap** (build & host Kimi K3 from scratch, chartered 2026-07-31; K0–K9 rungs, §6 START-HERE = K2 KDA critical path) | `docs/k3/ROADMAP.md` |
 | **K3 track — claim ledger** (every load-bearing K3 claim verified vs Moonshot primary sources; tech report arXiv:2607.24653 wins disagreements) | `docs/k3/FACTS.md` |
 | **K3 hand/delegate split — the boundary** (`k3/core/` hand-built by the human; agents: adversarial tests + markdown proposals only) | `src/scratch_llm/k3/HANDCRAFTED.md` |

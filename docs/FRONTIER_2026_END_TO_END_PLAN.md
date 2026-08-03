@@ -91,8 +91,9 @@
 >    `f9e8f3b`; F1-run descoped 07-17).
 >
 > *Adopted from the review:* F7 contamination probe + non-Qwen control; F8/F10 recall probe fixed
-> to RULER-primary. Ordering unchanged — **next: S3 fit-gate → P5 d12 ($10–15) → 8×H100
-> d20 (gated)**.
+> to RULER-primary. Ordering unchanged. *(Status update 2026-08-02: ~~next: S3 fit-gate~~ — S3 is
+> DONE (s1–s7, R² gate tripped ⇒ fit rejected, T1 fired, D:N HOLD ratio-20) — next: **human
+> decision on T1/d14** → P5 d12 ($10–15) → 8×H100 d20 (gated)*.
 
 ---
 
@@ -186,8 +187,10 @@ aggressive global fuzzy dedup; decontaminate eval sets yourself; overtraining sm
 20:1 is standard and beneficial; bpb as the vocab-invariant metric. *Contested:* which filtered
 corpus is best at ≤1B — now **self-measured**: our F12 at 35M/700M said the opposite of nanochat's
 head-to-head (ClimbMix +0.110 bpb *worse* at iso-FLOP, `docs/RESULTS.md` §F12); the d20 corpus
-(ClimbMix, operator override FINAL 2026-08-02) rests on nanochat's *larger-scale* result, and the d20
-run itself becomes the corpus arbiter at our scale (RESULTS.md:120-127); optimal vocab
+(ClimbMix, operator override FINAL 2026-08-02) rests on nanochat's *larger-scale* result, full stop
+— ~~the d20 run itself becomes the corpus arbiter at our scale~~ *(struck 2026-08-03: no FWE arm at
+d20 — confirmation arm declined — so the d20 validates the recipe against the re-anchored band, not
+the corpus choice; RESULTS.md §F12)*; optimal vocab
 at ≤1B; staged-mixture curriculum vs one good static mix (ClimbMix wins *statically* at GPT-2
 scale); reasoning-trace synthetic data at ≤1B (capacity floor unprobed).
 
@@ -202,7 +205,9 @@ is the cheapest large-win ablation we are not running.
 §F12): kill criterion triggered (ClimbMix bpb 1.30205 ≥ FineWeb-EDU 1.19197 at iso-FLOP, Δ=+0.1101),
 measurement-only verdict = KEEP FineWeb-EDU; **operator OVERRIDE → ClimbMix anyway** (following
 nanochat's larger-scale result), decision **FINAL 2026-08-02**. d20 corpus choice **settled =
-ClimbMix**, already staged on the pod; the d20 run itself becomes the corpus arbiter at our scale.
+ClimbMix**, already staged on the pod; ~~the d20 run itself becomes the corpus arbiter at our
+scale~~ *(struck 2026-08-03: the d20 trains on ClimbMix only — it validates the recipe against the
+re-anchored band; it cannot arbitrate the corpus choice)*.
 
 **F12 corpus ablation.** Pre-registered head-to-head that decides the d20 corpus *with our recipe*:
 **35M params / 700M tokens / iso-FLOP** (`C ≈ 1.5×10¹⁷`), tokenizer retrained **per corpus** on the
@@ -443,7 +448,8 @@ the leaderboard line (d24 ratio-8 FP8 ClimbMix, 1.65h, CORE 0.2626, val_bpb 0.71
 [leaderboard](https://github.com/karpathy/nanochat#time-to-gpt-2-leaderboard)); GPT-2 XL anchor
 CORE 0.256525; and nanochat's CORE-fit `CORE = 1 − 3.7555·FLOPs^−0.0344`. That fit at our d20's
 C ≈ 2.77e19 predicts CORE ≈ **0.195** `[INFERENCE from the published fit]` — inside our
-pre-registered 0.19–0.22 band; a useful independent cross-check that the band is sane.
+pre-registered 0.19–0.22 band (superseded 2026-08-02 → 0.23–0.25, §S4(e) re-anchor); a useful
+independent cross-check that the band is sane.
 
 **(e) Gates / kill (all falsifiable).**
 - a+b ∈ [0.95, 1.05] (the `C=6ND` identity) — else the grid or recipe is broken, fix before spending.
@@ -466,16 +472,23 @@ free-but-slow; 1×H100 spot ~$8–12 / ~$15–25). Any one trigger fires ⇒ run
 | trigger | condition | response |
 |---|---|---|
 | **T1 fit failure** | S3 gates fail (a+b ∉ [0.95,1.05] or R² < 0.98) | run **d14** — cheapest grid extension before trusting any extrapolation |
-| **T2 anchor divergence** | P5 d12 bpb diverges from the S3-fit prediction by > 0.01 bpb (or CORE > 0.02, the oracle-divergence gate) | run **d16** to localize where the curve breaks before the $100 |
+| **T2 anchor divergence** | P5 d12 bpb diverges from the S3-anchor band by > 0.01 bpb (or CORE > 0.02, the oracle-divergence gate). *(Amended 2026-08-03: the S3 fit was rejected — T1 — so "the S3-fit prediction" does not exist; the anchor is re-based on the measured d12 ray, s7 d12@r8 bpb 0.9402 with the batch-4 caveat, extended within-ray to ratio 20 ⇒ P5 expected band 0.89–0.92 bpb — indicative, fitted-interval estimate, not an extrapolation; `docs/RESULTS.md` §S3)* | run **d16** to localize where the curve breaks before the $100 |
 | **T3 science promotion** | F8 (DSA) or F10.2 (GDN-2 3:1) beats full attention on bpb at sweep scale **and** passes the mandatory RULER recall probe | confirm at **d14** before the result enters the public report (small-scale rankings can flip) |
 | none | — | d16 stays the $90-cumulative abort fallback only |
 
-Mid-scale runs use the *frozen* d20 recipe (full attention, Muon+AdamW, F12-winning corpus) — they
+Mid-scale runs use the *frozen* d20 recipe (full attention, Muon+AdamW, the operator-selected
+corpus — ClimbMix; the F12 measurement favored FWE, override FINAL 2026-08-02) — they
 are calibration points, not architecture bake-offs; the d20 architecture stays frozen regardless.
 
-**(f) Status.** **Running** (RTX 5090 pod, ClimbMix corpus): s1–s4 banked, s5 in flight as of
-2026-08-02. Blocks nothing that ships code; gates the D:N
-re-registration and the P5 go/no-go.
+**(f) Status.** **DONE 2026-08-02** (RTX 5090 pod, ClimbMix corpus): s1–s7 complete, 12.09 GPU-h
+(bpb 1.2553→0.9402 across C 1.92e16→8.79e17; s8 not run). The pre-registered R² gate **tripped**
+(R²_N 0.7709 / R²_D 0.8324 < 0.98 ⇒ fit rejected — grid-geometry D-zigzag across depth boundaries,
+not a recipe bug), so no N*(C)/D*(C) extrapolation is quoted; a+b = 1.0000 is near-vacuous by
+C=6ND. **T1 formally fired** ⇒ d14 escalation **surfaced for human decision** (free-but-slow vs
+paid vs accept-and-proceed-to-P5; no paid GPU without explicit go-ahead). D:N decision: **HOLD
+ratio-20 / 9.6B tokens** on fitted-interval evidence (s6-vs-s7 iso-FLOP) + the Sardana 2401.00448
+inference-aware overtrain registration. Gates the P5 go/no-go. Measured record: `docs/RESULTS.md`
+§S3 + `bench/RESULTS.md` §Frontier ablations.
 
 ---
 
@@ -519,8 +532,10 @@ collective NaN kill-switch. *Contested:* nothing material at this scale — the 
 recipe-side (S2/S3), not parallelization.
 
 **(e) Gate / kill (all pre-registered in `bench/RESULTS.md` §*$100 d20 run*).** P5 dress rehearsal
-(d12, 1×H100, **$10–15**: LR sweep for the single Muon LR + compile-on-sm90 re-validation + CORE
-vs a public checkpoint + ckpt kill/resume drill + the G1/G2/G4 entrypoints) must pass first. Then
+(d12, 1×H100, **$10–15, cap $20** — protocol of record `FRONTIER_2026_D20_CERTAINTY_PLAN.md` §6,
+revised 2026-08-03: LR sweep d12@ratio-4 + ratio-8 confirmation vs the 0.89–0.92 bpb band +
+3-point d8 width probe + compile-on-sm90 re-validation + ckpt kill/resume drill + step-time +
+the G1/G2/G4 entrypoints) must pass first. Then
 8×H100 d20 (~$100): MFU 33–40% (KILL <28% sustained), step 0.48–0.58 s (KILL >0.70 s), comm <1.5%
 (KILL >3%), scaling ≥97% (KILL <93%), loss-at-init ≈ log 32768 = 10.40 (kill on deviation), CORE
 **0.23–0.25, central ≈ 0.24** (re-anchored 2026-08-02; supersedes 0.19–0.22; KILL <0.15 ⇒ stack bug
@@ -532,7 +547,8 @@ FineWeb-EDU recipe; the corpus **moved to ClimbMix** (F12 operator override, FIN
 the band **must be re-anchored** against the *current*
 published ClimbMix curve (d24-class 0.257–0.269 at ~4e19) **before P5** (RESULTS.md §F12, lines 120-127).
 **DONE 2026-08-02** — re-anchored to **0.23–0.25 (central ≈0.24)**: progress-shift and curve-step
-methods agree (0.247–0.259 headline), −0.01..−0.02 our-recipe discount; GPT-2 XL parity (0.2565) is
+computations (0.247–0.259 headline; amended 2026-08-03 — the two are algebraically one computation,
+not independent corroboration), −0.01..−0.02 our-recipe discount; GPT-2 XL parity (0.2565) is
 the stretch case, not the base case. Full arithmetic: `docs/RESULTS.md` §S4-pre.
 
 **(f) Status.** All buildable gate rungs **done** (A7, A8, P1 ✅ SDPA 07-16/GPU-measured 07-17,
@@ -902,9 +918,13 @@ kill specialization).
 Ordered; effort `[S/M/L]`, deps, cost. Standing box = sm120 (free). Every rung: pre-register →
 build test-first → green-CI → measure → fill the ledger.
 
-1. **S3 scaling-law mini-sweep** `[L, free, no deps]` — the §3 grid (8 points, ~2–3 GPU-days
-   standing box). Fit L(N,D) in bpb; a+b gate; D:N decision rule; nanochat-oracle overlay. *Output:
-   the d20's D re-registered or confirmed, and a bpb-vs-FLOPs curve of our own.* Gates P5.
+1. ~~**S3 scaling-law mini-sweep**~~ — **DONE 2026-08-02** (`docs/RESULTS.md` §S3): s1–s7 complete
+   (12.09 GPU-h, RTX 5090 pod, ClimbMix; s8 not run). The pre-registered R² gate **tripped**
+   (R²_N 0.7709 / R²_D 0.8324 < 0.98 ⇒ fit rejected — grid-geometry D-zigzag, not a recipe bug), so
+   no extrapolation is quoted; a+b = 1.0000 near-vacuous. D:N **HOLDS at ratio-20 (9.6B)** on
+   fitted-interval evidence (s6-vs-s7) + the inference-aware overtrain registration. **T1 (d14)
+   formally fired — escalated to human decision** (free-slow vs paid vs accept-and-proceed-to-P5).
+   Gates P5.
 2. ~~**F12 data ablation**~~ — **DONE 2026-07-31** (`docs/RESULTS.md` §F12): kill criterion fired
    (ClimbMix bpb 1.30205 ≥ FineWeb-EDU 1.19197 at iso-FLOP, Δ=+0.1101; CORE 0.0551 vs 0.0510) —
    measurement-only verdict was KEEP FineWeb-EDU; **operator OVERRIDE chose ClimbMix anyway**

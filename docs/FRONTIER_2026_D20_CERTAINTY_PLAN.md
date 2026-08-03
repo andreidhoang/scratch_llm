@@ -2,7 +2,11 @@
 
 > **Audience:** the AI research engineer who owns the next two nodes (P5, then the d20).
 > **Status:** living document, written 2026-08-02 after S3 s1–s7 completed and the CORE band was
-> re-anchored. It consolidates, in one place, *what is certified vs borrowed vs still undefined*
+> re-anchored. **Revised 2026-08-03 (senior-review pass):** P5 sweep protocol pinned (horizon,
+> tie-break, confirmation run, width probe — §6 item 1), the oracle gate reconciled with the E2E
+> T2 amendment and de-confounded (§6 item 3), P5 given a $20 hard cap (§6/§10), and the §3
+> ratio-20 evidence chain stripped of its compute-confounded clause. It consolidates, in one
+> place, *what is certified vs borrowed vs still undefined*
 > about the d20's three defining quantities — model size N, token count D, and the optimizer
 > hyperparameters — and the exact engineering plan that converts the undefined parts into measured
 > ones before $100 is exposed.
@@ -18,12 +22,13 @@
 |---|---|---|---|---|
 | Corpus | ClimbMix | **Borrowed** | nanochat's larger-scale result; our F12 measured it *worse* at 35M (+0.110 bpb, single-seed) | d20 itself is the final arbiter (`docs/RESULTS.md` §F12 consequence 3) |
 | N | 480.4M (d20, d_model 1280, vocab 32,768 untied) | **Anchored** | 86% of nanochat d20's N at 73% of its C (anchor CORE 0.2219 @ 3.77e19) | P5 step-time + d20 report card vs band |
-| D | 9.6B tokens (ratio 20) | **Deliberate overtrain, uncertified by our fit** | nanochat's published optimum 8–10.5 + our interval evidence (nothing shows r20 hurting) + Sardana 2401.00448 serving economics | **d14 (T1 option)** — the only rung that can repair the fit |
+| D | 9.6B tokens (ratio 20) | **Deliberate overtrain, uncertified by our fit** | nanochat's published optimum 8–10.5 + s6-vs-s7 isoFLOP (training-optimal ≤8 at ~9e17 ⇒ 20 is an overtrain by design, §3) + Sardana 2401.00448 serving economics | **d14 (T1 option)** — the only rung that can repair the fit |
 | Muon LR / wd | **UNDEFINED** | **Not yet measured on our stack at any scale** | µP transfer theory + shipped LR-transfer machinery | **P5 LR sweep at d12 on H100** |
 | Expected CORE | 0.23–0.25 (central 0.24) | Re-anchored 2026-08-02 | published ClimbMix curve (0.257–0.269 @ ~4e19) − recipe discount | d20 run vs band; KILL <0.15 |
 
 One sentence: **size and data are chosen and honestly labeled as anchor/economics-driven;
-the hyperparameters are the genuinely open variable, and P5 exists to close them for $10–15.**
+the hyperparameters are the genuinely open variable, and P5 exists to close them for $10–15
+($20 hard cap).**
 
 ---
 
@@ -85,9 +90,10 @@ pre-registered abort, not by re-deriving N.
    re-registered 2026-07-30 ("decide, don't inherit").
 3. **What our S3 was supposed to do:** certify or re-register D via our own N\*(C)/D\*(C) fit.
    **It could not** — the R² gate raised (§4). What the data *does* support, per the
-   pre-registered fitted-interval rule: nothing in [s1, s7] shows ratio 20 *hurting* at any
-   budget (ratio-20 points beat their ratio-8 siblings at equal N), and the one true isoFLOP
-   comparison (s6 vs s7, 1.043× C) favors bigger-N/ratio-8 by −0.0096 bpb — i.e. the
+   pre-registered fitted-interval rule: the within-ray comparisons (ratio-20 beats ratio-8 at
+   equal N) are **compute-confounded** (at fixed N, ratio 20 is 2.5× the C, so it *must* win) and
+   are non-evidence for allocation; the one true isoFLOP comparison (s6 vs s7, 1.043× C) favors
+   bigger-N/ratio-8 by −0.0096 bpb — i.e. the
    training-optimal ratio at ~9e17 is ≤8 and drifting down, consistent with nanochat's 8–10.5
    and consistent with 20 being an *overtrain*, as intended.
 4. **Verdict of record (2026-08-02):** HOLD ratio 20 / 9.6B — with the written caveat that the
@@ -157,7 +163,7 @@ and the d20 width extrapolation is theory-guided rather than blind. **What is sh
 the LR-transfer machinery + fused optimizer are a completed d20-gate item (TASKSPEC P1–P6).
 **What has never run:** an actual LR sweep on our stack at any scale. That gap is P5's first
 work item, and it is why "final hyperparameters" do not exist as numbers today — they exist as
-a *procedure with a price tag of $10–15*.
+a *procedure with a price tag of $10–15 ($20 hard cap)*.
 
 ---
 
@@ -165,30 +171,56 @@ a *procedure with a price tag of $10–15*.
 
 **One rung, four products:** (1) the locked Muon LR + wd for d20; (2) sm90 re-validation of
 compile + precision; (3) the s8 ladder point + oracle-divergence check; (4) a rehearsed,
-measured path into the $100 run (kill/resume drill, step-time). $10–15, 1×H100.
+measured path into the $100 run (kill/resume drill, step-time). $10–15 planned / **$20 hard
+cap**, 1×H100. Budget math: 5-point sweep at the ratio-4 horizon ≈ 1.5–2 h + winner
+confirmation at ratio 8 ≈ 0.75 h + width probe ≈ 0.25 h + gates/drills ≈ 1 h ⇒ 3.5–4 h at
+$2.5–3.5/GPU-h. (The earlier "1–2B tokens total" sizing in TASKSPEC forces a sweep horizon too
+short to transfer — the protocol below spends the tokens where they resolve the LR.)
 
 **Protocol (each item maps to a gate in `bench/RESULTS.md` §$100 d20 run / E2E §S4(e)):**
 
 1. **Muon LR sweep at d12.** Grid: the transferred point estimate ×{0.5, 0.7, 1.0, 1.4, 2.0}
    (coarse, single seed — the goal is locating the basin and checking the transfer prediction,
-   not a publication-quality response surface). Selection metric: val_bpb on the pinned val
-   set (never raw CE). **Transfer check:** if the empirical optimum lands outside
+   not a publication-quality response surface). **Horizon pinned: ratio 4 at d12 (0.55B tokens,
+   C ≈ 4.4e17, ~25 min/point on H100) run with the d20's schedule shape** (same warmup fraction,
+   same decay form) — the horizon must be stated because LR optima drift downward as horizon
+   lengthens; ratio 4 is the cheapest horizon that still exercises the full schedule.
+   Selection metric: val_bpb on the pinned val set (never raw CE). **Tie-break: grid points
+   within 0.003 bpb (single-seed val_bpb noise) are ties ⇒ take the *lower* LR** — cheap
+   insurance against the horizon shift between the sweep and the d20's 18,311 steps.
+   **Confirmation run:** the winner once at ratio 8 (1.08B tokens, C ≈ 8.8e17) — this sits on
+   the measured s7 ray and doubles as the T2 anchor check (item 3). **Width probe:** a 3-point mini-sweep
+   at d8 (width 512, ratio-4 horizon) at {×0.7, 1.0, 1.4} of the d12 winner (~30 min total) —
+   a single LR point per width cannot measure a transfer slope; three locate the d8 basin. If
+   the d8 optimum sits more than one grid step from the µP-consistent position, treat the
+   768→1280 extrapolation as empirical-only and widen the d12 sweep once.
+   Depth transfer (12→20) stays a residual risk, accepted in writing: nanochat's own recipe
+   holds LR fixed across depths. **Transfer check:** if the empirical optimum lands outside
    ×[0.7, 1.4] of the µP prediction, transfer is weaker than assumed ⇒ widen the sweep once;
    if it lands flat/unstable, **stop — do not proceed to d20 on a guessed LR.**
 2. **Compile-on-sm90 re-validation.** bf16+compile NaN is a measured sm120-inductor fact;
    re-run the minimal repro on sm90. Outcome decides whether d20 trains compiled (planned
    step-time) or eager (re-price the run before starting it).
-3. **CORE vs a public checkpoint** (P3 suite, byte-identical to nanochat core.yaml).
-   Oracle-divergence gate: our d12 vs nanochat's published d12-class point — **> 0.01 bpb
-   divergence ⇒ trigger T2 (d16)**, stop and diagnose before the d20.
+3. **Anchor divergence vs the measured d12 ray** (the T2 gate, reconciled with the E2E
+   amendment of 2026-08-03; this item's earlier wording mixed units — CORE compared against a
+   bpb threshold — and is corrected here). **Primary gate (bpb):** the item-1 confirmation run
+   (d12@r8) must land inside the re-anchored band **0.89–0.92 bpb** (s7 d12@r8 0.9402 with the
+   batch-4 caveat, extended within-ray to ratio 20 — `docs/RESULTS.md` §S3); **> 0.01 bpb
+   outside the band ⇒ trigger T2 (d16)**, stop and diagnose before the d20. **Secondary
+   (CORE):** our d12 vs nanochat's published d12-class point (P3 suite, byte-identical to
+   nanochat core.yaml), interpreted only against the measured CORE noise floor
+   (±0.008–0.016, Appendix): divergence **≥ 0.02** (≈2× floor) is signal ⇒ diagnose; below
+   that it is inconclusive-by-noise, not a stack bug.
 4. **Checkpoint kill/resume drill.** Kill mid-run, resume, verify continuation (optimizer-state
    snapshots via `--checkpoint-every` → `work_dir/pretrain_ckpt.pt`, consolidated path under
    torch.distributed — all shipped and CPU-verified; this is the *live-fire* proof).
 5. **Step-time + MFU measurement at d12 on H100.** Re-prices the d20: the 2.4–3.3 h / $58–79
    window and the $90 abort are only as good as this number.
 
-**Go/no-go into d20 (all five required):** LR locked inside the predicted basin · compile clean
-(or eager re-priced and approved) · CORE divergence ≤ 0.01 bpb · resume verified · step-time
+**Go/no-go into d20 (all five required):** LR locked inside the predicted basin and confirmed
+at the ratio-8 horizon · compile clean
+(or eager re-priced and approved) · bpb inside 0.89–0.92 (±0.01) with CORE divergence < 0.02 ·
+resume verified · step-time
 inside 0.48–0.58 s-equivalent scaling. Any failure ⇒ fix and re-rehearse; **no paid d20 on a
 failed rehearsal.**
 
@@ -225,11 +257,12 @@ the human's call, and it is on the table precisely because the gate fired honest
 
 | Option | Cost | Buys | Risk left |
 |---|---|---|---|
-| A. Accept HOLD, go straight to P5 | $10–15 | HP closure (the real gap) | D:N stays borrowed+interval — bounded by shallow basin |
-| B. d14 free on standing box, then P5 | days of wall + $10–15 | D:N certified on our stack | LR still only P5-closed (fine) |
-| C. Paid d14, then P5 | $ + $10–15 | same as B, faster | same as B |
+| A. Accept HOLD, go straight to P5 | $10–15 (cap $20) | HP closure (the real gap) | D:N stays borrowed+interval — bounded by shallow basin |
+| B. d14 free on standing box, then P5 | days of wall + $10–15 (cap $20) | D:N certified on our stack | LR still only P5-closed (fine) |
+| C. Paid d14, then P5 | $ + $10–15 (cap $20) | same as B, faster | same as B |
 
-**Recommendation of record (2026-08-02): A, with B as the conservative alternative.** Rationale:
+**Decision of record (2026-08-03, operator-delegated): A — accept HOLD, straight to P5.**
+(Supersedes the 2026-08-02 recommendation of A with B as the conservative alternative.) Rationale:
 the genuinely *undefined* quantity is hyperparameters, and only P5 closes it; the D:N question
 is *bounded* (borrowed optimum + interval evidence + shallow-basin economics), so d14's marginal
 information is real but not gating. If the human weights corpus/D certainty above schedule,
@@ -244,9 +277,11 @@ B is the defensible pick. C requires explicit paid-work approval per guardrails.
 - [x] S3 s1–s7 + fit attempt + gate outcome logged; figures committed
 - [x] CORE band re-anchored 0.23–0.25 (`docs/RESULTS.md` §S4-pre)
 - [x] This plan doc
-- [ ] Human decision: T1 (A/B/C per §8)
+- [ ] Confirm staged ClimbMix train shards ≥ 9.6B tokens (+ pinned val set present) — free
+      check, must pass before P5 day
+- [x] Human decision: T1 — **A** (accept HOLD → P5), decided 2026-08-03 (§8 decision of record)
 
-**P5 day (rental, $10–15 — after human go-ahead):**
+**P5 day (rental, $10–15 planned / $20 hard cap — after human go-ahead):**
 - [ ] Provision 1×H100 per `deploy/runbooks/d20_speedrun_8xH100.md` (reuse its env steps)
 - [ ] Run §6 items 1–5 in order; log each gate outcome into `bench/RESULTS.md` §$100 d20 run
 - [ ] Write the P5 verdict (go/no-go per §6) into `docs/RESULTS.md` and the STATUS board
@@ -256,14 +291,19 @@ B is the defensible pick. C requires explicit paid-work approval per guardrails.
 - [ ] Human authorization for the $100 run (guardrail)
 - [ ] Execute d20 per runbook; enforce every pre-registered kill line mechanically
 - [ ] Report card: CORE vs 0.23–0.25 band, bpb vs ≈0.74 cross-check, CORE-vs-FLOPs point on
-      nanochat's curve — honest framing locked (never a depth-matched headline)
+      nanochat's curve — honest framing locked (never a depth-matched headline). **Noise rule,
+      pre-committed:** the band half-width (0.01) is below the CORE noise floor
+      (±0.008–0.016) — a single measurement within ±0.016 of a band edge is *inconclusive*,
+      not a pass/fail; repeat the eval (or mean over k reruns) before declaring either.
 
 ---
 
 ## §10 Consolidated kill / abort lines (mechanical, no mid-run debate)
 
-- P5: LR basin not found ⇒ stop; compile NaN on sm90 ⇒ re-price eager before any d20 approval;
-  CORE-oracle divergence > 0.01 bpb ⇒ T2/d16, stop.
+- P5: LR basin not found (flat/unstable) ⇒ stop · confirmation run (d12@r8) outside
+  0.89–0.92 bpb by > 0.01 ⇒ T2/d16, stop · CORE-vs-nanochat divergence ≥ 0.02 (noise-aware)
+  ⇒ diagnose before d20 · compile NaN on sm90 ⇒ re-price eager before any d20 approval ·
+  **$20 cumulative ⇒ abort, re-scope the sweep.**
 - d20: MFU < 28% sustained ⇒ kill · step > 0.70 s ⇒ kill · comm > 3% ⇒ kill · scaling < 93%
   ⇒ kill · loss-at-init deviates from ln 32768 = 10.40 ⇒ kill · CORE < 0.15 ⇒ stack bug ·
   **$90 cumulative ⇒ abort → downsize d16.**
@@ -282,5 +322,10 @@ B is the defensible pick. C requires explicit paid-work approval per guardrails.
 - Our S3: bpb 1.2553 → 0.9402 over 1.92e16 → 8.79e17; fit R²_N 0.7709 / R²_D 0.8324 (gate
   raised); s6-vs-s7 isoFLOP Δ = −0.0096 bpb for bigger-N
 - Re-anchored d20 band: **0.23–0.25 (central 0.24)**; predicted d20 val_bpb ≈ 0.74 (indicative)
+- P5 protocol (pinned 2026-08-03): sweep d12@ratio-4 (0.55B tok/point, C ≈ 4.4e17, ~25 min) ×
+  grid {0.5, 0.7, 1.0, 1.4, 2.0}, d20 schedule shape; tie-break = lower LR within 0.003 bpb;
+  confirmation d12@ratio-8 (1.08B tok) vs band 0.89–0.92 bpb; width probe: 3-point mini-sweep
+  d8@ratio-4 {×0.7, 1.0, 1.4}; budget
+  $10–15 planned / $20 hard cap
 - F12: FWE 1.19197 vs ClimbMix 1.30205 bpb (Δ +0.1101); CORE 0.0510 vs 0.0551 (single-seed);
   decontam overlap 1.92% / 0.07%

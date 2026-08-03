@@ -229,7 +229,9 @@ map: [`../README.md`](../README.md).
 CS336 A1→A5 gave us every *layer*; it never ran the *loop*. The next build spine adopts Karpathy's
 **nanochat** integration harness (`speedrun.sh` + report card) over the components we already own to
 train an actual **talking model** (headline: nanochat **d20**, measured **480.4M** @ vocab 32768,
-~$100 on 8×H100, pre-registered CORE band **0.19–0.22** vs the original-d20 anchor **0.2219** — the
+~$100 on 8×H100, pre-registered CORE band **0.19–0.22** *(re-anchored 2026-08-02 → **0.23–0.25**,
+central ≈0.24 — see `docs/RESULTS.md` §S4-pre; 0.19–0.22 preserved as the pre-registration of
+record)* vs the original-d20 anchor **0.2219** — the
 old "target CORE ≈ GPT-2" line was mis-anchored, corrected 2026-07-16), then runs an EV-ranked,
 pre-registered, **iso-FLOP frontier ablation study** — F1 MuonAdamW,
 F2 MTP draft head, F3 de-confound serving, F4 bf16+compile, F5 MLA-for-real, F6 MoE balancing,

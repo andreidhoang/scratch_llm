@@ -98,7 +98,9 @@ This is the heart of the manual: for each file we authored, *why it exists*, *wh
 
 ### `.claude/settings.json` — Lever 4 (permissions) + wiring for Lever 4 (hooks)
 - **What:** pre-approves the safe, frequent build commands (`uv`, `pytest`, `ruff`, `pyright`,
-  read-only `git`) and registers the three hooks.
+  read-only `git`) and registers the four hooks (`session-start` on SessionStart, `lint-on-edit`
+  on PostToolUse Edit|Write, `green-ci-gate` on PreToolUse git-commit, `kernel-write-guard` on
+  PreToolUse Edit|Write).
 - **Why lever 4:** permissions shape the *action space* deterministically — you stop being prompted
   50×/day for `pytest` (which would be pure friction) without granting anything destructive.
 - **The teaching moment:** my first draft added `git add`/`git commit` to the allow-list. The
@@ -150,23 +152,45 @@ This is the heart of the manual: for each file we authored, *why it exists*, *wh
   "a CLAUDE.md line is a suggestion; a hook is enforcement" applies to the *mode* too.
 
 ### `.claude/agents/*.md` — Levers 2 + 3
-Two specialists. The frontmatter is deliberately **minimal and verified** (`name`, `description`,
-`tools`, `model`) — I discarded several fields a docs-summary hallucinated, because an invented field
-is silently ignored. The `description` is load-bearing: it is the *only* part the model sees until
-delegation, so it is written to trigger on exactly the right request.
+Six specialists (re-verified 2026-08-03): `ship-reviewer`, `rl-run-auditor`, `kernel-ship-reviewer`,
+`bench-writer`, `kernel-tutor`, `roofline-analyst`. The frontmatter is deliberately **minimal and
+verified** (`name`, `description`, `tools`, `model`) — I discarded several fields a docs-summary
+hallucinated, because an invented field is silently ignored. The `description` is load-bearing: it is
+the *only* part the model sees until delegation, so it is written to trigger on exactly the right
+request.
 
 - `ship-reviewer` (Lever 3) — gates a diff on correctness + design/scope. Isolates the diff-reading;
   returns ACCEPT/REJECT.
 - `rl-run-auditor` (Lever 3) — scans run logs for the mandatory guardrails (the three KLs, IS-ratio
   histograms, reward/length stats, `kl_train_infer` HALT@0.10). A mechanical checklist that gates
   trust in any RL number.
+- `kernel-ship-reviewer` (Lever 3) — the perf-aware variant for a human-written Triton/CUDA kernel:
+  correctness vs the oracle, fp16/bf16 numerics, profile actually produced, speedup real (not a
+  benchmark artifact). ACCEPT/REJECT; never rewrites the kernel.
+- `bench-writer` (Lever 3) — writes the failing oracle test + the bench/roofline harness *before* a
+  kernel rep starts (the target and the DoD); never the kernel under test.
+- `kernel-tutor` (Lever 2/3) — Socratic kernel-concept tutor (tiling, coalescing, occupancy, the
+  roofline, online softmax); explains from first principles and structurally refuses to write the
+  kernel.
+- `roofline-analyst` (Lever 3) — reads a profiler/bench result and diagnoses the bottleneck
+  (memory- vs compute-bound, % of peak, top stall, the single next optimization); diagnoses only.
 
 ### `.claude/commands/*.md` — Lever 2
-You-triggered macros, **zero context cost until typed**, that expand into precise prompts. Two are
-deliberate gates delegating to the agents: `/ship` (reviews the diff, runs green-CI, then hands *you*
-the commit command — never auto-commits) and `/audit-rl` (routes RL run logs to the auditor). Two
-drive the build: **`/master <concept>`** (the forced first-principles + three-lens-visualize +
-teach-back mentor loop) and **`/next`** (orient → start the next load-bearing step test-first).
+You-triggered macros, **zero context cost until typed**, that expand into precise prompts. Fourteen
+exist (re-verified 2026-08-03), in four groups. The gates delegating to agents: `/ship` (reviews the
+diff, runs green-CI, then hands *you* the commit command — never auto-commits), `/audit-rl` (routes
+RL run logs to the auditor), `/kreview` (gates a human-written kernel via `kernel-ship-reviewer`),
+and `/profile` (routes a bench/profiler result to `roofline-analyst`). The build + day-rhythm
+drivers: **`/master <concept>`** (the forced first-principles + three-lens-visualize + teach-back
+mentor loop), **`/next`** (orient → start the next load-bearing step test-first), `/standup`
+(morning open: orient, pick the one EV-ranked node, pre-register its falsifiable prediction + kill
+criterion), and `/eod` (close: make state durable, name tomorrow's node, reset the window). The
+kernel-mastery lane: `/kernel-day` (drive today's rep — scaffold test/bench, pause for the human to
+implement, profile + review after), `/kquarry` (one Q1–Q6 quarry rep on an already-built kernel),
+`/kviz` (build a single-file interactive stepper for a kernel mechanism), and `/rebuild` (re-derive
+one agent-built kernel from blank in `mastery/`). The teach-back pair: `/feynman` (you explain;
+Claude plays the confused student) and `/tutor` (Socratic kernel-concept tutor, refuses to write the
+kernel).
 - **Why the mentor is a command, not a subagent.** Teaching is an *interactive Socratic dialogue* —
   it pauses for the user's prediction and teach-back. A subagent returns exactly **one** final message
   and cannot hold a back-and-forth, so mentor mode runs in the **main thread** (the user is in the
@@ -230,7 +254,8 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
 - **Data / corpus decision (F12)** — **DONE; decision FINAL 2026-08-02 = ClimbMix.** The operator
   overrode the triggered kill criterion (measured: ClimbMix +0.110 bpb worse than FineWeb-EDU at
   35M/700M, iso-FLOP) and confirmed **ClimbMix** for the S3 sweep and the d20 run, following
-  nanochat's larger-scale result; the d20 run itself becomes the corpus arbiter at our largest scale.
+  nanochat's larger-scale result; the confirmation arm was declined, so the d20 — ClimbMix-only —
+  cannot arbitrate the corpus choice: it validates the recipe against the re-anchored CORE band.
   Record of record: [`RESULTS.md`](RESULTS.md) §F12 (measurement, override, and FINAL decision all
   logged). Sources: [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md) §5,
   [`FRONTIER_2026_END_TO_END_PLAN.md`](FRONTIER_2026_END_TO_END_PLAN.md) §S0,
@@ -340,7 +365,13 @@ would silently not load. That one call paid for itself many times over.)
 A harness file that looks perfect but doesn't load is worse than none — it gives false confidence.
 After authoring, **introspect**: `/memory` (what CLAUDE.md/memory loaded), `/agents` (are the
 specialists discovered?), `/hooks` (are the hooks registered?), and actually *run* a hook/command
-once. We did this here: we executed all three hooks and watched their output before trusting them.
+once. We did this here: we executed all four hooks and watched their output before trusting them.
+
+**Inventory drift is its own failure class (found 2026-08-03).** This manual claimed "two
+specialists", "three hooks", and four commands while the harness had quietly grown to six agents,
+four registered hooks, and fourteen commands — the prose read fine; only the counts were stale.
+Re-verify every inventory claim against `.claude/` whenever the harness changes: this section's
+"verify mechanisms fire" applies to the manual's own inventory too.
 
 ### 3.7 Write conclusions to durable state before long operations
 Before a long advisor call, a big agent run, or anything that might be interrupted, make the
@@ -374,6 +405,24 @@ discipline behind the `🔵 build-lab` choices in `FRONTIER_PRACTICE_2026.md` �
 kill-criterion so a failed node is abandoned rather than sunk-cost. "What would falsify this?" is the same
 gate that runs the DELTA capstone. *(Framing: Jacob Steinhardt's research-as-MDP — the EV-under-uncertainty
 view of a research career.)*
+
+### 3.10 Label taxonomies — three honesty-label schemes, one canonical for new entries
+Three claim-labelling schemes coexist in this repo's docs (reconciled 2026-08-03; `CLAUDE.md` and
+`FRONTIER_2026_MASTER_PLAN.md` are owned by other workstreams, so the mapping lives here):
+
+| Canonical — root `AGENTS.md` §Honesty ledger | `CLAUDE.md` FOP-4 | `FRONTIER_2026_MASTER_PLAN.md` §2 / `END_TO_END_PLAN.md` §1 |
+|---|---|---|
+| **measured by us** (a number off our own box, logged in `bench/RESULTS.md`) | `[FACT]` — only when the fact is our own measurement | `[MEASURED]` |
+| **reported** (an external claim, primary- or secondary-source) | `[FACT]` / `[INFERENCE]` | `[VERIFIED]` (primary source, citation given) / `[REPORTED]` (secondary) |
+| **not verified** (unresolved or conflicting evidence) | `[UNCERTAIN]` | `[UNCERTAIN]` |
+
+(`[PRE-REGISTERED PREDICTION]` in the MASTER_PLAN hierarchy is a prediction, not an evidence label —
+it converts to `[MEASURED]` after the run or dies at its kill criterion.)
+
+**Rule:** the root `AGENTS.md` trio — *measured by us / reported / not verified* — is the canonical
+scheme for **new** entries (FACTS.md, `bench/RESULTS.md`, fresh claims anywhere). The FOP-4 brackets
+and the `[VERIFIED]` hierarchy are **grandfathered per-file**: don't rewrite existing files to
+convert them, and don't introduce a fourth scheme.
 
 ---
 
@@ -447,8 +496,8 @@ Authoritative schemas, confirmed against on-disk files + `code.claude.com` docs 
 ### How to verify *this* harness loaded (do this once now)
 ```
 /memory     # expect: scratch_llm/CLAUDE.md + the MEMORY.md entries
-/agents     # expect: ship-reviewer, rl-run-auditor
-/hooks      # expect: SessionStart, PostToolUse(Edit|Write), PreToolUse(git commit)
+/agents     # expect: ship-reviewer, rl-run-auditor, kernel-ship-reviewer, bench-writer, kernel-tutor, roofline-analyst
+/hooks      # expect: SessionStart, PostToolUse(Edit|Write), PreToolUse(git commit), PreToolUse(Edit|Write — kernel-write-guard)
 ```
 (Run Claude from inside `scratch_llm/`, or these won't be in scope.)
 
