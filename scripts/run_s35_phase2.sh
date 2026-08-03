@@ -7,7 +7,11 @@
 # Sequence (CERTAINTY_PLAN §6 + SCALING_PROGRAM stage 2), all at recipe-v1 = WINNER_LR:
 #   1. confirmation: d12 @ ratio-8 (= v1 s7) at WINNER_LR — doubles as the T2 anchor
 #   2. width probe: d8 @ ratio-4 at {0.7, 1.0, 1.4} × WINNER_LR
-#   3. S3.5 ladder: s8 (d12 @ ratio-20), s35_d14r8; s35_d14r20 only with --with-d14r20
+#   3. ladder refresh: s1–s6 at WINNER_LR — MANDATORY for the joint fit. The rebuilt
+#      tokenizer is not verifiably identical to the lost original, so the banked s1–s6
+#      records (old tokenizer, old recipe) cannot be mixed into the S3.5 fit; without
+#      these six cheap points the 5-parameter joint law is underdetermined.
+#   4. S3.5 ladder: s8 (d12 @ ratio-20), s35_d14r8; s35_d14r20 only with --with-d14r20
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel 2>/dev/null || echo /root/cs336/scratch_llm)"
 
@@ -41,7 +45,12 @@ for m in 0.7 1.0 1.4; do
   run p5_d8r4 v3 8 "$lr" "artifacts/p5/width_lr$m" || { step "FATAL: width probe $m failed"; exit 1; }
 done
 
-# 3. S3.5 ladder points (recipe-v1)
+# 3. Ladder refresh at recipe-v1 (cheap points first — fail fast if the recipe misbehaves)
+for p in s1 s2 s3 s4 s5 s6; do
+  run "$p" v1 8 "$WINNER" "artifacts/s35/ladder_$p" || { step "FATAL: ladder $p failed"; exit 1; }
+done
+
+# 4. S3.5 top-end points (recipe-v1)
 run s8 v1 8 "$WINNER" artifacts/s35/d12_r20 || { step "FATAL: s8 failed"; exit 1; }
 run s35_d14r8 v3 8 "$WINNER" artifacts/s35/d14_r8 || { step "FATAL: d14r8 failed"; exit 1; }
 if [ "$WITH_D14R20" = "--with-d14r20" ]; then
