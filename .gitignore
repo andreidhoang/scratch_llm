@@ -28,6 +28,12 @@ data/cache/
 *.gguf
 checkpoints/
 
+# Staged corpora + tokenized sweep data (~23 GB) — manifests/result JSONs stay tracked
+artifacts/f12_corpus_ablation/climbmix/
+artifacts/f12_corpus_ablation/fineweb_edu/
+artifacts/f12_corpus_ablation/parquet/
+artifacts/s3_scaling_sweep/data/
+
 # Run outputs — manifests are committed, large logs/traces are not
 runs/**/rollouts/
 runs/**/*.log
