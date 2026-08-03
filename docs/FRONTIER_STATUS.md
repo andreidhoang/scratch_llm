@@ -9,6 +9,7 @@
 > - Buildable spec (file→change, tests, DoD) → [`FRONTIER_2026_TASKSPEC.md`](FRONTIER_2026_TASKSPEC.md)
 > - Integrated entry point → [`FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md)
 > - Architecture × scaling-law program (when a re-sweep is/isn't needed) → [`FRONTIER_2026_ARCH_SCALING.md`](FRONTIER_2026_ARCH_SCALING.md)
+> - d20 certainty plan (what's certified vs borrowed vs undefined; P5/d14 protocol) → [`FRONTIER_2026_D20_CERTAINTY_PLAN.md`](FRONTIER_2026_D20_CERTAINTY_PLAN.md)
 
 ---
 
@@ -169,6 +170,7 @@ Owner: `FRONTIER_2026_END_TO_END_PLAN.md` §S3 + `scaling/isoflop.py`.
 | 2026-08-02 | `stage_pretrain` device policy pinned (qk_norm on; SDPA on cuda) + stale checkpoint-chain test updated | Green CI restored after the S3 grid fix |
 | 2026-08-02 | S3 sweep s1–s7 DONE (12.09 GPU-h); R² gate raised (0.7709/0.8324 < 0.98), T1 fired; d20 D:N HOLD ratio-20 on interval evidence | Grid-geometry D zigzag breaks the power-law fit by construction; s6-vs-s7 iso-FLOP favors bigger-N; no extrapolation quoted; d14 decision escalated to human |
 | 2026-08-02 | d20 CORE band re-anchored 0.19–0.22 → **0.23–0.25 (central 0.24)** | Band was calibrated to the FWE-era nanochat fit; current ClimbMix curve sits +0.052..+0.064 above it at matched C (real recipe progress, 3–8× noise floor); GPT-2 XL parity is the stretch case, not base case |
+| 2026-08-02 | `FRONTIER_2026_D20_CERTAINTY_PLAN.md` added | One-page answer to "how are size/data/HPs defined": N anchored, D deliberate-overtrain (uncertified, d14 is the repair option), HPs undefined until the P5 sweep; decision matrix recommends accept-HOLD → P5 |
 
 ---
 
