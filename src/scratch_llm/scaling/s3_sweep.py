@@ -86,6 +86,18 @@ GRID_SPEC: tuple[tuple[str, int, int], ...] = (
     ("s8", 12, 20),
 )
 
+# The v3 recipe/scale-extension grid (FRONTIER_2026_D20_CERTAINTY_PLAN §6 P5 protocol +
+# FRONTIER_2026_SCALING_PROGRAM stage 2): ratio-4 points for the P5 LR sweep (d12 core sweep,
+# d8 width probe) and the d14 rungs that extend the ladder's leverage toward the d20. The P5
+# confirmation point (d12 @ ratio-8) and S3.5's d12-r20 are the v1 grid's s7/s8 — reused, not
+# duplicated. LR is NOT a grid axis: one point per invocation, ``--lr`` carries the multiplier.
+GRID_SPEC_V3: tuple[tuple[str, int, int], ...] = (
+    ("p5_d12r4", 12, 4),
+    ("p5_d8r4", 8, 4),
+    ("s35_d14r8", 14, 8),
+    ("s35_d14r20", 14, 20),
+)
+
 # The v2 budget × size grid (the R²-gate repair): (target budget C, depths per budget). Each
 # budget gets THREE model sizes so the per-budget min-pick can interpolate instead of
 # degenerating. Points are named b<budget index>_d<depth> — b1_d4 .. b5_d16. Sizes are staggered
@@ -139,6 +151,7 @@ class SweepRecord(TypedDict):
     wall_s: float
     seed: int  # the run's seed; replicates of one (point, budget) average before min-pick
     target_compute: NotRequired[float]  # v2 only: the registered budget C_k this point serves
+    lr: NotRequired[float]  # peak LR override (--lr); absent = the recipe default 3e-3
 
 
 @dataclass(frozen=True)
@@ -230,11 +243,14 @@ def _instantiated_params(depth: int, vocab_size: int, context_length: int) -> in
 
 
 def build_grid(
-    vocab_size: int = VOCAB_SIZE, context_length: int = CONTEXT_LENGTH
+    vocab_size: int = VOCAB_SIZE,
+    context_length: int = CONTEXT_LENGTH,
+    spec: tuple[tuple[str, int, int], ...] = GRID_SPEC,
 ) -> list[GridPoint]:
-    """Instantiate the s1–s8 grid: N from ``model_config_for_depth``, D = ratio × N, C = 6ND."""
+    """Instantiate a depth × ratio grid: N from ``model_config_for_depth``, D = ratio × N,
+    C = 6ND. Defaults to the s1–s8 v1 spec; the v3 P5/S3.5 extension passes its own."""
     grid: list[GridPoint] = []
-    for point, depth, ratio in GRID_SPEC:
+    for point, depth, ratio in spec:
         n_params = _instantiated_params(depth, vocab_size, context_length)
         tokens = ratio * n_params
         grid.append(
@@ -248,6 +264,13 @@ def build_grid(
             )
         )
     return grid
+
+
+def build_grid_v3(
+    vocab_size: int = VOCAB_SIZE, context_length: int = CONTEXT_LENGTH
+) -> list[GridPoint]:
+    """Instantiate the v3 P5/S3.5 extension grid — same N/D/C construction as v1."""
+    return build_grid(vocab_size, context_length, spec=GRID_SPEC_V3)
 
 
 def build_grid_v2(
@@ -355,6 +378,7 @@ def run_point(
     seed: int = 0,
     bf16: bool = False,
     compile_model: bool = False,
+    lr: float | None = None,
 ) -> SweepRecord:
     """Run one grid point on the real-corpus pretrain path (speedrun's shard-backed chain:
     shards → pretrain → eval) and return its record.
@@ -363,7 +387,9 @@ def run_point(
     D/(batch×ctx); v2: the plan-frozen whole steps, batch-mismatches raise); val_bpb and
     val_loss (nats/token) come from speedrun's report card on the held-out tail slice, computed
     by ``eval.metrics.bits_per_byte``. The record carries the seed (dual-seed fits average
-    replicates before min-picking) and, for v2 points, the target budget C_k.
+    replicates before min-picking) and, for v2 points, the target budget C_k. ``lr`` overrides
+    the peak LR (the P5 recipe sweep): the schedule SHAPE (warmup, decay profile) is unchanged,
+    only the peak moves, and the override lands in the record so the sweep stays auditable.
     """
     steps = point.planned_steps(batch_size, CONTEXT_LENGTH)
     cfg = SpeedrunConfig(
@@ -377,6 +403,9 @@ def run_point(
         seed=seed,
         amp_dtype="bf16" if bf16 else None,
         compile=compile_model,
+        # SpeedrunConfig.lr (3e-3) is the recipe default, read off the dataclass so this
+        # never duplicates it; only P5's --lr overrides the peak.
+        lr=lr if lr is not None else SpeedrunConfig.lr,
     )
     res = run_speedrun(cfg)
     if res.n_params != point.n_params:
@@ -401,6 +430,8 @@ def run_point(
     )
     if isinstance(point, BudgetGridPoint):
         record["target_compute"] = point.target_compute
+    if lr is not None:
+        record["lr"] = lr
     return record
 
 
@@ -414,11 +445,14 @@ def run_sweep(
     seed: int = 0,
     bf16: bool = False,
     compile_model: bool = False,
+    lr: float | None = None,
 ) -> list[SweepRecord]:
     """Run the selected grid points in order, appending each finished record to
     ``<out_dir>/results.json`` as it lands (a crash mid-sweep keeps the finished points).
     Dual-seed coverage is one invocation per seed (``--seed 0``, then ``--seed 1``); records
-    carry their seed and the fitter averages replicates before min-picking."""
+    carry their seed and the fitter averages replicates before min-picking. ``lr`` overrides
+    the peak LR for every point in the invocation (P5: one LR per invocation, one out-dir per
+    LR, so same-point records at different peaks never share a results.json)."""
     results_path = Path(out_dir) / RESULTS_FILENAME
     records: list[SweepRecord] = []
     for point in points:
@@ -427,10 +461,11 @@ def run_sweep(
             c_desc = f"C_target={point.target_compute:.2e} C_eff={point.compute:.2e}"
         else:
             c_desc = f"C={point.compute:.2e}"
+        lr_desc = f" lr={lr:g}" if lr is not None else ""
         print(
             f"[{point.point}] depth={point.depth} N={point.n_params:,} "
             f"D={point.tokens:,} tok (D:N={point.ratio:.2f}) {c_desc} -> {steps} steps "
-            f"(batch {batch_size} x ctx {CONTEXT_LENGTH}, seed {seed})"
+            f"(batch {batch_size} x ctx {CONTEXT_LENGTH}, seed {seed}{lr_desc})"
         )
         record = run_point(
             point,
@@ -440,6 +475,7 @@ def run_sweep(
             seed=seed,
             bf16=bf16,
             compile_model=compile_model,
+            lr=lr,
         )
         append_result(results_path, record)
         records.append(record)

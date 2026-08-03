@@ -30,9 +30,11 @@ from scratch_llm.scaling.s3_sweep import (
     average_seed_replicates,
     build_grid,
     build_grid_v2,
+    build_grid_v3,
     fit_scaling_law,
     load_results,
     nanochat_core_fit,
+    run_point,
     select_points,
     steps_for_budget,
     write_fit_outputs,
@@ -426,3 +428,56 @@ def test_fit_v2_records_group_by_target_budget() -> None:
     assert report.n_law.exponent + report.d_law.exponent == pytest.approx(1.0, abs=1e-6)
     assert report.r2_n == pytest.approx(1.0, abs=1e-9)
     assert report.to_dict()["min_pick"] == {"smooth": True, "clamped_budgets": []}
+
+
+def test_build_grid_v3_extension_points() -> None:
+    """The P5/S3.5 extension grid: ratio-4 LR-sweep points + the d14 leverage rungs, exact N."""
+    grid = build_grid_v3()
+    assert [(g.point, g.depth, g.ratio) for g in grid] == [
+        ("p5_d12r4", 12, 4),
+        ("p5_d8r4", 8, 4),
+        ("s35_d14r8", 14, 8),
+        ("s35_d14r20", 14, 20),
+    ]
+    v1_by_depth = {g.depth: g for g in build_grid() if g.ratio == 8}
+    for g in grid:
+        cfg = model_config_for_depth(g.depth, VOCAB_SIZE, CONTEXT_LENGTH)
+        cfg = replace(cfg, qk_norm=True, use_sdpa=True)
+        expected = sum(p.numel() for p in TransformerLM(cfg).parameters())
+        assert g.n_params == expected == EXPECTED_N[g.depth]
+        assert g.tokens == g.ratio * g.n_params
+        assert g.compute == pytest.approx(6.0 * g.n_params * g.tokens, rel=1e-12)
+        if g.depth in v1_by_depth:
+            # same depth ⇒ same N as the v1 point (the instantiation cache agrees)
+            assert g.n_params == v1_by_depth[g.depth].n_params
+
+
+def test_run_point_lr_override_lands_in_config_and_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--lr must reach SpeedrunConfig.lr (schedule peak) AND the record; default passes 3e-3
+    through and leaves the record's lr key absent (absent = recipe default)."""
+    from types import SimpleNamespace
+
+    import scratch_llm.scaling.s3_sweep as s3_mod
+
+    captured: dict[str, float] = {}
+
+    def fake_run_speedrun(cfg: object) -> SimpleNamespace:
+        captured["lr"] = cfg.lr  # type: ignore[attr-defined]
+        return SimpleNamespace(
+            n_params=EXPECTED_N[4],
+            report_card=SimpleNamespace(val_bpb=0.9, nats_per_token=2.5),
+            seconds=1.0,
+        )
+
+    monkeypatch.setattr(s3_mod, "run_speedrun", fake_run_speedrun)
+    point = next(g for g in build_grid() if g.point == "s1")
+
+    rec = run_point(point, data_dir=tmp_path, batch_size=32, lr=1.5e-3)
+    assert captured["lr"] == 1.5e-3
+    assert rec.get("lr") == 1.5e-3
+
+    rec_default = run_point(point, data_dir=tmp_path, batch_size=32)
+    assert captured["lr"] == 3e-3  # SpeedrunConfig's recipe default, untouched
+    assert "lr" not in rec_default

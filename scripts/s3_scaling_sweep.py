@@ -1,16 +1,19 @@
 """S3 scaling-law sweep CLI — plan / run / fit for the real-corpus IsoFLOP grid (E2E §S3).
 
-    python scripts/s3_scaling_sweep.py plan [--grid v1|v2] [--batch 32] [--out PATH]
-    python scripts/s3_scaling_sweep.py run --data-dir DATA [--grid v1|v2] [--points s1,s2,...]
-        [--out-dir DIR] [--batch 32] [--device cuda] [--bf16] [--compile] [--seed 0]
+    python scripts/s3_scaling_sweep.py plan [--grid v1|v2|v3] [--batch 32] [--out PATH]
+    python scripts/s3_scaling_sweep.py run --data-dir DATA [--grid v1|v2|v3] [--points s1,s2,...]
+        [--out-dir DIR] [--batch 32] [--device cuda] [--bf16] [--compile] [--seed 0] [--lr LR]
     python scripts/s3_scaling_sweep.py fit [--out-dir DIR] [--results PATH] [--smooth|--no-smooth]
 
 ``plan`` emits the grid without running anything — v1 (default, the s1–s8 depth × ratio grid:
-exact instantiated N, D = ratio × N, C = 6ND) or v2 (the budget × size repair grid: exact N,
-D = C_target/(6N) rounded to whole optimizer steps, target vs effective C per point). ``run``
+exact instantiated N, D = ratio × N, C = 6ND), v2 (the budget × size repair grid: exact N,
+D = C_target/(6N) rounded to whole optimizer steps, target vs effective C per point), or v3
+(the P5/S3.5 extension points: p5_d12r4, p5_d8r4, s35_d14r8, s35_d14r20). ``run``
 executes the selected points on the shard-backed pretrain path and appends each finished record
 to ``<out-dir>/results.json`` (records carry the seed — dual-seed coverage is one invocation
-per seed). ``fit`` loads results.json, averages replicate seeds on the bpb axis, fits
+per seed — and the peak LR when ``--lr`` overrides it; P5 runs one LR per invocation into its
+own out-dir so same-point records at different peaks never mix). ``fit`` loads results.json,
+averages replicate seeds on the bpb axis, fits
 ``N_opt ∝ C^a`` / ``D_opt ∝ C^b`` on val_bpb via scaling/isoflop.py (quadratic-in-log-N min-pick
 by default; ``--no-smooth`` keeps the v1 raw argmin), runs the pre-registered gates
 (a+b ∈ [0.95, 1.05], log-log R² ≥ 0.98), applies the D:N decision rule, and writes
@@ -36,6 +39,7 @@ from scratch_llm.scaling.s3_sweep import (
     RESULTS_FILENAME,
     build_grid,
     build_grid_v2,
+    build_grid_v3,
     fit_scaling_law,
     load_results,
     run_sweep,
@@ -53,9 +57,10 @@ def main() -> None:
     p_plan = sub.add_parser("plan", help="print/emit the grid as JSON (runs nothing)")
     p_plan.add_argument(
         "--grid",
-        choices=["v1", "v2"],
+        choices=["v1", "v2", "v3"],
         default="v1",
-        help="v1: s1-s8 depth x ratio grid (default); v2: budget x size exact-C grid",
+        help="v1: s1-s8 depth x ratio grid (default); v2: budget x size exact-C grid; "
+        "v3: P5/S3.5 extension points (p5_d12r4, p5_d8r4, s35_d14r8, s35_d14r20)",
     )
     p_plan.add_argument(
         "--batch",
@@ -68,9 +73,10 @@ def main() -> None:
     p_run = sub.add_parser("run", help="execute grid points on the real-corpus pretrain path")
     p_run.add_argument(
         "--grid",
-        choices=["v1", "v2"],
+        choices=["v1", "v2", "v3"],
         default="v1",
-        help="which grid to run (default v1; v2 points are b1_d4 .. b5_d16)",
+        help="which grid to run (default v1; v2 points are b1_d4 .. b5_d16; "
+        "v3 points are p5_d12r4, p5_d8r4, s35_d14r8, s35_d14r20)",
     )
     p_run.add_argument(
         "--points",
@@ -92,6 +98,13 @@ def main() -> None:
         "--compile", action="store_true", help="torch.compile (not with --bf16 on sm120)"
     )
     p_run.add_argument("--seed", type=int, default=0)
+    p_run.add_argument(
+        "--lr",
+        type=float,
+        default=None,
+        help="peak LR override (P5 recipe sweep: one LR per invocation, one out-dir per LR; "
+        "default None = recipe 3e-3)",
+    )
 
     p_fit = sub.add_parser("fit", help="fit the scaling law from results.json + emit fit.json/md")
     p_fit.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
@@ -114,6 +127,8 @@ def main() -> None:
     if args.command == "plan":
         if args.grid == "v2":
             grid = [g.to_dict() for g in build_grid_v2(batch_size=args.batch)]
+        elif args.grid == "v3":
+            grid = [g.to_dict() for g in build_grid_v3()]
         else:
             grid = [g.to_dict() for g in build_grid()]
         text = json.dumps(grid, indent=2)
@@ -125,7 +140,12 @@ def main() -> None:
         return
 
     if args.command == "run":
-        grid = build_grid_v2(batch_size=args.batch) if args.grid == "v2" else build_grid()
+        if args.grid == "v2":
+            grid: list = list(build_grid_v2(batch_size=args.batch))
+        elif args.grid == "v3":
+            grid = list(build_grid_v3())
+        else:
+            grid = list(build_grid())
         points = select_points(grid, args.points) if args.points else grid
         run_sweep(
             points,
@@ -136,6 +156,7 @@ def main() -> None:
             seed=args.seed,
             bf16=args.bf16,
             compile_model=args.compile,
+            lr=args.lr,
         )
         return
 
