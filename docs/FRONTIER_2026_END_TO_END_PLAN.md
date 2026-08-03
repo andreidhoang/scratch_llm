@@ -523,13 +523,17 @@ recipe-side (S2/S3), not parallelization.
 vs a public checkpoint + ckpt kill/resume drill + the G1/G2/G4 entrypoints) must pass first. Then
 8×H100 d20 (~$100): MFU 33–40% (KILL <28% sustained), step 0.48–0.58 s (KILL >0.70 s), comm <1.5%
 (KILL >3%), scaling ≥97% (KILL <93%), loss-at-init ≈ log 32768 = 10.40 (kill on deviation), CORE
-0.19–0.22 (KILL <0.15 ⇒ stack bug), **$90 cumulative ⇒ abort → downsize d16**. Honest framing
+**0.23–0.25, central ≈ 0.24** (re-anchored 2026-08-02; supersedes 0.19–0.22; KILL <0.15 ⇒ stack bug
+unchanged), **$90 cumulative ⇒ abort → downsize d16**. Honest framing
 (locked): a CORE-vs-FLOPs point on nanochat's published curve — we buy 73% of the anchor's compute
 at 86% of its N — **never** a depth-matched headline, and bpb not CE for any loss comparison.
 Re-anchor caveat from the data/eval angles: the 0.19–0.22 band is calibrated to the Oct-2025
 FineWeb-EDU recipe; the corpus **moved to ClimbMix** (F12 operator override, FINAL 2026-08-02), so
 the band **must be re-anchored** against the *current*
 published ClimbMix curve (d24-class 0.257–0.269 at ~4e19) **before P5** (RESULTS.md §F12, lines 120-127).
+**DONE 2026-08-02** — re-anchored to **0.23–0.25 (central ≈0.24)**: progress-shift and curve-step
+methods agree (0.247–0.259 headline), −0.01..−0.02 our-recipe discount; GPT-2 XL parity (0.2565) is
+the stretch case, not the base case. Full arithmetic: `docs/RESULTS.md` §S4-pre.
 
 **(f) Status.** All buildable gate rungs **done** (A7, A8, P1 ✅ SDPA 07-16/GPU-measured 07-17,
 P2 ✅ parquet 0.7B, P3 ✅ CORE suite, launch calibration B=16/18.2 GiB/0.283 s-step `[MEASURED
@@ -918,7 +922,8 @@ build test-first → green-CI → measure → fill the ledger.
    decision]` — Muon LR sweep, compile-on-sm90 re-validation, CORE vs public checkpoint, ckpt
    kill/resume drill, step-time measurement (the d20 go/no-go).
 6. **The 8×H100 d20** `[💰 ~$100, deps: P5 pass + user authorization]` — 480.4M, 9.6B tokens,
-   18,311 steps, MTP head baked (F2a falsifier passed today: +0.0027 in band), CORE 0.19–0.22
+   18,311 steps, MTP head baked (F2a falsifier passed today: +0.0027 in band), CORE **0.23–0.25**
+   (re-anchored 2026-08-02 vs the ClimbMix curve, `docs/RESULTS.md` §S4-pre; supersedes 0.19–0.22)
    pre-registered, $90 abort → d16. **Runs unconditionally** (decision of record, 2026-08-02):
    the d20-GQA is simultaneously (i) the loop-closure artifact with its pre-registered CORE band,
    (ii) the Rung-0/1 control-family anchor the KDA multiplier is measured against, and (iii) the

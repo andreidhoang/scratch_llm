@@ -223,7 +223,8 @@ manifold, not the base exponents.
   `uv run python scripts/s3_scaling_sweep.py fit --out-dir artifacts/s3_scaling_sweep` →
   `fit.json` / `fit.md`; gates a+b ∈ [0.95, 1.05] and R² ≥ 0.98 fire loudly; the D:N rule
   decides whether the d20's 9.6B-token registration stands; the nanochat CORE-fit oracle at
-  the d20's C (≈0.195) cross-checks the 0.19–0.22 band. Results → `docs/RESULTS.md` §S3 +
+  the d20's C (≈0.195) cross-checks the 0.19–0.22 band *(superseded 2026-08-02: band re-anchored
+  to 0.23–0.25 vs the current ClimbMix curve — `docs/RESULTS.md` §S4-pre)*. Results → `docs/RESULTS.md` §S3 +
   `bench/RESULTS.md`.
 - **Rung 1 — Anchor protocol (spec for every architecture variant).**
   1. Matched N (same depth knob), matched D (ratio 20), matched seed, same

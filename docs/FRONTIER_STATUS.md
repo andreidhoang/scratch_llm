@@ -77,7 +77,7 @@ for human decision; no paid GPU work without explicit go-ahead.
 | Tokens | ~9.6B (ratio-20, deliberate overtrain) |
 | Compute | ~2.77e19 FLOP |
 | Cost | ~$48–100 (8×H100, 2–4h) |
-| Target CORE | 0.19–0.22 (vs nanochat published d12/d20 curve) |
+| Target CORE | **0.23–0.25 (central ≈0.24)** — re-anchored 2026-08-02 vs the published ClimbMix curve (supersedes 0.19–0.22; KILL <0.15 unchanged) — `docs/RESULTS.md` §S4-pre |
 | Attention | Full GQA/MHA (frozen at P5) |
 | Optimizer | Muon+AdamW (ADOPTED, commit `f9e8f3b`) |
 | Precision | bf16 (compile NaN on sm120 → validated on sm90/H100 in P5) |
@@ -168,6 +168,7 @@ Owner: `FRONTIER_2026_END_TO_END_PLAN.md` §S3 + `scaling/isoflop.py`.
 | 2026-08-02 | `FRONTIER_2026_ARCH_SCALING.md` added | One law per recipe backbone; per-architecture anchors, not re-sweeps; MoE the sole mini-fit exception |
 | 2026-08-02 | `stage_pretrain` device policy pinned (qk_norm on; SDPA on cuda) + stale checkpoint-chain test updated | Green CI restored after the S3 grid fix |
 | 2026-08-02 | S3 sweep s1–s7 DONE (12.09 GPU-h); R² gate raised (0.7709/0.8324 < 0.98), T1 fired; d20 D:N HOLD ratio-20 on interval evidence | Grid-geometry D zigzag breaks the power-law fit by construction; s6-vs-s7 iso-FLOP favors bigger-N; no extrapolation quoted; d14 decision escalated to human |
+| 2026-08-02 | d20 CORE band re-anchored 0.19–0.22 → **0.23–0.25 (central 0.24)** | Band was calibrated to the FWE-era nanochat fit; current ClimbMix curve sits +0.052..+0.064 above it at matched C (real recipe progress, 3–8× noise floor); GPT-2 XL parity is the stretch case, not base case |
 
 ---
 

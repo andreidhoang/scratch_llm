@@ -123,7 +123,8 @@ second-scale (d8/ratio-20) confirmation arm. Consequences of record: (1) the F12
 stands unchanged — ClimbMix measured +0.110 bpb worse at 35M/700M with our recipe; the d20 corpus
 choice rests on nanochat's larger-scale result, not on a scale-stable verdict of ours; (2) the d20
 CORE band must be re-anchored against the *current* published ClimbMix curve (d24-class 0.257–0.269
-at ~4e19 FLOPs) before P5, per E2E §S4(e); (3) the d20 run itself becomes the corpus arbiter at our
+at ~4e19 FLOPs) before P5, per E2E §S4(e) — **DONE 2026-08-02: re-anchored band 0.23–0.25 (central
+≈0.24), see §S4-pre below**; (3) the d20 run itself becomes the corpus arbiter at our
 largest scale — its bpb/CORE vs the S3-fit prediction and the nanochat overlay is the final,
 self-measured verdict.
 
@@ -228,6 +229,55 @@ guardrails no paid work without explicit human go-ahead, and the free d14 blocks
 days. **Surfaced for human decision: run d14 (free, slow), rent for d14 (paid), or accept the
 HOLD-on-interval-evidence rationale above and proceed to P5.** T2/T3 not evaluated (P5 and
 F8/F10 respectively, both downstream).
+
+## S4-pre · d20 CORE band re-anchor (2026-08-02 — pre-P5, per E2E §S4(e) + §F12 consequence 2)
+
+**Why.** The pre-registered band **0.19–0.22** (anchor: nanochat's original d20 CORE 0.2219 @
+3.77e19; cross-check: nanochat CORE-fit `1 − 3.7555·C^−0.0344` = 0.195 @ our 2.77e19) was
+calibrated to the **Oct-2025 FineWeb-EDU recipe**. The corpus moved to **ClimbMix** (F12
+operator override, FINAL 2026-08-02), and nanochat's *current* published ClimbMix curve sits
+materially above that fit. E2E §S4(e) therefore requires re-anchoring before P5.
+
+**Facts used (all published/verified in-repo).**
+- nanochat CORE-fit (FWE-era): `CORE = 1 − 3.7555·C^(−0.0344)` → 0.169 @ miniseries C=1.09e19
+  (actual 0.1708 ✓ — the fit is sound *for its era*), 0.195 @ our d20 C=2.77e19, **0.205 @ 4e19**.
+- nanochat current ClimbMix curve: **0.257–0.269 @ ~4e19** (leaderboard d24 ratio-8 FP8:
+  0.2626, val_bpb 0.718). Recipe-progress delta vs the stale fit at matched C:
+  **+0.052..+0.064** — 3–8× the CORE noise floor (±0.008–0.016, nanochat 7× rerun
+  0.2512–0.2677), so it is *real recipe progress* (ClimbMix data + FP8 + tuning), not noise.
+- GPT-2 XL anchor: 0.256525.
+
+**Re-anchor arithmetic (two methods, identical result).**
+- (A) *Progress shift:* stale fit @ 2.77e19 (0.195) + the matched-C progress delta
+  (+0.052..+0.064) = **0.247–0.259**.
+- (B) *Curve step:* take the current ClimbMix curve at 4e19 (0.257–0.269) and step down to
+  2.77e19 using the fit's own slope (Δ = −0.008 over 0.69× C — the curve is flat here) =
+  **0.247–0.259**.
+- **Recipe discount (ours vs their leaderboard stack):** we train ratio-20 (deliberate
+  overtrain vs their optimal ≈8–10.5), bf16 not FP8, first-run recipe maturity; and our own
+  F12 measured ClimbMix *worse* than FWE at 35M (single-seed, below noise, but no evidence we
+  yet reproduce nanochat's ClimbMix edge). Discount **−0.01..−0.02**.
+
+**Re-anchored band (supersedes 0.19–0.22): CORE 0.23–0.25, central ≈ 0.24.**
+- The **KILL <0.15** tripwire is unchanged — it detects stack bugs, far below any
+  recipe-difference scenario.
+- **GPT-2 XL parity (0.2565) is the stretch case, not the base case** — central estimate sits
+  0.017 below; the band's top edge (0.25) just touches parity territory. This is the honest
+  framing for the report card.
+- Cross-check from our own ladder: chaining our measured s7 bpb 0.9402 @ 8.79e17 to nanochat's
+  d24 0.718 @ 4e19 (log-log slope −0.071) predicts **d20 val_bpb ≈ 0.74** — between the two,
+  closer to d24; sane (indicative only: cross-recipe chaining, and §S3 showed our ladder
+  cannot certify extrapolations on its own).
+- Width note: the band (±0.01) is ≈ the CORE noise floor; a single d20 CORE number cannot
+  resolve finer. One seed, reported with the noise floor attached.
+
+**Consequence for P5/d20 gates:** the P5 CORE-vs-public-checkpoint comparison and the d20
+report card now score against **0.23–0.25 (central 0.24)** on the ClimbMix curve; a d20 CORE
+in 0.19–0.22 would be a *miss* vs the re-anchored expectation (recipe gap to investigate),
+not a confirmation. Updates applied: `FRONTIER_STATUS.md` d20 spec table + ledger, E2E §S4(e),
+TASKSPEC §F12 + Next-node marker, `bench/RESULTS.md` §$100 d20 run (amendment — the original
+0.19–0.22 row is preserved as the pre-registration of record).
+
 
 **d14/d16 escalation:** trigger-gated per E2E §S3(g) (T1 fit failure ⇒ d14; T2 P5-anchor
 divergence > 0.01 bpb ⇒ d16; T3 F8/F10 sweep-scale win + RULER pass ⇒ d14 confirm; none ⇒ skip,

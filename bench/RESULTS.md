@@ -1007,6 +1007,15 @@ shallower-than-noise minimum, 0.6 OOM span extrapolated 2.2 OOM, embedding-fract
 | CORE (22-task DCLM suite, decontaminated) vs anchor 0.2219 @ 3.77e19 | **0.19–0.22** (we buy 73% of anchor C with 86% of its N) | <0.15 (stack bug, not sizing) | — |
 | val bits-per-byte (vocab-independent honesty metric) | within band of nanochat d20 interpolated to C≈2.77e19 | — | — |
 
+**Amendment 2026-08-02 (corpus override ⇒ band re-anchor):** the CORE row above is the
+pre-registration of record, calibrated to the Oct-2025 FineWeb-EDU recipe. With the corpus moved to
+ClimbMix (F12 operator override, FINAL 2026-08-02), the band is **re-anchored to 0.23–0.25 (central
+≈0.24)** against nanochat's current published ClimbMix curve (d24-class 0.257–0.269 @ ~4e19, i.e.
++0.052..+0.064 above the stale fit at matched C — real recipe progress, 3–8× the CORE noise floor),
+minus a −0.01..−0.02 our-recipe discount (ratio-20 overtrain, bf16 vs FP8, first-run maturity). KILL
+<0.15 unchanged. GPT-2 XL parity (0.2565) is the stretch case, not the base case. Full arithmetic:
+`docs/RESULTS.md` §S4-pre.
+
 **Not in the paid run:** midtrain (unbuilt — `speedrun.py` raises `NotImplementedError`), FP8 (only
 MLP-up/lm_head are wide enough at d_model 1280 per arXiv 2501.12084; modded-nanogpt's FP8 head nets
 ~5% e2e — a later ablation rung), any TP/PP/FSDP (roofline: DP has ~51× headroom over machine balance
