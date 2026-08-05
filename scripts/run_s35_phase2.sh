@@ -23,8 +23,12 @@ DATA=artifacts/s3_scaling_sweep/data
 LOG=artifacts/s35_phase2.log
 
 step() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" | tee -a "$LOG"; }
-run() { # point grid batch lr outdir
+run() { # point grid batch lr outdir  — idempotent: skips if results.json already present
   local point=$1 grid=$2 batch=$3 lr=$4 outdir=$5
+  if [ -s "$outdir/results.json" ]; then
+    step "SKIP $point ($outdir/results.json already present)"
+    return 0
+  fi
   step "RUN $point (grid $grid, batch $batch, lr $lr) -> $outdir"
   $PY scripts/s3_scaling_sweep.py run --grid "$grid" --points "$point" \
     --data-dir "$DATA" --out-dir "$outdir" \
