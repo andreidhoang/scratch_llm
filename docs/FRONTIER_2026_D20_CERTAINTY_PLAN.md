@@ -5,7 +5,10 @@
 > re-anchored. **Revised 2026-08-03 (senior-review pass):** P5 sweep protocol pinned (horizon,
 > tie-break, confirmation run, width probe — §6 item 1), the oracle gate reconciled with the E2E
 > T2 amendment and de-confounded (§6 item 3), P5 given a $20 hard cap (§6/§10), and the §3
-> ratio-20 evidence chain stripped of its compute-confounded clause. It consolidates, in one
+> ratio-20 evidence chain stripped of its compute-confounded clause. **Revised 2026-08-07
+> (ADR-0020):** µP framing retired in favor of nanochat's actual composite transfer rule (§5);
+> target-scale d20 probe gate P5.5 added (§6.5); T1 decision amended A → A′ — d14 re-measures D:N
+> on the standing box in parallel with P5, with a re-registration hook before the d20 (§8). It consolidates, in one
 > place, *what is certified vs borrowed vs still undefined*
 > about the d20's three defining quantities — model size N, token count D, and the optimizer
 > hyperparameters — and the exact engineering plan that converts the undefined parts into measured
@@ -23,7 +26,7 @@
 | Corpus | ClimbMix | **Borrowed** | nanochat's larger-scale result; our F12 measured it *worse* at 35M (+0.110 bpb, single-seed) | d20 itself is the final arbiter (`docs/RESULTS.md` §F12 consequence 3) |
 | N | 480.4M (d20, d_model 1280, vocab 32,768 untied) | **Anchored** | 86% of nanochat d20's N at 73% of its C (anchor CORE 0.2219 @ 3.77e19) | P5 step-time + d20 report card vs band |
 | D | 9.6B tokens (ratio 20) | **Deliberate overtrain, uncertified by our fit** | nanochat's published optimum 8–10.5 + s6-vs-s7 isoFLOP (training-optimal ≤8 at ~9e17 ⇒ 20 is an overtrain by design, §3) + Sardana 2401.00448 serving economics | **d14 (T1 option)** — the only rung that can repair the fit |
-| Muon LR / wd | **UNDEFINED** | **Not yet measured on our stack at any scale** | µP transfer theory + shipped LR-transfer machinery | **P5 LR sweep at d12 on H100** |
+| Muon LR / wd | **UNDEFINED** | **Not yet measured on our stack at any scale** | nanochat's composite transfer rule (ADR-0020: Adam ×(d/768)^−½, Muon width-constant, √B scaling, T_epoch wd) + shipped LR-transfer machinery | **P5 LR sweep at d12 on H100 + P5.5 target-scale d20 probe** |
 | Expected CORE | 0.23–0.25 (central 0.24) | Re-anchored 2026-08-02 | published ClimbMix curve (0.257–0.269 @ ~4e19) − recipe discount | d20 run vs band; KILL <0.15 |
 
 One sentence: **size and data are chosen and honestly labeled as anchor/economics-driven;
@@ -144,8 +147,8 @@ is what 12.09 GPU-h bought.
 |---|---|---|
 | Muon LR (matrix params) | **undefined** | the single most consequential number in the run |
 | AdamW LR (embeddings/scalars/head) | partially borrowed | follows nanochat ratios; must be co-validated in the sweep |
-| weight decay | borrowed | 1/width-style scaling assumptions from the µP literature |
-| warmup / schedule shape | borrowed | nanochat-consistent; validated indirectly by S3 stability |
+| weight decay | borrowed | T_epoch rule λ = 0.28·√(B/B_ref)·(D_ref/D), per nanochat master (ADR-0020); nanochat's own label: "blindly following AdamW theory" |
+| warmup / schedule shape | **defined** | cosine + warmup = steps/20 — recipe-v1, locked: the entire S3.5 grid (and thus the law + gates + band) ran it; nanochat's constant+warmdown-0.65 deferred to a post-d20 ablation (ADR-0020 status note 2) |
 | global batch | **defined** | 524,288 tok (P-locked in the d20 pre-registration) |
 | precision | **defined with an open validation** | bf16; compile NaN observed on sm120 — sm90 re-validation is a P5 item |
 
@@ -157,13 +160,29 @@ identifies as the deciding factor in whether Muon's small-scale edge survives. W
 external evidence (F1 descoped mid-flight, optimizer ADOPTED, LR sweep *folded into P5* — not
 dropped).
 
-**What µP buys us (the bridge):** under maximal-update parametrization, the optimal LR is
-width-transferable *if* the parametrization rules hold; the d12 sweep then pins the constants
-and the d20 width extrapolation is theory-guided rather than blind. **What is shipped:**
-the LR-transfer machinery + fused optimizer are a completed d20-gate item (TASKSPEC P1–P6).
+**The transfer bridge (revised 2026-08-07, ADR-0020):** the bridge is **nanochat's composite
+transfer rule, adopted verbatim** — not µP. Code-verified on nanochat master: AdamW-group LRs ×
+`(d_model/768)^-0.5` ("tuned for 768 dim model"); Muon `matrix_lr` width-constant with only a
+per-shape `max(1, rows/cols)^0.5` correction; all LRs × `√(B/2^19)` (nanochat's own label:
+*"not studied carefully, assumption!"*); wd via T_epoch (`λ = 0.28·√(B/B_ref)·(D_ref/D)`). The
+anchor stack contains **no µP**, and its author's load-bearing lesson from a 320-experiment
+sweep (d12→d16→d20) is *"small-scale tuning doesn't transfer. Validate at target scale."* —
+which is why P5.5 (§6.5) exists. All four rules are ledger-labeled *reported, not verified on our
+stack* until P5/P5.5 measure them. **What is shipped:**
+the LR-transfer machinery + fused optimizer are a completed d20-gate item (TASKSPEC P1–P6);
+ADR-0020 item 1 sets its defaults to the composite rule above.
 **What has never run:** an actual LR sweep on our stack at any scale. That gap is P5's first
 work item, and it is why "final hyperparameters" do not exist as numbers today — they exist as
 a *procedure with a price tag of $10–15 ($20 hard cap)*.
+
+**Recipe-divergence inventory (ADR-0020 item 4 — every divergence weakens the CORE anchor):**
+
+| Element | Ours (today) | nanochat master | Verdict |
+|---|---|---|---|
+| Schedule shape | cosine, warmup = steps/20 | 40-step warmup → constant → warmdown 0.65 → 5% | **keep cosine for d20** — the whole S3.5 grid ran it; law/gates/band are calibrated to it. Warmdown deferred to post-d20 ablation (ADR-0020 status note 2) |
+| weight decay | 0.1 fixed | 0.28, T_epoch-scaled | **adopt T_epoch rule** |
+| Peak-LR parameterization | single peak 3e-3 | per-group (matrix 0.02 / emb 0.3 / unemb 0.008) | deviate — our muon_adamw grouping differs; P5 sweep covers it |
+| Global batch | 524,288 tok | 2^19 at d12-class, ∝ D^0.383 above | aligned |
 
 ---
 
@@ -191,12 +210,13 @@ short to transfer — the protocol below spends the tokens where they resolve th
    **Confirmation run:** the winner once at ratio 8 (1.08B tokens, C ≈ 8.8e17) — this sits on
    the measured s7 ray and doubles as the T2 anchor check (item 3). **Width probe:** a 3-point mini-sweep
    at d8 (width 512, ratio-4 horizon) at {×0.7, 1.0, 1.4} of the d12 winner (~30 min total) —
-   a single LR point per width cannot measure a transfer slope; three locate the d8 basin. If
-   the d8 optimum sits more than one grid step from the µP-consistent position, treat the
+   a single LR point per width cannot check a transfer rule; three locate the d8 basin. If
+   the d8 optimum sits more than one grid step from the composite-rule position (ADR-0020:
+   Adam ×(d/768)^−½, Muon width-constant), treat the
    768→1280 extrapolation as empirical-only and widen the d12 sweep once.
-   Depth transfer (12→20) stays a residual risk, accepted in writing: nanochat's own recipe
-   holds LR fixed across depths. **Transfer check:** if the empirical optimum lands outside
-   ×[0.7, 1.4] of the µP prediction, transfer is weaker than assumed ⇒ widen the sweep once;
+   Depth transfer (12→20) is no longer accepted blind: it is exactly what the P5.5 probe
+   measures (below). **Transfer check:** if the empirical optimum lands outside
+   ×[0.7, 1.4] of the composite-rule prediction, transfer is weaker than assumed ⇒ widen the sweep once;
    if it lands flat/unstable, **stop — do not proceed to d20 on a guessed LR.**
 2. **Compile-on-sm90 re-validation.** bf16+compile NaN is a measured sm120-inductor fact;
    re-run the minimal repro on sm90. Outcome decides whether d20 trains compiled (planned
@@ -217,12 +237,34 @@ short to transfer — the protocol below spends the tokens where they resolve th
 5. **Step-time + MFU measurement at d12 on H100.** Re-prices the d20: the 2.4–3.3 h / $58–79
    window and the $90 abort are only as good as this number.
 
-**Go/no-go into d20 (all five required):** LR locked inside the predicted basin and confirmed
+**Go/no-go into d20 (all six required):** LR locked inside the predicted basin and confirmed
 at the ratio-8 horizon · compile clean
 (or eager re-priced and approved) · bpb inside 0.89–0.92 (±0.01) with CORE divergence < 0.02 ·
 resume verified · step-time
-inside 0.48–0.58 s-equivalent scaling. Any failure ⇒ fix and re-rehearse; **no paid d20 on a
+inside 0.48–0.58 s-equivalent scaling · **P5.5 probe winner selected at target scale (below)**.
+Any failure ⇒ fix and re-rehearse; **no paid d20 on a
 failed rehearsal.**
+
+---
+
+## §6.5 P5.5 — the target-scale probe gate (added 2026-08-07, ADR-0020 item 2)
+
+**Why it exists:** nanochat's 320-experiment lesson is that d12-tuned settings can *actively
+hurt* at d20 ("small-scale tuning doesn't transfer. Validate at target scale."). P5 locates the
+basin at d12; P5.5 confirms it at d20 before the budget is committed. It retires the two
+residual risks §6 used to accept in writing: depth transfer (12→20) and horizon drift
+(ratio-4/8 → ratio-20).
+
+**Protocol (first hour of the d20 rental, on the 8×H100):** the P5 winner ×{0.7, 1.0, 1.4} at
+the real d20 config (N, batch 524,288 tok, schedule per §5 divergence table), ~0.5B tokens each
+(≈5% of the token budget, ≈$5–8 total), ranked by val_bpb on the pinned val set. Commit the
+remaining ~95% at the probe winner. Ties within 0.003 bpb ⇒ lower LR (same tie-break as P5).
+The $90 abort line stays armed during the probes.
+
+**Kill lines:** all three probe arms unstable or separated by < noise from the P5 prediction in
+the *wrong* direction (winner outside ×[0.7, 1.4] of the transferred LR) ⇒ stop, diagnose, do
+not silently widen; probe val_bpb trajectory inconsistent with the d12 ray's early shape ⇒
+stop, suspect stack/config bug before spending further.
 
 ---
 
@@ -268,6 +310,17 @@ is *bounded* (borrowed optimum + interval evidence + shallow-basin economics), s
 information is real but not gating. If the human weights corpus/D certainty above schedule,
 B is the defensible pick. C requires explicit paid-work approval per guardrails.
 
+**Amended 2026-08-07 (ADR-0020 item 3): A → A′.** P5 proceeds exactly as decided above, **and**
+the d14 rung (§7, free path) launches on the standing box **in parallel** — it consumes no
+rental dollars and does not compete with the H100 day. New evidence motivating the amendment:
+nanochat master's own IsoFLOP fits measure the compute-optimal D:N at ≈8–10.5 (default 12,
+speedrun 8) *on the architecture family we are replicating* — the strongest external challenge
+to ratio-20 on record, which converts d14 from "modest marginal value" into the only measurement
+of the biggest budget lever. **Re-registration hook:** if the d14-extended fit supports an
+optimal ratio ≲12, D for the d20 is re-registered (CORE band re-anchored in the same commit)
+*before* the d20 launches; if the fit is gate-rejected again, ratio-20 stands with the ledger
+note "anchor stack measures 8–12; our overtrain is deliberate and bounded (≈0.017 nats)."
+
 ---
 
 ## §9 Execution checklist
@@ -280,6 +333,9 @@ B is the defensible pick. C requires explicit paid-work approval per guardrails.
 - [ ] Confirm staged ClimbMix train shards ≥ 9.6B tokens (+ pinned val set present) — free
       check, must pass before P5 day
 - [x] Human decision: T1 — **A** (accept HOLD → P5), decided 2026-08-03 (§8 decision of record)
+- [ ] **A′ amendment (ADR-0020):** launch the d14 rung on the standing box in parallel with P5
+      prep — ratio varied *within* d14 per §7, kill criterion pre-registered first; outcome
+      feeds the D re-registration hook before the d20
 
 **P5 day (rental, $10–15 planned / $20 hard cap — after human go-ahead):**
 - [ ] Provision 1×H100 per `deploy/runbooks/d20_speedrun_8xH100.md` (reuse its env steps)
@@ -289,6 +345,8 @@ B is the defensible pick. C requires explicit paid-work approval per guardrails.
 **Post-P5 (only on go):**
 - [ ] Lock the measured Muon LR/wd + step-time into the d20 config; update cost window
 - [ ] Human authorization for the $100 run (guardrail)
+- [ ] **P5.5 probe (§6.5):** first hour of the 8×H100 rental — winner ×{0.7, 1.0, 1.4} × ~0.5B
+      tokens at the real d20 config; commit the remaining budget at the probe winner
 - [ ] Execute d20 per runbook; enforce every pre-registered kill line mechanically
 - [ ] Report card: CORE vs 0.23–0.25 band, bpb vs ≈0.74 cross-check, CORE-vs-FLOPs point on
       nanochat's curve — honest framing locked (never a depth-matched headline). **Noise rule,
@@ -304,6 +362,9 @@ B is the defensible pick. C requires explicit paid-work approval per guardrails.
   0.89–0.92 bpb by > 0.01 ⇒ T2/d16, stop · CORE-vs-nanochat divergence ≥ 0.02 (noise-aware)
   ⇒ diagnose before d20 · compile NaN on sm90 ⇒ re-price eager before any d20 approval ·
   **$20 cumulative ⇒ abort, re-scope the sweep.**
+- P5.5 (§6.5): probe winner outside ×[0.7, 1.4] of the transferred LR ⇒ stop, diagnose ·
+  probe loss trajectory inconsistent with the d12 ray's early shape ⇒ stop, suspect stack bug ·
+  probes count toward the $90 d20 abort line.
 - d20: MFU < 28% sustained ⇒ kill · step > 0.70 s ⇒ kill · comm > 3% ⇒ kill · scaling < 93%
   ⇒ kill · loss-at-init deviates from ln 32768 = 10.40 ⇒ kill · CORE < 0.15 ⇒ stack bug ·
   **$90 cumulative ⇒ abort → downsize d16.**
@@ -329,3 +390,10 @@ B is the defensible pick. C requires explicit paid-work approval per guardrails.
   $10–15 planned / $20 hard cap
 - F12: FWE 1.19197 vs ClimbMix 1.30205 bpb (Δ +0.1101); CORE 0.0510 vs 0.0551 (single-seed);
   decontam overlap 1.92% / 0.07%
+- nanochat composite transfer rule (code-verified on master, ADR-0020; **reported, not verified
+  on our stack**): Adam LRs ×(d_model/768)^−½ · Muon matrix_lr 0.02 width-constant,
+  per-shape max(1, rows/cols)^½ · all LRs ×√(B/2^19) · wd 0.28 T_epoch-scaled
+  (λ ×√(B/B_ref)×(D_ref/D)) · B ∝ D^0.383 · schedule: 40-step warmup → constant → warmdown
+  0.65 → 5% of peak · D:N measured ≈8–10.5, default 12, speedrun 8
+- nanochat 320-experiment sweep lesson (discussion #481, reported): d12-optimal HPs actively
+  hurt at d20 — "small-scale tuning doesn't transfer. Validate at target scale." ⇒ P5.5 (§6.5)
