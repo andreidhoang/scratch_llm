@@ -295,6 +295,31 @@ HOLD-by-economics, or HOLD confirmed inside the interval — both are wins) and 
 becomes the law's pre-registered holdout test (measured bpb must land inside the PI).
 Fail ⇒ report; D:N stays HOLD-by-economics; **no third attempt**.
 
+**OUTCOME (2026-08-08, measured on the vast.ai RTX 6000 Ada pod, ~81 GPU-h / ~$46–48 total
+program cost).** All 13 points completed on recipe-v1 — **muon_adamw, standard parametrization,
+cosine schedule, warmup = steps/20, η\* = 0.0021 fixed** (corrects an earlier handoff document
+that mislabeled the grid "AdamW"; code-verified via `s3_sweep.py:395` → `speedrun.py:62`
+default — ADR-0020 status note 2). Zero bpb inversions across the grid. Final joint fit (13
+points): `L(N,D) = 0.2061 + 6401·N^(−0.589) + 2380·D^(−0.502)`, log-L R² = 0.9983, 46/48
+starts in the best basin. **Gates: R² PASS (0.9983) · bootstrap PI half-width FAIL (0.0207 vs
+≤ 0.02 — marginal) · LOO D:N swing FAIL (3.15× vs ≤ 2×; worsened from 1.86× when the
+highest-leverage point d14-r20 was added) · residual trend PASS (p=0.62). Overall: REJECTED.**
+Per the pre-registered clause above: D:N stays HOLD-by-economics permanently; **no third
+attempt**. Interpretation (labeled directional, not decision-grade): the loss prediction is
+stable (12→13-point point estimate moved 0.2818 → 0.2782 bpb) but the N-vs-D *allocation* is
+lever-arm-unstable at the 2.5× extrapolation from 195M to 480M params — the gates correctly
+refused to certify it. Both rejected fits put the compute-optimal ratio at ≈3.4–3.8 at the
+d20's C, consistent with nanochat's measured 8–12 (reported, not ours) — ratio-20 therefore
+stands as a *deliberate, bounded* inference-economics overtrain, and the ADR-0020
+re-registration hook does not fire (it required a gate-passing fit). **d20 tripwire restated on
+the pinned-tokenizer scale: predicted val_bpb = 0.2782, 90% PI [0.2538, 0.2952]** — this
+replaces the old-tokenizer ≈0.74 cross-check, which is void. The d20 run remains the law's
+pre-registered holdout test (measured bpb should land inside the PI). Side products: P5 LR bowl
+well-formed (×0.7 winner, tie-break rule validated); d8 width probe confirms LR transfer at
+fixed depth; s7 anomaly fully explained as the batch-4 confound (batch8 − batch4 = −0.0187 bpb).
+Artifacts: `artifacts/s35/`, `artifacts/s35_analysis/` (fit JSON + figures), pod commit
+`4101806`.
+
 **Decision of record (2026-08-03, operator-delegated): option (a) — the d20 runs
 mtp_depth = 0.** The d20 spec said "MTP head baked into pretrain (F2a)", but the speedrun
 spine never sets `mtp_depth` (default 0 — S3 ran without it), and every certified constant
