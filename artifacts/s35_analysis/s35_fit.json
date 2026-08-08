@@ -1,0 +1,224 @@
+{
+  "winner_lr": 0.0021,
+  "winner_mult": 0.7,
+  "recipe_v1_violations": [],
+  "fit_set": [
+    {
+      "point": "s1",
+      "depth": 4,
+      "n_params": 19991808,
+      "ratio": 8,
+      "tokens": 159934464,
+      "compute": 1.918427458122547e+16,
+      "val_loss": 0.945965980787793,
+      "val_bpb": 0.7058526776952807,
+      "wall_s": 836.7220251709223,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "s2",
+      "depth": 4,
+      "n_params": 19991808,
+      "ratio": 20,
+      "tokens": 399836160,
+      "compute": 4.796068645306368e+16,
+      "val_loss": 0.8676038445635835,
+      "val_bpb": 0.647381099639464,
+      "wall_s": 2075.171571996063,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "p5_d8r4",
+      "depth": 8,
+      "n_params": 59255296,
+      "ratio": 4,
+      "tokens": 237021184,
+      "compute": 8.426856249714278e+16,
+      "val_loss": 0.7136914813610212,
+      "val_bpb": 0.5325361095411276,
+      "wall_s": 2467.924380597193,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "s3",
+      "depth": 4,
+      "n_params": 19991808,
+      "ratio": 40,
+      "tokens": 799672320,
+      "compute": 9.592137290612736e+16,
+      "val_loss": 0.8115633327785451,
+      "val_bpb": 0.6055652773939947,
+      "wall_s": 4217.509894636925,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "s4",
+      "depth": 8,
+      "n_params": 59255296,
+      "ratio": 8,
+      "tokens": 474042368,
+      "compute": 1.6853712499428557e+17,
+      "val_loss": 0.636850492346783,
+      "val_bpb": 0.4751995678958516,
+      "wall_s": 5009.810910647968,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "s5",
+      "depth": 8,
+      "n_params": 59255296,
+      "ratio": 20,
+      "tokens": 1185105920,
+      "compute": 4.213428124857139e+17,
+      "val_loss": 0.589941774353616,
+      "val_bpb": 0.4401976282117675,
+      "wall_s": 12475.087481918978,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "p5_d12r4",
+      "depth": 12,
+      "n_params": 135288576,
+      "ratio": 4,
+      "tokens": 541154304,
+      "compute": 4.392719711065866e+17,
+      "val_loss": 0.5405592063221066,
+      "val_bpb": 0.4033497725970426,
+      "wall_s": 11436.645254642935,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "s6",
+      "depth": 8,
+      "n_params": 59255296,
+      "ratio": 40,
+      "tokens": 2370211840,
+      "compute": 8.426856249714278e+17,
+      "val_loss": 0.5643642585278431,
+      "val_bpb": 0.42111241965132856,
+      "wall_s": 24974.72813245491,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "s7",
+      "depth": 12,
+      "n_params": 135288576,
+      "ratio": 8,
+      "tokens": 1082308608,
+      "compute": 8.785439422131732e+17,
+      "val_loss": 0.5155152693552756,
+      "val_bpb": 0.3846627052742326,
+      "wall_s": 22837.53291287599,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "s35_d14r8",
+      "depth": 14,
+      "n_params": 195228544,
+      "ratio": 8,
+      "tokens": 1561828352,
+      "compute": 1.829480850833277e+18,
+      "val_loss": 0.465267024449472,
+      "val_bpb": 0.3471689064098037,
+      "wall_s": 45480.517879788065,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "s8",
+      "depth": 12,
+      "n_params": 135288576,
+      "ratio": 20,
+      "tokens": 2705771520,
+      "compute": 2.196359855532933e+18,
+      "val_loss": 0.47476102027711437,
+      "val_bpb": 0.35425305373969845,
+      "wall_s": 57372.10130017204,
+      "seed": 0,
+      "lr": 0.0021
+    },
+    {
+      "point": "s35_d14r20",
+      "depth": 14,
+      "n_params": 195228544,
+      "ratio": 20,
+      "tokens": 3904570880,
+      "compute": 4.5737021270831923e+18,
+      "val_loss": 0.4284052699203966,
+      "val_bpb": 0.31966372264280857,
+      "wall_s": 113353.43010441703,
+      "seed": 0,
+      "lr": 0.0021
+    }
+  ],
+  "params": {
+    "A": 6401.347579518093,
+    "B": 2380.356818732057,
+    "E": 0.20606168756270615,
+    "alpha": 0.5893069626053427,
+    "beta": 0.5020384098072552,
+    "objective": 6.990610294722514e-06,
+    "n_starts": 48,
+    "n_converged": 46
+  },
+  "gates": {
+    "all_passed": false,
+    "compute": 2.77e+19,
+    "n_params": 480400000.0,
+    "tokens": 9600000000.0,
+    "gates": {
+      "r2_log_l": {
+        "value": 0.9982681176364883,
+        "threshold": 0.98,
+        "passed": true,
+        "detail": "R\u00b2 in log-L space \u2265 0.98 \u2014 necessary, not sufficient (retained for continuity)"
+      },
+      "bootstrap_pi_half_width": {
+        "value": 0.02068858013899416,
+        "threshold": 0.02,
+        "passed": false,
+        "detail": "90% bootstrap PI half-width \u2264 0.02 bpb at the target point (0/200 refits failed; >20% failing is itself a red flag)"
+      },
+      "loo_ratio_swing": {
+        "value": 3.1481201353071033,
+        "threshold": 2.0,
+        "passed": false,
+        "detail": "max/min D_opt:N_opt leaving each point out once, \u2264 2\u00d7 (S3 measured 2.9\u00d7)"
+      },
+      "residual_trend": {
+        "value": 0.16083916083916086,
+        "threshold": 0.7,
+        "passed": true,
+        "detail": "Spearman residual-vs-log-C trend: fails only when strong AND significant (|rho| \u2265 0.7 and p < 0.05); p = 0.6175"
+      }
+    }
+  },
+  "d20": {
+    "compute_flops": 2.77e+19,
+    "n_params": 480400000.0,
+    "tokens": 9600000000.0,
+    "predicted_bpb": 0.2782380267669339,
+    "bootstrap_pi": {
+      "lo": 0.2537851586834873,
+      "hi": 0.2951623189614756,
+      "half_width": 0.02068858013899416,
+      "n_failed_fits": 0,
+      "n_boot": 200,
+      "level": 0.9,
+      "fit_failure_red_flag": false
+    },
+    "n_opt": 1105028465.0157554,
+    "d_opt": 4177871261.0818067,
+    "optimal_ratio": 3.780781575633202,
+    "l_pred_at_optimal": 0.2712505986221509
+  }
+}
