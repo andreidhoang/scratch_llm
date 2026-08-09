@@ -24,7 +24,7 @@ the 2026 frontier's *contested* claims.
 
 ## Current next node
 
-> **S3 s1–s7 ✅ 2026-08-02** → decisions CLOSED 2026-08-03 (T1 = A, mtp_depth=0) → **S3.5 ✅ DONE 2026-08-08 (13/13 points on the pod; η\* = 0.0021 locked; final joint fit REJECTED at gates ⇒ D:N HOLD ratio-20 is PERMANENT; d20 bpb tripwire 0.278 [0.254, 0.295] — `docs/RESULTS.md` §S3.5)** → **P5 engineering items (sm90 compile re-validation, kill/resume drill, step-time — HP half already closed by the pod)** → **8×H100 d20 with P5.5 probe gate in hour 1 (ADR-0020) (~$100, gated on user go-ahead)**
+> **S3 s1–s7 ✅ 2026-08-02** → decisions CLOSED 2026-08-03 (T1 = A, mtp_depth=0) → **S3.5 ✅ DONE 2026-08-08 (13/13 points on the pod; η\* = 0.0021 locked; final joint fit REJECTED at gates ⇒ D:N HOLD ratio-20 is PERMANENT; d20 bpb tripwire 0.278 [0.254, 0.295] — `docs/RESULTS.md` §S3.5)** → **P5.5 probe gate ✅ SHIPPED 2026-08-09 (`scripts/d20_probe.py` + `utils/dist_launch.py` torchrun shim — runbook §0.5 G2 closed for the probe path; pre-registered in `bench/RESULTS.md` §P5.5)** → **P5 engineering items (sm90 compile re-validation, kill/resume drill, step-time — HP half already closed by the pod; speedrun-`main` torchrun shim still open)** → **8×H100 d20 with P5.5 probe gate in hour 1 (ADR-0020) (~$100, gated on user go-ahead)**
 
 See `FRONTIER_2026_TASKSPEC.md` Next-node marker for exact commands and prerequisites.
 
@@ -178,6 +178,7 @@ Owner: `FRONTIER_2026_END_TO_END_PLAN.md` §S3 + `scaling/isoflop.py`.
 | 2026-08-03 | **Decisions CLOSED: T1 = A (accept HOLD → P5) and d20 runs mtp_depth=0** (F2a/F2b retarget post-d20) | Operator-delegated senior-review calls: hyperparameters are the only unbounded unknown and only P5 closes them; the d20's value is anchor comparability and every certified constant assumes mtp_depth=0 — records in `docs/RESULTS.md` §S3.5 + `FRONTIER_2026_D20_CERTAINTY_PLAN.md` §8 |
 | 2026-08-07 | ADR-0020: HP transfer = nanochat's composite rule (not µP) + P5.5 target-scale probe gate added; T1 amended A → A′ | Code-verified on nanochat master: Adam ×(d/768)^−½, Muon width-constant, √B scaling, T_epoch wd; "validate at target scale" (320-sweep lesson) ⇒ d20 probe in the rental's first hour; schedule stays cosine (whole grid ran it) with warmdown deferred to post-d20 ablation |
 | 2026-08-08 | **S3.5 phase 2 DONE — 13/13 points, final joint fit REJECTED at gates; D:N HOLD ratio-20 is now PERMANENT (no third attempt per pre-registration)** | Final law `L = 0.2061 + 6401·N^−0.589 + 2380·D^−0.502` (R² 0.9983 PASS; bootstrap PI 0.0207 FAIL marginal; LOO 3.15× FAIL; residuals PASS); loss prediction stable, allocation not certifiable at 2.5× extrapolation; d20 bpb tripwire restated 0.2782 [0.2538, 0.2952] on the pinned-tokenizer scale (old ≈0.74 void); ~81 GPU-h ≈ $46–48; pod stopped, commit `4101806` merged |
+| 2026-08-09 | **P5.5 probe gate SHIPPED (ADR-0020 item 2): `scripts/d20_probe.py` + `utils/dist_launch.py`** | 3 arms at η\*·√32 × {0.7, 1.0, 1.4} = {0.0083, 0.0119, 0.0166}, 480M tok each, min-bpb + 0.003 tie→lower-LR rule pre-registered in `bench/RESULTS.md` §P5.5; torchrun shim closes runbook §0.5 G2 for the probe path (gloo-verified, `tests/test_dist_launch.py`); speedrun-`main` shim remains a P5 item |
 
 *Last updated: 2026-08-08*
 

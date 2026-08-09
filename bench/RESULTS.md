@@ -1186,3 +1186,36 @@ Census data: `artifacts/k3_anatomy/` (via `scripts/k3_fetch_tensors.py`); gate:
 (`docs/RESULTS.md` §K3) and will be logged here once measured. Forward critical path: K9 = 8×B300
 Modal rental (~$120–170); K10.2 = KDA decode kernel (per-channel decay, on DELTA's GDN-2 base,
 benchmarked vs the FLA oracle).
+
+---
+
+## Frontier ablations — Pre-registration: the P5.5 d20 probe gate (2026-08-09, ADR-0020 item 2)
+
+**What this is.** The target-scale LR probe that runs in the first hour of the 8×H100 d20 rental,
+BEFORE the full budget commits. η\* = 0.0021 was swept at d12 / batch 16,384 tok/step `[MEASURED,
+artifacts/p5]`; the composite rule (ADR-0020) transfers it to the d20's 524,288-tok batch as
+**lr_center = η\*·√32 = 0.011879** — a rule whose √B term nanochat itself labels *"not studied
+carefully, assumption!"* `[reported]`. The probe measures it: 3 arms at lr_center × {0.7, 1.0,
+1.4} = {0.008316, 0.011879, 0.016631}, each 480M tokens = 916 steps at the exact d20 config
+(muon_adamw, cosine over the probe horizon, warmup steps/20 — the P5 sweep's protocol), ranked by
+val_bpb on the identical held-out tail slice (same data dir + seed 0). Tooling:
+`src/scratch_llm/scaling/d20_probe.py` + `scripts/d20_probe.py` (torchrun-aware via
+`utils/dist_launch.py` — runbook §0.5 G2 closed for the probe path), CPU-green in
+`tests/test_d20_probe.py` + `tests/test_dist_launch.py`.
+
+**Decision rule (pre-registered, reuse of P5's).** Winner = min val_bpb; arms within **0.003 bpb**
+of the best tie and break to the **lower LR**. `select` refuses a partial bracket — a crashed arm
+is re-run, never skipped past. The winner's lr becomes the full run's `--lr`.
+
+| pre-registered falsifier | predicted | KILL / abort | measured |
+|---|---|---|---|
+| arm ordering (val_bpb) | **lr1.0 wins**; lr1.4 second, lr0.7 third (mild under-training beats mild instability at 5% horizon) | **lr1.4 wins outright** ⇒ the √B rule UNDER-transfers at 32× batch — re-derive the transfer before committing (do NOT just take the win silently) | — |
+| arm spread (max−min val_bpb) | **0.002–0.010 bpb** (a real but small LR sensitivity) | all three within the 0.003 tie band ⇒ LR-insensitive at d20 scale — take the lowest LR, log "√B untestable at this noise floor" | — |
+| per-arm wall @ 916 steps (8×H100, bf16) | **7.3–8.9 min** (0.48–0.58 s/step from the d20 scorecard) | >12 min/arm ⇒ step-time tripwire fires HERE, before the full run (re-price or abort) | — |
+| probe cost @ $24/h node | **$9–12** (3 arms + startup; refines ADR-0020's $5–8 estimate) | probe total >$20 ⇒ stop, report, re-plan | — |
+| step-0 CE (each arm) | ≈ **log(32768) = 10.40** | off ⇒ masking/embedding bug; kill immediately | — |
+
+**What the probe does NOT certify** `[FACT]`: it ranks LRs at a 5% horizon — horizon drift
+between 916 and 18,311 steps is accepted residual risk (the probe is the best measurement
+available at any price ≪ the run). It also produces the first **measured** point on the √B
+assumption at 32× batch — logged here either way, per ADR-0020's honesty-label inheritance.

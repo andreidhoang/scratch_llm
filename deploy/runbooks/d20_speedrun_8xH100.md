@@ -196,6 +196,46 @@ python -m scratch_llm.speedrun --nano --depth 4 --bf16 --compile --device cuda -
 
 ---
 
+## Step 2.5 — P5.5: the target-scale LR probe gate (ADR-0020) (~30–45 min, ≈$9–12)
+
+**MANDATORY before Step 3's full-budget launch.** The d20's LR was swept at d12 / batch 16,384
+(η\* = 0.0021) and transferred by the composite rule's √B term — an assumption its own author
+flags as unstudied. Karpathy's 320-sweep lesson applies: *validate at target scale*. The probe
+runs 3 arms at the EXACT d20 config, ~5% of the token budget each, and picks the LR the full run
+commits at. Pre-registered predictions + falsifiers: `bench/RESULTS.md` §*Pre-registration: the
+P5.5 d20 probe gate (2026-08-09)*.
+
+```bash
+python scripts/d20_probe.py plan          # arms + these exact commands; runs nothing
+for m in 0.7 1.0 1.4; do                  # each arm is idempotent — safe to re-run after preemption
+  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  torchrun --standalone --nproc_per_node=8 scripts/d20_probe.py run --mult $m \
+    --data-dir <D20_CORPUS> --out-root artifacts/d20_probe --bf16 --device cuda
+done
+python scripts/d20_probe.py select --out-root artifacts/d20_probe   # prints + saves the winner lr
+```
+
+- **Mechanics `[FACT]`:** each arm = 916 steps (480M tokens) at global batch 524,288, muon_adamw,
+  cosine over the probe horizon, warmup steps/20 — the P5 sweep's protocol at the d20's shape.
+  The probe carries its own torchrun shim (`utils/dist_launch.py` — **G2 closed for this path**;
+  speedrun's `main` still needs the same wiring for Step 3, a P5 deliverable). Rank 0 writes
+  `artifacts/d20_probe/lr<mult>/results.json`; a finished arm is never re-paid (idempotent skip).
+- **Decision rule `[FACT, pre-registered]`:** min val_bpb wins; ties within **0.003 bpb** break to
+  the **lower LR**; `select` REFUSES a partial bracket (re-run the missing arm — never select
+  around a crash).
+- **Tripwires that fire HERE instead of at hour 2 `[pre-registered]`:** per-arm wall >12 min
+  (step-time re-price), any `non-finite loss`, step-0 CE ≠ ~10.40, or **lr1.4 winning outright**
+  (√B under-transfers at 32× batch — re-derive the transfer before committing; do not just take
+  the win). Probe total >$20 ⇒ stop and report.
+- **Data `[FACT]`:** `--data-dir` is the staged d20 corpus = **ClimbMix** (F12 operator override,
+  FINAL 2026-08-02) — the same shards Step 3 trains on, so the probe's val slice is the run's
+  val slice. (This runbook's Step 1 text predates the override; the corpus choice of record is
+  ClimbMix.)
+- **The winner's lr is Step 3's `<P5_SWEPT_MUON_LR>`** — replacing the composite-rule center if
+  the probe disagrees with it. That is the point of the gate.
+
+---
+
 ## Step 3 — launch the distributed d20 pretrain (~2.4–3.3 h `[INFERENCE]`)
 
 **Assumes §0.5 G1+G2 have landed in P5.** The ZeRO-2 path activates *inside* `train()` via
@@ -332,6 +372,7 @@ python bench/core_eval.py --ckpt runs/d20/pretrain.pt --data-dir data/fineweb_ed
 | 0 provision + P6 gate | ~20–40 min | yes | nccl busbw ≥ 350 GB/s or destroy+re-rent |
 | 1 stage 10B corpus | **hours `[INFERENCE]`** | **NO — off-clock** | pre-stage the night before / cheap CPU box; `vastai copy` on |
 | 2 recipe re-validate (sm90) | ~10 min | yes | bf16+compile NaN check; fall back to bf16-eager if it NaNs |
+| 2.5 P5.5 probe gate (ADR-0020) | ~30–45 min | yes | 3 LR arms × 916 steps; winner lr = Step 3's `--lr`; ≈$9–12 |
 | 3 distributed pretrain | **2.4–3.3 h `[INFERENCE]`** | yes | **$58–79**; the P5 d12 step-time is the go/no-go |
 | 4 guardrails | (continuous) | yes | ckpt sync, NaN guard, $/token projection, manifest |
 | 5 CORE + val_bpb | ~20–40 min | yes | the headline number |
