@@ -6,6 +6,9 @@
 > claim is ledgered in [`FACTS.md`](FACTS.md) — where a book and the tech report disagree, **the
 > tech report wins** and the book capsule is flagged.
 >
+> Merge overlay (2026-08-09): kernel-ladder × K3 interleaving + reasoning method lives in
+> [`MERGED_KERNELS_K3_ROADMAP.md`](MERGED_KERNELS_K3_ROADMAP.md) — it sequences, never re-scopes.
+>
 > Role frame: this is run as if we were the Moonshot team rebuilding our own model — which is
 > literally how K3 was built: Kimi Linear 48B-A3B was the intermediate open artifact, K3 is the
 > scaled successor. Our roadmap mirrors that lineage: **GDN → KDA → Kimi-Linear-class miniature →
