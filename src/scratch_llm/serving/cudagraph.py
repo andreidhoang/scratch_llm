@@ -58,7 +58,7 @@ class CudaGraphDecoder:
 
         stream = torch.cuda.Stream()
         stream.wait_stream(torch.cuda.current_stream())
-        with torch.cuda.stream(stream):
+        with torch.cuda.stream(stream):  # pyright: ignore[reportArgumentType]
             for _ in range(warmup_steps):
                 self.model(self._static_in, self.cache)
         torch.cuda.current_stream().wait_stream(stream)

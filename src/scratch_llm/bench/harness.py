@@ -76,9 +76,9 @@ def benchmark(
         starts = [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
         ends = [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
         for i in range(iters):
-            starts[i].record()
+            starts[i].record(torch.cuda.current_stream())
             fn()
-            ends[i].record()
+            ends[i].record(torch.cuda.current_stream())
         torch.cuda.synchronize()
         times = [s.elapsed_time(e) / 1e3 for s, e in zip(starts, ends, strict=True)]
         return _summarize(times, iters)

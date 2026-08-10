@@ -65,7 +65,9 @@ def test_backward_matches_autograd(shape: tuple[int, int, int, int], is_causal: 
     _ref_attention(q1, k1, v1, is_causal).backward(do)
 
     q2, k2, v2 = (t.clone().requires_grad_(True) for t in base)
-    FlashAttentionPyTorch.apply(q2, k2, v2, is_causal).backward(do)
+    out = FlashAttentionPyTorch.apply(q2, k2, v2, is_causal)
+    assert out is not None
+    out.backward(do)
 
     for got, want in ((q2.grad, q1.grad), (k2.grad, k1.grad), (v2.grad, v1.grad)):
         torch.testing.assert_close(got, want, atol=1e-10, rtol=1e-8)

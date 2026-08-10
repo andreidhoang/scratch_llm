@@ -42,10 +42,10 @@ from torch.utils.checkpoint import (
 # recomputing everything else IS the selective-activation-checkpointing (SAC) policy.
 MATMUL_OPS = frozenset(
     {
-        torch.ops.aten.mm.default,
-        torch.ops.aten.addmm.default,
-        torch.ops.aten.bmm.default,
-        torch.ops.aten.matmul.default,
+        torch.ops.aten.mm.default,  # pyright: ignore[reportAttributeAccessIssue]
+        torch.ops.aten.addmm.default,  # pyright: ignore[reportAttributeAccessIssue]
+        torch.ops.aten.bmm.default,  # pyright: ignore[reportAttributeAccessIssue]
+        torch.ops.aten.matmul.default,  # pyright: ignore[reportAttributeAccessIssue]
     }
 )
 _SAVE_OPS = MATMUL_OPS

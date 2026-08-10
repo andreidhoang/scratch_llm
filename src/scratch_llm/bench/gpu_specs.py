@@ -112,10 +112,10 @@ def measure_hbm_bandwidth(n_bytes: int = 1 << 28, iters: int = 50) -> float:
         dst.copy_(src)
     torch.cuda.synchronize()
     start, end = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
-    start.record()
+    start.record(torch.cuda.current_stream())
     for _ in range(iters):
         dst.copy_(src)
-    end.record()
+    end.record(torch.cuda.current_stream())
     torch.cuda.synchronize()
     seconds = start.elapsed_time(end) / 1e3 / iters
     moved = 2 * n_bytes  # one read + one write per copy
