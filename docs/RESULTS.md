@@ -140,6 +140,20 @@ in §S4-pre) is struck. **Pre-registered here — the pending S3-noise measureme
 scale (~0.5 GPU-h) to establish the bpb seed-noise floor, before any future small-scale
 corpus/architecture verdict quotes a delta against noise.
 
+**OUTCOME (2026-08-10, MEASURED — the floor now exists).** 3 seeds at s1 (d4/r8, 19.99M params,
+159.93M tokens, C = 1.92e16) on recipe-v1 (pinned ClimbMix tokenizer md5 4fc61379, muon_adamw,
+η\* = 0.0021, cosine, warmup steps/20, batch 8, bf16, vast.ai RTX 5090, ~0.42 GPU-h compute,
+~$0.45 pod): val_bpb = **1.46851 / 1.49252 / 1.47955** (seeds 0/1/2) → mean 1.48019,
+**max−min = 0.02401 bpb, sample σ = 0.0120 bpb** (val_loss spread 0.0595 nats). The F12 corpus
+delta (+0.1101 bpb) is **~4.6× the max−min seed spread (~9σ)** — the "DECISIVE for the sign at
+35M/700M" clause is now quantified, not just asserted. **Comparability caveat (metrology trap,
+documented for every future small-scale verdict):** the val set is the last `ctx×4` tokens of the
+*staging* (`speedrun.py:344`), so staging volume silently changes the val bytes. This floor was
+measured on a 250M-token staging; the S3.5 ladder ran on a 3.95B staging — absolute bpb (1.48 vs
+ladder_s1's 0.70585) is **not comparable across stagings**; the *spread* is the deliverable and is
+val-set-independent to first order. Records: `artifacts/noise_floor/seed{0,1,2}/results.json`;
+ledger: `bench/RESULTS.md` §Frontier ablations.
+
 **Artifacts:** `data/shards.py` (FineWeb-EDU arm), new ClimbMix staging path,
 `scripts/tok_train.py` per-corpus BPE, `eval/corpus_ablation.py` (or reuse `eval/optimizer_race.py`),
 `docs/RESULTS.md` §F12, `bench/RESULTS.md` §Frontier ablations.

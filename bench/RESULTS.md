@@ -1219,3 +1219,34 @@ is re-run, never skipped past. The winner's lr becomes the full run's `--lr`.
 between 916 and 18,311 steps is accepted residual risk (the probe is the best measurement
 available at any price ≪ the run). It also produces the first **measured** point on the √B
 assumption at 32× batch — logged here either way, per ADR-0020's honesty-label inheritance.
+
+---
+
+## Frontier ablations — Measured: the bpb seed-noise floor (2026-08-10, vast.ai RTX 5090)
+
+The S3-noise measurement pre-registered in `docs/RESULTS.md` §F12 (Amendment 2026-08-03) —
+executed and DONE. 3 seeds at s1 scale (d4/r8, N = 19.99M, D = 159.93M tokens, C = 1.92e16,
+9762 steps) on recipe-v1: pinned ClimbMix tokenizer (md5 4fc61379), muon_adamw, η\* = 0.0021,
+cosine, warmup steps/20, batch 8 × ctx 2048, bf16.
+
+| seed | val_bpb | val_loss (nats) | wall |
+|---|---|---|---|
+| 0 | 1.46851 | 3.63637 | 0.14 h |
+| 1 | 1.49252 | 3.69585 | 0.14 h |
+| 2 | 1.47955 | 3.66373 | 0.14 h |
+
+**Floor: max−min = 0.02401 bpb · sample σ = 0.0120 bpb · mean 1.48019** (val_loss spread 0.0595
+nats). Consequence of record: the F12 corpus delta (+0.1101 bpb) is ~4.6× the max−min spread
+(~9σ) — decisive for the sign at 35M/700M, now quantified. Any future small-scale
+corpus/architecture verdict quotes its delta against **0.024 bpb** (3-seed range at s1).
+
+**Metrology trap documented (root-caused this run):** the val set is the last `ctx×4` tokens of
+the staging (`speedrun.py:344`), so staging volume silently changes the val bytes. This floor was
+measured on a 250M-token staging; the S3.5 ladder's val tail sits at 3.95B — absolute bpb (1.48
+here vs ladder_s1's 0.70585) is NOT comparable across stagings. The spread is val-set-independent
+to first order and is the deliverable.
+
+Records: `artifacts/noise_floor/seed{0,1,2}/results.json` (all three on the identical pinned val).
+Cost: ~0.42 GPU-h compute; pod ≈ $0.45 total (instance 47359631, destroyed 2026-08-10 —
+scale-to-zero confirmed, 0 running instances). Side product: `fla-core 0.5.2` installed and
+import-verified on the pod image (K2 parity oracle, per `bootstrap-pod.sh`).
