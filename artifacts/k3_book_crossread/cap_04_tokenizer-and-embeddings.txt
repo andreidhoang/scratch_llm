@@ -1,0 +1,169 @@
+FOUNDATIONS
+The tokenizer and the embedding layer
+YOUR GUIDE
+Let's get started.
+
+Every computation in Kimi K3 begins the same way: a string of text becomes a sequence of integers, and each integer selects one row of a very large matrix. Nothing about this stage is specific to K3 — it is the front door of every language model — but the numbers are worth seeing up close. K3's vocabulary holds 163,840 entries, and its embedding matrix alone contains about 1.17 billion parameters, more than many complete language models. In this chapter we build both pieces small: a byte-pair encoding (BPE) tokenizer trained on a toy corpus, and an embedding layer at our mini-K3 dimensions.
+
+A scope note before we start. Moonshot has published K3's vocabulary size and its special token IDs, but not how the tokenizer was trained — the training corpus, the exact algorithm variant, and the pre-tokenization rules are not public. Byte-level BPE is the standard choice for models of this generation, so it is our teaching assumption throughout the book, and we label it as such.1
+1 The released files pin vocab_size to 163840 and name a BPE-style tokenizer; the training details behind it are not documented. Everything we say about how the vocabulary was built is therefore a description of standard practice, not of Moonshot's exact recipe.
+
+Why subwords
+
+A tokenizer must fix the unit of text the model sees. Characters are one option: the vocabulary stays tiny, but every word becomes many tokens, sequences get long, and the model spends capacity re-learning spelling. Whole words are the opposite failure: the vocabulary explodes, and any word not seen in training becomes an unknown token the model cannot process.
+
+Subword tokenization sits between the two. Frequent words ("the") get their own token; rare words ("tokenization") are split into a few frequent pieces ("token", "ization"). BPE is the simplest algorithm that produces such a vocabulary, and it does so with one operation applied repeatedly: find the most frequent adjacent pair of symbols, and merge it into a new symbol. The figure below places the three options side by side.
+
+Character, subword, and word tokenization. BPE earns its place by keeping both the vocabulary and the sequences short.
+Training BPE on a toy corpus
+
+The training algorithm needs a corpus, a table of word frequencies, and a loop. We use a corpus small enough that every merge can be checked by hand:
+
+from collections import Counter
+
+corpus = "the cat sat on the mat the cat ate the rat the rat sat on the mat"
+word_freqs = Counter(tuple(w) for w in corpus.split())
+print(word_freqs)
+Counter({('t', 'h', 'e'): 6, ('c', 'a', 't'): 2, ('s', 'a', 't'): 2,
+         ('o', 'n'): 2, ('m', 'a', 't'): 2, ('r', 'a', 't'): 2, ('a', 't', 'e'): 1})
+
+Each word is stored as a tuple of symbols — initially single characters — together with how often it occurs. In a true byte-level tokenizer the base symbols would be the 256 possible bytes rather than characters; our corpus is plain ASCII, where the two coincide, so nothing is lost by reading them as letters.2
+2 Starting from bytes is what makes byte-level BPE incapable of encountering an unknown token: any string, in any language or encoding, is at worst a sequence of raw bytes. The cost is that a base symbol can be a fragment of a multi-byte character, which is invisible in ASCII examples like ours.
+
+Training needs two operations. The first counts every adjacent pair of symbols across the corpus, weighted by word frequency. The second rewrites the corpus with a chosen pair fused into one symbol:
+
+def count_pairs(word_freqs):
+    pairs = Counter()
+    for word, freq in word_freqs.items():
+        for a, b in zip(word, word[1:]):
+            pairs[(a, b)] += freq
+    return pairs
+
+def apply_merge(pair, word_freqs):
+    merged = {}
+    for word, freq in word_freqs.items():
+        out, i = [], 0
+        while i < len(word):
+            if i < len(word) - 1 and (word[i], word[i + 1]) == pair:
+                out.append(word[i] + word[i + 1])
+                i += 2
+            else:
+                out.append(word[i])
+                i += 1
+        merged[tuple(out)] = freq
+    return merged
+
+The training loop alternates the two: count all pairs, take the most frequent, merge it everywhere, add the fused string to the vocabulary, repeat. Each iteration grows the vocabulary by exactly one entry.
+
+vocab = sorted({ch for word in word_freqs for ch in word})
+print("base vocab:", vocab, len(vocab))
+
+merges = []
+for step in range(6):
+    pairs = count_pairs(word_freqs)
+    best = max(pairs, key=pairs.get)
+    merges.append(best)
+    vocab.append(best[0] + best[1])
+    word_freqs = apply_merge(best, word_freqs)
+    print(f"merge {step}: {best[0]!r} + {best[1]!r}  (count {pairs[best]})")
+base vocab: ['a', 'c', 'e', 'h', 'm', 'n', 'o', 'r', 's', 't'] 10
+merge 0: 'a' + 't'  (count 9)
+merge 1: 't' + 'h'  (count 6)
+merge 2: 'th' + 'e'  (count 6)
+merge 3: 'c' + 'at'  (count 2)
+merge 4: 's' + 'at'  (count 2)
+merge 5: 'o' + 'n'  (count 2)
+
+The trace is worth reading line by line. The pair ('a', 't') appears nine times — inside "cat", "sat", "mat", "rat" and "ate" — so it merges first, and the symbol at is born. Then t + h and th + e fuse in sequence, and after two merges the corpus's most frequent word, "the", has become a single symbol. Later merges assemble cat, sat and on from the pieces already made. The vocabulary has grown from 10 symbols to 16, and frequency alone decided its contents. The figure below walks through the first iteration in full.
+
+One iteration of BPE training: count adjacent pairs, fuse the most frequent, rewrite. Six iterations take our toy vocabulary from 10 entries to 16.
+Encoding new text
+
+The list merges — in the order they were learned — is the entire tokenizer. To encode text we never saw during training, we split it into symbols and replay the merges in that same order:
+
+def encode_word(word, merges):
+    symbols = list(word)
+    for a, b in merges:                       # replay merges in training order
+        i, out = 0, []
+        while i < len(symbols):
+            if i < len(symbols) - 1 and (symbols[i], symbols[i + 1]) == (a, b):
+                out.append(a + b)
+                i += 2
+            else:
+                out.append(symbols[i])
+                i += 1
+        symbols = out
+    return symbols
+
+token_to_id = {tok: i for i, tok in enumerate(vocab)}
+print(encode_word("that", merges))
+print([token_to_id[t] for t in encode_word("that", merges)])
+['th', 'at']
+[11, 10]
+
+The word "that" never appears in the corpus, yet it encodes cleanly into two learned subwords, th and at, with IDs 11 and 10. This is the property that matters: the tokenizer covers unseen words by composition rather than by memorization. The model downstream only ever sees the integers.
+
+Scaling this loop from 6 merges to K3's size means running it roughly 163,000 more times on a corpus of trillions of bytes — the algorithm does not change, only the bookkeeping needed to make the counting fast. The result is a vocabulary where common English words, frequent code fragments, and high-frequency strings from many languages each occupy one slot.
+
+K3's vocabulary and its special tokens
+
+The released config.json fixes vocab_size at 163840. Three IDs in that range are reserved for special tokens — markers that are never produced by the merge process but are inserted by the serving stack: bos_token_id 163584 marks the beginning of a sequence, eos_token_id 163586 marks the end, and pad_token_id 163839 fills unused positions when sequences are batched together. Note where they sit, as the figure below shows: all three live in the top stretch of the ID space, past 163,583, which is the conventional layout — ordinary subwords fill the bottom of the range and a reserved block sits at the top.3
+3 The config documents these three IDs. The gap between 163584 and 163839 leaves room for a few hundred more reserved entries — chat-format delimiters, tool-call markers, and similar — whose exact assignments are not part of the published config, so we do not enumerate them.
+
+K3's ID space: learned subwords below, a reserved block at the top holding the three documented special tokens.
+The embedding layer
+
+An integer ID is not something a neural network can multiply. The embedding layer converts each ID into a dense vector by plain table lookup: a matrix with one row per vocabulary entry, where token i fetches row i. In PyTorch this is nn.Embedding, and at mini-K3 scale — vocab=512, d_model=64 from our fixed teaching config — it looks like this:
+
+import torch
+import torch.nn as nn
+
+torch.manual_seed(3)
+vocab_size, d_model = 512, 64          # mini-K3
+embedding = nn.Embedding(vocab_size, d_model)
+print(embedding.weight.shape)
+
+token_ids = torch.tensor([11, 10, 42, 7])
+x = embedding(token_ids)
+print(x.shape)
+print(torch.equal(x[0], embedding.weight[11]))
+torch.Size([512, 64])
+torch.Size([4, 64])
+True
+
+Four token IDs went in; four rows of the weight matrix came out, stacked into a (4, 64) tensor. The torch.equal check confirms there is no arithmetic hiding anywhere — the output for token 11 is row 11 of the matrix, element for element. The rows start as random numbers and become meaningful only through training.
+
+Because lookup is just row selection, the gradient during training is equally sparse — only the rows that were actually used receive any update:
+
+loss = x.sum()
+loss.backward()
+grad_rows = embedding.weight.grad.abs().sum(dim=1)
+print((grad_rows != 0).sum().item())
+4
+
+Of 512 rows, exactly the 4 we looked up have nonzero gradient. At K3 scale the same fact means that in any training batch, the overwhelming majority of the 163,840 rows sit untouched. The figure below shows the lookup at both scales.
+
+Embedding lookup at mini-K3 scale, and the same operation at K3 scale where the table holds 1.17 billion parameters.
+Scaling the arithmetic to K3
+
+Our miniature's embedding matrix holds 512 × 64 = 32,768 parameters. K3's holds:
+
+k3_vocab, k3_d = 163840, 7168
+print(k3_vocab * k3_d)
+print(k3_vocab * k3_d / 1e9)
+1174405120
+1.17440512
+
+One matrix, about 1.17 billion parameters, before a single transformer layer has run. Against K3's 2.8T total this is a rounding error — under 0.05% — but it is a reminder of the scale the vocabulary operates at: every one of the 163,840 rows is a trainable 7,168-dimensional vector.4
+4 163,840 is 2.5 × 65,536, so it divides evenly by 128 and by every smaller power of two. Vocabulary sizes are routinely padded to such values because the embedding lookup and the final output projection shard cleanly across GPUs when the row count divides the parallelism degree.
+
+Why so large a vocabulary? GPT-2 managed with 50,257 entries. A larger table lets more strings — multilingual text, code identifiers, common phrases — be single tokens, which shortens sequences. For a model built to serve 1,048,576-token contexts, every percentage point of compression matters: a document that tokenizes into fewer IDs leaves more of the context window free, and, as we will compute two chapters from now, every token held in context has a memory price.
+
+Where the vectors go next
+
+We now have the complete front of the model: text becomes IDs through learned merges, and IDs become rows of a trainable matrix. From here on, the tokenizer disappears from view — every remaining chapter of this book operates on the (T, d_model) tensor of embedding vectors, with d_model = 64 in our miniature standing in for K3's 7,168.
+
+One thing is deliberately absent. We have added no information about position — token 3's vector would be identical if the same ID appeared at position 300. Classic transformers fix this by adding a positional signal right here, at the embedding. K3 does something more interesting: 69 of its 93 layers use no explicit positional encoding at all, and the remaining 24 apply a rotary encoding inside the attention computation rather than at the input. Both choices belong to later chapters. In the next chapter we build the standard transformer block — attention, MLP, RMSNorm, and residual connections — that every K3-specific component will be measured against.
+
+CHAPTER COMPLETE
+Nicely done. You reached the end of this one.

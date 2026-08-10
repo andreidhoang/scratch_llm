@@ -1,0 +1,101 @@
+START HERE
+How to read this book
+YOUR GUIDE
+Let's get started.
+
+A model with 2.8 trillion parameters cannot be understood by staring at it, and it cannot be run on anything you own. It can, however, be understood by rebuilding it small, because none of Kimi K3's architectural ideas depend on being large. The delta rule that drives 69 of its layers is the same equation at a 16-dimensional state as at full width; a router choosing 2 experts from 16 exercises the same code path as one choosing 16 from 896. This chapter fixes the method the whole book follows: the dimensions we build at, the configuration every chapter shares, the habits that keep tensor code correct, and what we assume you already know.
+
+One module per chapter
+
+Each chapter takes one component of K3 and follows the same loop. First the concept: what problem the component solves, stated in prose and usually with a worked numeric example before any code appears. Then the code: a PyTorch implementation at toy dimensions, written to be read top to bottom, with loops left explicit wherever a loop is clearer than a batched einsum. Then verification: we run the code, check shapes, and where possible construct a small input on which the component's defining behavior is visible in the printed numbers. Finally the scale-up: we connect the miniature to the real released numbers, so the toy version never floats free of the actual model.
+
+The chapter loop. Every component in the book passes through these four stages in order.
+
+The printed outputs in this book are real: every code block that shows output was executed, and where random tensors are involved we set seeds so you can reproduce the numbers exactly.1
+1 We run PyTorch 2.10 on CPU. Later versions occasionally change random number streams, so if your printed tensors differ in the decimals while all shapes and behaviors match, the version is the likely reason.
+ When a chapter says a memory answers 5.0 after an overwrite, that number came out of a terminal, not out of an expectation.
+
+Why toy dimensions
+
+We could build at K3's real width of 7,168 and simply never train. We build at 64 instead, for three reasons. Small tensors are printable, and reading actual numbers is how you catch a wrong transpose that shape checks miss. Small modules are runnable in seconds on any laptop, which keeps the feedback loop tight enough that you will actually run them. And small dimensions force the code to be correct structurally rather than accidentally: a bug that swaps a 7,168 with another 7,168 is invisible, whereas swapping 64 with 16 fails immediately. However, the miniature only teaches the right lessons if its proportions match the original, which is why we do not choose dimensions chapter by chapter.
+
+The mini-K3 configuration
+
+The following configuration is fixed for the entire book. Every later chapter imports it, so a KDA layer built in Part 02 plugs into the assembled model of Part 06 without renaming a single dimension. Each field carries the corresponding K3 value in a comment; the K3 numbers come from the released configuration and are the subject of the next chapter, "The shape of Kimi K3".
+
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class MiniK3Config:
+    # widths
+    d_model: int = 64          # K3: 7168
+    n_heads: int = 4           # K3: 96
+    head_dim: int = 16         # K3: 128
+    vocab: int = 512           # K3: 163840
+    context: int = 256         # K3: 1048576
+    # depth and layer pattern
+    n_layers: int = 8          # K3: 93
+    mla_layers: tuple = (3, 7) # K3: 24 layers, every 4th plus the last
+    # Gated MLA
+    kv_lora_rank: int = 16     # K3: 512
+    q_lora_rank: int = 32      # K3: 1536
+    qk_rope_head_dim: int = 8  # K3: 64
+    qk_nope_head_dim: int = 16 # K3: 128
+    v_head_dim: int = 16       # K3: 128
+    # Stable LatentMoE
+    n_experts: int = 16        # K3: 896
+    top_k: int = 2             # K3: 16
+    n_shared: int = 1          # K3: 2
+    moe_intermediate: int = 48 # K3: 3072
+    router_latent: int = 32    # K3: 3584
+
+cfg = MiniK3Config()
+assert cfg.d_model == cfg.n_heads * cfg.head_dim
+assert cfg.router_latent == cfg.d_model // 2
+print(cfg.d_model, cfg.n_heads, cfg.n_layers)
+64 4 8
+
+The dataclass is frozen so no chapter can quietly mutate a dimension that another chapter depends on. Note the ratios the miniature preserves. The routing latent is half the model width, exactly as in K3, where 3,584 is half of 7,168. The layer pattern places full attention at every fourth layer plus the final one: in our eight layers those are indices 3 and 7, six KDA layers and two MLA layers, a 3:1 mixture mirroring K3's 69 and 24. The expert count, active count, and shared count of 16, 2, and 1 keep MoE routing meaningfully sparse (an eighth of the experts fire) without making the toy model unwieldy, where K3 activates 16 of 896.2
+2 One ratio we deliberately do not preserve: in our miniature n_heads × head_dim equals d_model (4 × 16 = 64), the textbook arrangement. In K3 it does not — 96 × 128 = 12,288, wider than the 7,168 hidden size. We take that up when reading the config in "The shape of Kimi K3".
+
+Two fields deserve a caution. The mini values for KDA's internal head geometry are our choices, because Moonshot's release does not break out KDA per-head dimensions separately from the global head_dim; the chapters of Part 02 state this again where it matters. The same discipline applies throughout the book: where a K3 detail is undocumented, the prose says so and labels our value a teaching stand-in, and we never silently promote a guess into a fact.
+
+The miniature and the original, field by field. The ratios, not the magnitudes, are what the chapters rely on.
+The shape-check habit
+
+Almost every bug you will write while following this book is a shape bug, and almost every shape bug is caught by one habit: annotate the expected shape of each tensor as a comment when it is created, and print or assert the shape at module boundaries. The code in this book does this everywhere, and we recommend keeping the habit in your own copies. A small example with the config's dimensions:
+
+import torch
+import torch.nn as nn
+
+torch.manual_seed(0)
+d_model, n_heads, head_dim = 64, 4, 16
+
+x = torch.randn(1, 10, d_model)          # (batch, tokens, d_model)
+W_q = nn.Linear(d_model, n_heads * head_dim, bias=False)
+q = W_q(x).view(1, 10, n_heads, head_dim)
+print(q.shape)
+torch.Size([1, 10, 4, 16])
+The shape-check example as a picture: each stage's expected shape is written down before the code runs.
+
+The comment on x is not decoration; it is the specification the next line is checked against. When a chapter introduces a module, the first thing we do after writing it is push a batch through and print the output shape, and only then look at values. Shapes tell you the plumbing is connected; printed values on seeded inputs tell you the plumbing carries the right water.3
+3 A worthwhile refinement once modules nest deeply: assert x.shape == (B, T, d_model), x.shape at entry to each forward. Assertions cost nothing at these sizes and turn a silent broadcast into a loud failure at the exact line where the shapes diverged.
+
+How the parts depend on each other
+
+The book has ten parts, numbered 00 through 09, and the ordering is a dependency graph rather than a convention. Part 01 builds what everything else stands on: a tokenizer and embedding layer, a standard transformer block as the baseline against which every K3 component is measured, the cost analysis of attention at one million tokens, and the state view of linear attention. The four middle parts each build one K3-specific subsystem on top of those foundations: Part 02 grows the linear-attention state into the full KDA layer, Part 03 builds Gated MLA, Part 04 adds Attention Residuals across depth, and Part 05 replaces the MLP with Stable LatentMoE.
+
+The dependency graph of the book. Arrows mean "builds directly on".
+
+As the figure shows, the four subsystem parts depend on Part 01 but only lightly on each other, so a reader who cares most about MoE can go from Part 01 to Part 05 directly and lose little. Part 06 is the convergence point: "Assembling mini-K3" needs all four subsystems, "Counting to 2.8 trillion" reproduces the release's headline parameter counts from the config, and "Training the miniature" runs the assembled model on real text. The last three parts consume the assembled model rather than extend it: quantization in Part 07, long-context behavior in Part 08, and serving in Part 09. Cross-references in the text always name the chapter, so you can tell a backward reference from a forward one at a glance.
+
+What we assume you know
+
+We assume working Python and basic PyTorch: creating tensors, indexing and reshaping them, writing an nn.Module with a forward method, and calling backward on a loss without needing to know how autograd is implemented. If you have trained any small network, even a two-layer classifier, you have enough. We also assume the transformer at a high level: text becomes tokens, tokens become vectors, a stack of layers transforms those vectors, and the model is trained to predict the next token. We do not assume you know how attention is computed, what a KV cache is, what RoPE does, or anything about mixtures of experts, linear attention, or quantization; each of those is built from the ground up when it first appears, because those are exactly the components K3 rearranges.
+
+The arithmetic in this book is deliberately elementary. When we account for parameters or memory we multiply small counts of dimensions and show the multiplication, in the style of "three matrices of 3584 × 3072 each". If you can check napkin math of that kind, you can verify every quantitative claim we make about where K3's size and speed come from.
+
+One habit completes the method: whenever we state a K3 number, it traces to the released artifacts or to Moonshot's published claims, and claims are attributed as claims. The place where most of those numbers live is a single file in the release, and reading it end to end is the fastest way to see the whole model at once. That file is the subject of the next chapter.
+
+CHAPTER COMPLETE
+Nicely done. You reached the end of this one.

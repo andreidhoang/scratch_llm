@@ -1,0 +1,115 @@
+START HERE
+The shape of Kimi K3
+YOUR GUIDE
+Let's get started.
+
+Every open-weight release ships a small JSON file, config.json, that specifies the architecture completely: every width, every depth, every routing decision, compressed into a few dozen key-value pairs. For a model you are about to rebuild, this file is the blueprint, and reading it closely is the fastest way to hold the whole design in your head at once. In this chapter we go through Kimi K3's configuration line by line and turn each number into a piece of a mental model. We end with a napkin sketch of where the 2.8 trillion parameters physically live; the exact accounting, down to the last matrix, is deferred to the chapter "Counting to 2.8 trillion".
+
+The released configuration, grouped the way this chapter reads it: widths, depth, the attention pattern, and the expert system.
+The widths
+
+hidden_size: 7168. This is the width of the residual stream, the vector each token carries through the whole network: every layer reads a 7,168-dimensional vector per token and writes one back. Nearly every other width in the file is defined relative to this one.
+
+num_attention_heads: 96 and head_dim: 128. Attention splits its work across 96 heads of 128 dimensions each, and here the config quietly breaks a textbook habit. In the classic transformer, heads times head dimension equals the hidden size, so the attention block is a same-width rearrangement. In K3, 96 × 128 = 12,288, wider than 7,168: the attention layers project the stream up into a wider space, attend there, and project back down. Head count and head width are independent design choices, and the config is the proof.1
+1 The neighboring key num_key_value_heads: 96 equals the query head count, meaning K3 does not use grouped-query attention, the usual trick of sharing key/value heads to shrink the cache. It does not need to: its cache savings come from latent compression in the MLA layers, which compresses along a different axis entirely.
+
+vocab_size: 163840. The tokenizer knows 163,840 tokens, on the large side for current models; a bigger vocabulary means fewer tokens per document, which matters when you bill and batch by the token.2
+2 The special tokens sit at the top of the ID range: bos_token_id 163584, eos_token_id 163586, and pad_token_id 163839, the last ID in the vocabulary. Details of how the tokenizer was trained are not published; we treat it as a byte-level BPE in "The tokenizer and the embedding layer" and label that a teaching assumption.
+
+max_position_embeddings: 1048576. The context window is 2^20 tokens exactly, roughly ten novels' worth of text in one prompt. Note what this key does not mean here: as we will see below, most of K3's layers have no positional embeddings at all, so the number is best read as "the sequence length the model is built and trained to handle".
+
+Two housekeeping keys close the group: rms_norm_eps: 1e-05, the usual small constant inside RMSNorm, and a declared dtype of bfloat16, which describes the non-expert weights; the experts are stored in something far smaller, as covered in "What 1.56 TB on disk means".
+
+The depth
+
+num_hidden_layers: 93. Ninety-three layers, each containing an attention component and an MLP-shaped component. The two keys that follow tell us the MLP-shaped component is almost never an MLP. first_k_dense_replace: 1 says the first one layer, layer 0, keeps a plain dense MLP; moe_layer_freq: 1 says every layer after it uses a mixture of experts. So the stack is one dense layer followed by 92 MoE layers. The dense layer's width comes from intermediate_size: 33792, a conventional expansion of the 7,168-wide stream. Starting a deep MoE stack with a dense layer is a common stabilizer: the first transformation every token sees is the same regardless of routing.
+
+The attention pattern
+
+The config lists the layer indices that run full attention: [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 93] — every fourth layer, plus the final layer. That is 24 layers of Gated MLA, exact softmax attention with latent compression and an output gate. The remaining 69 layers run Kimi Delta Attention (KDA), the linear-attention layer with a fixed-size recurrent state. The mixture is roughly 3:1, and the mental model is a division of labor: KDA layers maintain a cheap running memory whose size never grows, while every fourth layer provides a checkpoint where any token can look back at any other exactly. Why the stack needs both, and why the exact layers sit where they do, is the opening question of Part 03, in "Why keep any full attention at all".
+
+The 93-layer tower: a dense base, 69 KDA layers, and 24 Gated MLA layers spaced every fourth layer plus the top.
+
+One config key belongs to the KDA side: gate_lower_bound: -5.0. KDA's memory forgets through a learned per-channel decay gate, and this key floors the gate's pre-activation, which bounds how aggressively any channel can erase its state in a single step. The mental model to carry for now: forgetting in K3 is learned, per channel, and clamped for stability. The mechanism, and what happens without the clamp, is the chapter "Forgetting, one channel at a time".
+
+The KDA layers also carry no explicit positional encoding, no RoPE and no learned positions; order is carried implicitly, because a recurrent state processed left to right is inherently order-aware. This arrangement is why the config's million-token context is not paired with a million-entry position table.
+
+Inside a Gated MLA layer
+
+Five keys give the geometry of the 24 full-attention layers, and they are the config's densest cluster of ideas. kv_lora_rank: 512 is the headline: instead of caching full keys and values per token, an MLA layer caches one 512-dimensional latent per token and reconstructs keys and values from it on demand. q_lora_rank: 1536 applies the same low-rank treatment to queries, which saves parameters rather than cache. The per-head layout is split by qk_nope_head_dim: 128 and qk_rope_head_dim: 64: each head's query and key have 128 dimensions that carry no positional information plus 64 dimensions that are rotated by RoPE, 192 in all, while v_head_dim: 128 keeps values at 128. The split exists because latent compression and rotary position interact badly if applied to the same dimensions; the resolution is the chapter "Decoupled RoPE: position in the MLA layers".
+
+The MLA geometry from five config keys: one 512-wide cached latent per token, reconstructed into 192-wide keys and 128-wide values per head.
+
+The payoff of the latent is easiest to see priced out at full context. Caching one 512-number latent per token, per MLA layer, in two-byte bfloat16:
+
+cache_1m = 24 * 1_048_576 * 512 * 2     # 24 layers, 1M tokens, bf16 = 2 bytes
+print(f"{cache_1m / 1e9:.1f} GB")
+25.8 GB
+
+About 26 GB of cache for a million tokens of context, from the only 24 layers that keep a cache at all; the 69 KDA layers contribute a fixed-size state independent of sequence length.3
+3 This is a sketch, not the exact serving number: the real cached entry also has to carry the small rotary component, and engines add their own bookkeeping. The precise cache layout is worked out when we build the layer in "Multi-head Latent Attention from scratch".
+ For contrast, a textbook 93-layer model of these dimensions caching full 96-head keys and values at every layer would need terabytes. The chapter "How the hybrid stack reaches one million tokens" does this ledger properly.
+
+The expert system
+
+Four keys define the MoE that fills 92 of the 93 layers. num_experts: 896 — each MoE layer contains 896 separately-parameterized expert MLPs. num_experts_per_token: 16 — a learned router sends each token through only 16 of them. num_shared_experts: 2 — two additional experts are applied to every token unconditionally, a baseline pathway that routing cannot starve. moe_intermediate_size: 3072 — each expert is narrow, with a 3,072-wide intermediate, roughly a tenth of the dense layer's 33,792. The activation key hidden_act: "situ" names SiTU-GLU, the gated-linear-unit variant K3 uses inside experts; what is and is not documented about it is the subject of "The expert MLP and SiTU-GLU".
+
+One load-bearing number in the routing story does not appear as a key in this file: Moonshot documents that tokens are projected from 7,168 down to a 3,584-dimensional latent, half the hidden size, before dispatch to experts, cutting both communication and expert input width. This latent routing is the "Latent" in Stable LatentMoE, and it reshapes the parameter arithmetic we are about to do.
+
+One MoE layer as the config describes it: routing in a 3,584-wide latent, 16 of 896 experts chosen, 2 shared experts always on.
+A napkin sketch of where the parameters live
+
+The config never states "2.8T"; that number is a consequence, and we can nearly reach it on a napkin. Assume each expert is a GLU-style MLP with three weight matrices, as the situ activation implies, reading and writing the 3,584-wide routing latent with a 3,072-wide intermediate. Then:
+
+per_expert = 3 * 3584 * 3072            # three matrices per SiTU-GLU expert
+per_layer  = per_expert * 896           # 896 routed experts per MoE layer
+total      = per_layer * 92             # 92 MoE layers (layer 0 is dense)
+print(f"{per_expert:,}")
+print(f"{per_layer:,}")
+print(f"{total:,}")
+33,030,144
+29,595,009,024
+2,722,740,830,208
+
+About 33 million parameters per expert, about 29.6 billion per layer, and about 2.72 trillion across the 92 MoE layers. Everything else is small change by comparison: the embedding matrix is 163,840 × 7,168 ≈ 1.17 billion, layer 0's dense MLP is about 3 × 7,168 × 33,792 ≈ 0.73 billion, the attention stack and routers add tens of billions across 93 layers, and the MoonViT-V2 vision encoder is 0.4 billion. The napkin says the routed experts are roughly 97% of the model, and the remaining machinery, everything this book spends Parts 01 through 04 building, fits in the gap between 2.72T and the 2.8T headline.4
+4 The napkin rests on two assumptions the release does not spell out, the three-matrix expert shape and the expert width being the 3,584 latent on both sides, and some independent analyses total the model at 2.78T rather than 2.8T. The next section settles the first assumption from the checkpoint itself; the second is left to "Counting to 2.8 trillion", which redoes this accounting carefully and accounts for the 104B active figure, which involves more than experts alone.
+
+The napkin distribution of parameters: routed experts dominate, and everything we build before Part 05 lives in the thin remainder.
+
+There is a satisfying inversion in that figure. By parameter count, K3 is almost entirely experts; by architectural novelty, most of the ideas, KDA, Gated MLA, AttnRes, the routing itself, live in the thin remainder. Both are worth building, and the config has now given us the full map: how wide (7,168, with attention at 12,288 and experts at 3,072), how deep (93, one dense), how it attends (69 cheap, 24 exact), and how it routes (16 of 896, plus 2 shared, in a 3,584 latent).
+
+Checking the config against the checkpoint
+
+A configuration file is a declaration of intent. The weights are the thing itself, and the two do not have to agree. We downloaded the released 1.561 TB checkpoint and enumerated what is inside it: 497,220 tensors falling into 59 distinct name patterns. Everything in this section is our measurement of those tensors, and it is worth reading as a map from the config keys above to the objects they name.
+
+Start with depth. The checkpoint holds 93 decoder layers, and the tensor rosters split them 69 KDA to 24 MLA, matching the layer-index list the config publishes. Layer 0 is the only layer carrying mlp.gate_proj, mlp.up_proj, and mlp.down_proj, the three matrices of a plain dense MLP. There is no second one anywhere in the file, which is first_k_dense_replace: 1 in physical form: exactly one dense layer, exactly 92 MoE layers after it.
+
+The expert count checks out by multiplication. Each MoE layer stores its 896 experts as separate tensors, so one weight kind spans 896 × 92 slots, and the MXFP4 storage we will meet in Part 07 turns each expert matrix into a pair of tensors, a packed weight_packed and a weight_scale block-scale array. The three matrices per expert are named w1, w2, and w3, which settles the napkin's first assumption above, since an expert really is a three-matrix GLU. Multiplying that out accounts for almost the whole file:
+
+n_experts, moe_layers = 896, 92
+per_kind = n_experts * moe_layers          # one tensor per expert, per layer, per weight kind
+expert_total = per_kind * 3 * 2            # w1, w2, w3, each stored as packed + scale
+total = 497_220                            # tensors counted in the checkpoint
+
+print(f"expert tensors per weight kind: {per_kind:,}")
+print(f"all expert tensors:             {expert_total:,}")
+print(f"everything else:                {total - expert_total:,}")
+expert tensors per weight kind: 82,432
+all expert tensors:             494,592
+everything else:                2,628
+
+82,432 tensors per weight kind, 494,592 expert tensors in total, and 2,628 tensors left for everything else: the attention stack, the norms, the routers, the shared experts, the embedding, and the vision encoder. The napkin sketch said the experts hold about 97% of the parameters; the file says they hold about 99.5% of the tensors, which is the same story told by counting objects instead of numbers.
+
+The router settles one detail the config leaves ambiguous. Its weight has shape (896, 7168): one score per expert, computed from the full-width residual stream. So the 3,584-dimensional latent is the dispatch path and not the scoring path. Tokens are scored at 7,168 and only then compressed for the trip to the experts. Three neighboring names complete the MoE picture: block_sparse_moe.routed_expert_up_proj, routed_expert_down_proj and routed_expert_norm are the latent path itself, block_sparse_moe.shared_experts.{gate,up,down}_proj are the two always-on experts, and block_sparse_moe.gate.e_score_correction_bias is a per-expert additive bias on the router's scores, which is what Quantile Balancing looks like as a tensor.
+
+Inside the layers, the rosters are specific enough to plan a re-implementation from. A KDA layer carries q_proj, k_proj, v_proj, q_conv1d, k_conv1d, v_conv1d, A_log, dt_bias, f_a_proj, f_b_proj, b_proj, and o_norm. All three of q, k and v are convolved, not just q and k; the forget gate is factored into a low-rank pair f_a_proj/f_b_proj; A_log and dt_bias are a Mamba-style decay parameterization; b_proj produces the delta rule's write strength; and o_norm normalizes the output. An MLA layer carries a different six: q_a_proj, q_b_proj, q_a_layernorm, kv_a_proj_with_mqa, kv_b_proj, and kv_a_layernorm, which is the down-project, cache, up-project structure the q_lora_rank and kv_lora_rank keys implied. One tensor appears on both kinds: self_attn.g_proj exists on all 93 layers, so the output gate is not an MLA feature at all but a property of every attention layer in the model.5
+5 Attention Residuals are in the file too, under self_attention_res_proj and self_attention_res_norm plus mlp_res_proj and mlp_res_norm, 93 of each, with an output_attn_res_proj and output_attn_res_norm at the end. AttnRes therefore applies at both sublayers of every layer, not once per layer, which is more than the release describes. Part 04 builds it.
+
+Each config key from this chapter matched against the tensors that implement it in the released checkpoint.
+
+As the figure shows, every structural claim the config makes is visible in the weights, which is not a foregone conclusion for a release of this size. It also means the remaining gaps are gaps of a different kind: not "the file is silent about the shape" but "the shape is there and the reasoning behind it is not".
+
+What neither the config nor the checkpoint can tell us is anything about training: token counts, data, optimizer, none of it published. Some gaps we flagged as we passed them survive the inventory too, the SiTU-GLU formula, KDA's internal head geometry, and the AttnRes pseudo-query dimensions, which the corresponding chapters handle with labeled teaching values. With the blueprint read, we can start building. Part 01 begins where the model does, at the embedding matrix whose 163,840 rows we just counted.
+
+CHAPTER COMPLETE
+Nicely done. You reached the end of this one.

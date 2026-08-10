@@ -1,0 +1,185 @@
+KIMI DELTA ATTENTION
+The full KDA layer in PyTorch
+YOUR GUIDE
+Let's get started.
+
+Three chapters of pieces are on the table: a delta-rule write that corrects instead of accumulating, a per-channel gate that forgets on learned timescales, and a conv–Swish–L2 pipeline that conditions queries and keys before they touch the state. In this chapter we assemble them into one nn.Module — Kimi Delta Attention in miniature — with the same interface as the standard attention block from Part 01: a (T, d_model) tensor of token vectors in, the same shape out. We then subject the module to the three checks any sequence layer must pass: shapes are right, causality holds end to end, and gradients reach every parameter.
+
+One scope note before the code. The public sources tell us what a KDA layer contains — the delta recurrence, the per-channel forget gate, the short convolution of kernel size 4, the Swish, the L2 normalization — without giving the formulas that connect them, and without the per-head key/value dimensions inside KDA (the config's head_dim: 128 with 96 heads describes the attention stack broadly, without a KDA-specific breakdown). The released checkpoint fills in more than the sources do: enumerating its tensors gives the exact parts list of a KDA layer, and we compare that list against our module in a section below once the code is on the page. Where a formula is still unstated we follow the conventions of modern linear-attention blocks and label the choice as ours. Our miniature uses the book-wide mini-K3 config: d_model = 64, 4 heads, and per-head d_k = d_v = 16.
+
+The plan of the module
+
+Reading the forward pass from input to output, the layer will do six things:
+
+Project x into q, k, v streams, each d_model wide.
+Pass each stream through a depthwise short convolution and a Swish; L2-normalize q and k per head. All three streams are convolved, which the checkpoint confirms: every KDA layer carries q_conv1d, k_conv1d and v_conv1d. Restricting the L2 normalization to q and k remains our reading.
+Produce the controls: one write strength beta per head per token, and one decay alpha per key channel per head per token, using the gate_lower_bound = -5.0 parameterization from two chapters back.
+Run the gated delta recurrence independently in each head, maintaining four (16, 16) states.
+Gate and normalize the recurrence output: an RMSNorm on each head's output, multiplied by an output gate projected from x. Both halves of this path are in the checkpoint — every KDA layer carries an o_norm and a self_attn.g_proj — and the activation we put on the gate is ours.1
+1 The RMSNorm-then-gate output path follows Gated DeltaNet and similar recent recurrent layers, where a per-head normalization keeps the recurrence's output scale in check and an elementwise gate lets the token decide how much of the memory read-out to pass along. K3's config confirms RMSNorm is the model's normalizer (rms_norm_eps: 1e-05), and the checkpoint shows the per-layer normalizer sitting inside the KDA layer under the name o_norm. Whether o_norm is applied before or after the gate is not something a tensor list can settle; we normalize first.
+Merge heads and apply the output projection W_o.
+
+Below is the whole layer as one picture before we write it as code.
+
+The assembled KDA module: three preprocessed streams, two learned controls, a per-head recurrence, and a gated output path.
+The code
+
+Two support modules first. ShortConv is exactly the class from the previous chapter, and RMSNorm is the standard root-mean-square normalizer, the same normalizer K3 uses throughout (rms_norm_eps: 1e-05 in the released config):
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class ShortConv(nn.Module):
+    """Depthwise causal 1-D convolution with kernel size 4."""
+    def __init__(self, dim, kernel_size=4):
+        super().__init__()
+        self.conv = nn.Conv1d(dim, dim, kernel_size, groups=dim,
+                              padding=kernel_size - 1, bias=False)
+
+    def forward(self, x):                    # (T, dim) -> (T, dim)
+        y = self.conv(x.T.unsqueeze(0))[..., :x.shape[0]]
+        return y.squeeze(0).T
+
+
+class RMSNorm(nn.Module):
+    def __init__(self, dim, eps=1e-5):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        rms = torch.sqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
+        return self.weight * x / rms
+
+Now the layer itself. Every line of the recurrence is an operation we have already built one-headed versions of; the new work is bookkeeping across four heads at once, which we express with einsum:
+
+class KDA(nn.Module):
+    """Kimi Delta Attention, miniature: 4 heads, d_k = d_v = 16 per head."""
+    def __init__(self, d_model=64, n_heads=4, gate_lower_bound=-5.0):
+        super().__init__()
+        self.h = n_heads
+        self.d_k = d_model // n_heads          # 16
+        self.d_v = d_model // n_heads          # 16
+        self.lb = gate_lower_bound
+
+        self.W_q = nn.Linear(d_model, d_model, bias=False)
+        self.W_k = nn.Linear(d_model, d_model, bias=False)
+        self.W_v = nn.Linear(d_model, d_model, bias=False)
+        self.conv_q = ShortConv(d_model)
+        self.conv_k = ShortConv(d_model)
+        self.conv_v = ShortConv(d_model)
+
+        self.W_beta = nn.Linear(d_model, n_heads, bias=False)   # K3: b_proj
+        self.W_alpha = nn.Linear(d_model, d_model, bias=False)  # h x d_k gate scores
+
+        self.W_g = nn.Linear(d_model, d_model, bias=False)      # K3: g_proj
+        self.out_norm = RMSNorm(self.d_v)                       # K3: o_norm
+        self.W_o = nn.Linear(d_model, d_model, bias=False)
+
+    def forward(self, x):                      # x: (T, d_model)
+        T = x.shape[0]
+
+        q = F.silu(self.conv_q(self.W_q(x)))   # (T, 64)
+        k = F.silu(self.conv_k(self.W_k(x)))
+        v = F.silu(self.conv_v(self.W_v(x)))
+
+        # split heads: (T, h, d)
+        q = F.normalize(q.view(T, self.h, self.d_k), dim=-1)
+        k = F.normalize(k.view(T, self.h, self.d_k), dim=-1)
+        v = v.view(T, self.h, self.d_v)
+
+        beta = torch.sigmoid(self.W_beta(x))                       # (T, h)
+        log_alpha = self.lb * torch.sigmoid(self.W_alpha(x))       # (T, 64)
+        alpha = torch.exp(log_alpha).view(T, self.h, self.d_k)     # (T, h, d_k)
+
+        S = x.new_zeros(self.h, self.d_v, self.d_k)
+        outs = []
+        for t in range(T):
+            S = alpha[t].unsqueeze(1) * S                          # decay key channels
+            error = v[t] - torch.einsum('hvk,hk->hv', S, k[t])
+            S = S + beta[t].view(-1, 1, 1) * torch.einsum('hv,hk->hvk', error, k[t])
+            outs.append(torch.einsum('hvk,hk->hv', S, q[t]))
+        o = torch.stack(outs)                                      # (T, h, d_v)
+
+        g = self.W_g(x).view(T, self.h, self.d_v)                  # output gate
+        o = self.out_norm(o) * F.silu(g)
+        return self.W_o(o.reshape(T, -1))                          # (T, 64)
+
+The recurrence block deserves a slow read, because it is the whole architecture in four lines. S holds four states, one per head, as a (4, 16, 16) tensor — in the (h, d_v, d_k) layout we have used since the delta-rule chapter. The decay line broadcasts alpha[t], of shape (4, 16), across the d_v axis, scaling each head's key channels exactly as alpha * S did in the single-head version. The three einsum calls are the familiar operations with a head axis carried along: ('hvk,hk->hv') is the per-head matrix–vector read S k, ('hv,hk->hvk') is the per-head outer product, and the final one is the read S q.2
+2 Reading einsum signatures: letters name axes, repeated letters on the input side are multiplied and, if absent from the output, summed over. So 'hvk,hk->hv' says: for each head h and value channel v, sum over key channels k — a batched matrix–vector product.
+ Note also what is absent: no attention matrix, no mask, no positional encoding. Causality comes from the loop running left to right, a point we return to in the next chapter.
+
+What the checkpoint confirms
+
+The released weights settle several of the questions the scope note left open. We enumerated the 497,220 tensors of the 1.561 TB checkpoint, and each of the 69 KDA layers carries the same twelve-item parts list: q_proj, k_proj, v_proj, q_conv1d, k_conv1d, v_conv1d, A_log, dt_bias, f_a_proj, f_b_proj, b_proj, o_norm — plus self_attn.g_proj, which sits on all 93 layers of the model rather than on KDA layers alone.
+
+Most of that list maps onto the module above one tensor at a time. The three projections are our W_q, W_k and W_v. The three convolutions are our conv_q, conv_k and conv_v, and their presence settles the question the previous chapter left open: all three streams are convolved, values included, so v_conv1d is a documented part of K3 and not a convention we borrowed. b_proj is the write-strength projection that produces beta, our W_beta. o_norm normalizes the recurrence output, our out_norm. g_proj gates it, our W_g. The L2 normalization has no tensor of its own because it has no parameters, so the inventory neither confirms nor contradicts our reading that it applies to q and k only.
+
+One part of the list does not map cleanly, and it is the forget gate. Our W_alpha is a single full-width 64×64 projection whose output is squashed by a sigmoid and scaled by gate_lower_bound. K3 spreads the same job across four tensors. f_a_proj and f_b_proj are a low-rank pair, so the raw gate score is produced by projecting the token down to a small rank and back up rather than through one wide matrix. A_log and dt_bias are the decay parameterization in the Mamba style: a learned log-scale decay base and a bias on the per-token step size. The names give the factorization; they do not give the formula that combines the four, so we keep our single projection as the teaching form and flag the difference rather than guess a wiring.3
+3 At K3's width the low-rank pair is the economical choice: a full 7,168 × 7,168 gate projection would cost about 51.4 million parameters per layer, and a down-then-up pair through a small rank costs a fraction of that. Our miniature is 64 wide, where the saving would be invisible, which is the usual reason a teaching implementation and a production one differ.
+
+Check one: shapes and parameter count
+torch.manual_seed(3)
+layer = KDA()
+x = torch.randn(32, 64)
+y = layer(x)
+print("in:", tuple(x.shape), " out:", tuple(y.shape))
+print("params:", sum(p.numel() for p in layer.parameters()))
+in: (32, 64)  out: (32, 64)
+params: 25616
+
+The interface matches standard attention, and the budget is easy to audit: six square 64×64 projections (W_q, W_k, W_v, W_alpha, W_g, W_o) at 4,096 parameters each is 24,576; three depthwise convolutions at 4 × 64 = 256 each is 768; W_beta maps 64 to 4 heads for 256; and the RMSNorm weight adds 16. The sum is 25,616. For comparison, a plain multi-head attention layer at the same width spends 16,384 on its four projections; KDA's premium buys the gate, the output gate, and the convolutions. The audit is laid out below.
+
+The parameter audit: six square projections dominate, and the KDA-specific machinery adds little beyond a standard attention layer's budget.
+Shapes through the layer: the only object without a time axis is the state, four 16 x 16 matrices.
+
+As the figure emphasizes, the four states total 4 × 16 × 16 = 1,024 numbers, and that count is independent of whether the layer reads 32 tokens or a million. This is the property the whole of Part 02 has been building toward, and we will price it out against the KV cache properly when we assemble the full model.
+
+Check two: causality, end to end
+
+Individually, every stage is causal: the convolutions by construction (tested in the previous chapter), the recurrence by loop order, and everything else position-wise. The composition should therefore be causal too, but composition bugs are exactly the bugs that shape checks miss, so we test the module as a whole. If the layer is causal, the first 16 outputs of a 32-token run must equal the outputs of running only those 16 tokens:
+
+y_full = layer(x)
+y_half = layer(x[:16])
+print("first 16 outputs match a 16-token run:",
+      torch.allclose(y_full[:16], y_half, atol=1e-5))
+first 16 outputs match a 16-token run: True
+
+Tokens 16 through 31 had no influence on positions 0 through 15. This test also certifies something operationally important: the layer can be run incrementally at generation time — feed one token, update the four states, emit one output — and produce exactly what a full-sequence pass would.
+
+Check three: it trains
+
+A module that runs forward but strangles gradients is still broken. The recurrence threads S through every time step, so the gradient of a late output must flow backward through many decay-and-write steps to reach, say, the convolution weights; sigmoid-saturated gates or the exp in the decay could in principle kill that signal. The direct test is to take a few optimization steps on a toy regression target and watch the loss:
+
+torch.manual_seed(3)
+layer = KDA()
+target = torch.randn(32, 64)
+opt = torch.optim.Adam(layer.parameters(), lr=1e-3)
+for step in range(3):
+    opt.zero_grad()
+    loss = F.mse_loss(layer(x), target)
+    loss.backward()
+    opt.step()
+    print(f"step {step}: loss = {loss.item():.4f}")
+
+no_grad = [n for n, p in layer.named_parameters()
+           if p.grad is None or p.grad.abs().sum() == 0]
+print("parameters without gradient:", no_grad)
+step 0: loss = 1.0220
+step 1: loss = 0.9964
+step 2: loss = 0.9767
+parameters without gradient: []
+
+The loss falls monotonically over three Adam steps, and the audit at the end confirms that every one of the eleven parameter tensors — projections, convolutions, gate weights, the RMSNorm scale — received a nonzero gradient. Backpropagation-through-time across the gated recurrence works out of the box, because every operation in the loop (broadcast multiply, einsum, addition) is differentiable and PyTorch unrolls the 32 steps into one graph.4
+4 Unrolling is also why this implementation would be painful at real sequence lengths: a 4,096-token sequence builds a 4,096-step graph and holds intermediate states for all of it. The chunkwise formulation in the next chapter is as much about memory and parallelism during training as about speed.
+
+Training check: the loss falls over three optimizer steps and no parameter is cut off from the gradient.
+The miniature against the real thing
+
+It is worth stating plainly what our 25,616-parameter module corresponds to at scale. K3 runs this layer design at hidden_size 7,168 in 69 of its 93 layers — every layer except layer 0's dense block and the 24 Gated MLA layers that sit at every fourth position. Each of those 69 layers carries its own projections, kernel-size-4 convolutions, gate parameterization with gate_lower_bound: -5.0, and per-head recurrent states, exactly the parts list we just wired, at 112 times our width. The per-head geometry inside K3's KDA layers is not publicly broken out, so we do not claim our 4 × (16 × 16) state layout mirrors it beyond the ratios of the mini-K3 config. What we can claim is the parts list, since we counted it: every tensor our module holds has a counterpart in a real KDA layer, and the one place the two differ — a full-width gate projection where K3 uses a low-rank pair with A_log and dt_bias — is the difference named in the section above.
+
+Two loose ends remain, and they are the subject of the next chapter. First, nothing in KDA.forward mentions position: no rotary embedding, no learned positional table, nothing — and for KDA layers that is not an omission but the design, called NoPE. Second, our for t in range(T) loop is faithful and unusably slow for training at scale; the chunkwise reformulation turns almost all of it into matrix multiplications. With those two pieces, Part 02's account of K3's workhorse layer is complete, and we can move on to the 24 layers that still do exact attention.
+
+CHAPTER COMPLETE
+Nicely done. You reached the end of this one.

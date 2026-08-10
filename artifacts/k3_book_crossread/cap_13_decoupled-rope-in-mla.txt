@@ -1,0 +1,148 @@
+GATED MLA
+Decoupled RoPE: position in the MLA layers
+YOUR GUIDE
+Let's get started.
+
+The MLA layer we built in the previous chapter has a blind spot: it does not know where anything is. Under a causal mask, softmax attention treats the visible prefix as an unordered set — the score between a query at position 900,000 and a key at position 12 is computed the same way whether those tokens are adjacent or a document apart. K3's 69 KDA layers get away without explicit positions because their recurrence processes tokens strictly in order, the NoPE property we examined at the end of Part 02. The 24 full-attention layers have no such recurrence, so they need positional information injected — and the standard tool for that, rotary position embeddings, turns out to conflict directly with the latent compression we just built. This chapter implements RoPE, exhibits the conflict in four lines of arithmetic, and then builds the decoupled two-part heads K3 uses to resolve it.
+
+RoPE in one page
+
+Rotary position embeddings (RoPE) encode position by rotating query and key vectors before they are scored, by an angle proportional to the token's position. The vector of dimension d is treated as d/2 two-dimensional planes; plane m rotates at its own frequency, fast for low m and slow for high m, so together the planes form a multi-scale encoding of position. Readers who have built a RoPE-equipped model before can skim to the next section; we implement it compactly because the decoupled variant needs to call it.
+
+import torch
+
+def rope(x, positions, base=10000.0):
+    """Rotate pairs of channels of x by position-dependent angles.
+    x: (..., T, d) with d even; positions: (T,)"""
+    d = x.shape[-1]
+    inv_freq = base ** (-torch.arange(0, d, 2).float() / d)      # (d/2,)
+    angles = positions[:, None].float() * inv_freq[None, :]      # (T, d/2)
+    cos, sin = angles.cos(), angles.sin()
+    x1, x2 = x[..., 0::2], x[..., 1::2]
+    out = torch.empty_like(x)
+    out[..., 0::2] = x1 * cos - x2 * sin
+    out[..., 1::2] = x1 * sin + x2 * cos
+    return out
+
+The property that makes RoPE the default choice is that the absolute rotations produce relative scores. Rotation matrices compose by adding angles, so the dot product between a query rotated to position i and a key rotated to position j depends only on the offset i − j:
+
+torch.manual_seed(3)
+d = 8
+q, k = torch.randn(d), torch.randn(d)
+for (i, j) in [(5, 3), (105, 103), (1005, 1003)]:
+    qi = rope(q[None, :], torch.tensor([i]))[0]
+    kj = rope(k[None, :], torch.tensor([j]))[0]
+    print(f"i={i:5d} j={j:5d}  score {qi @ kj:.6f}")
+i=    5 j=    3  score 0.324762
+i=  105 j=  103  score 0.324762
+i= 1005 j= 1003  score 0.324760
+
+The same pair of vectors, at offsets of 2 anywhere in the sequence, scores identically to five decimal places (the sixth wobbles with floating-point accumulation). Attention equipped with RoPE can therefore learn offset-dependent behavior — attend to the previous token, to the token 128 back — without ever seeing absolute indices.1
+1 The base 10000 is the classic teaching value and is what our miniature uses. Our pinned K3 facts record a 1,048,576-token max_position_embeddings but not the rotary base or any long-context frequency scaling the released model applies, so we do not claim a value for it.
+
+RoPE rotates channel pairs at position-proportional angles; dot products then depend only on the distance between tokens.
+Why the rotation cannot enter the latent
+
+Here is the conflict. The weight-absorption trick from the previous chapter rested on one regrouping: q^T (W_uk c) = (W_uk^T q)^T c, legal because W_uk is the same fixed matrix for every cached token. RoPE breaks exactly that premise. The rotated key for a token at position j is
+
+k_j = R_j W_uk c_j
+
+where R_j is the rotation for position j — a different matrix for every cached token, wedged between the up-projection and the latent. The product q^T R_j W_uk can no longer be computed once per decode step; it changes with every j in the cache. We can watch the position-dependence directly by scoring one query against the same latent placed at two positions:
+
+kv_lora_rank, head_dim = 16, 8
+W_uk = torch.randn(head_dim, kv_lora_rank)
+c = torch.randn(kv_lora_rank)
+q2 = torch.randn(head_dim)
+for j in [3, 103]:
+    k_up = W_uk @ c
+    k_rot = rope(k_up[None, :], torch.tensor([j]))[0]
+    print(f"pos {j}: score with rotated key {q2 @ k_rot:.4f}")
+pos 3: score with rotated key -10.1205
+pos 103: score with rotated key -6.3040
+
+Same latent, same query, different score — which is what a positional encoding is for, and precisely what a position-independent fold cannot absorb. That leaves two unattractive implementations. Store keys after rotation, and the cache must hold full per-head keys again, surrendering the 48× compression. Store latents and rotate at use, and every decode step re-runs the up-projection and rotation over the entire context, surrendering the absorbed decode path. The compression and the position encoding are fighting over the same spot in the computation.2
+2 The value path has no such conflict — values are never rotated — which is why W_uv folds into the output projection untouched even in the full decoupled layer. The fight is only over keys and queries.
+
+The rotation R_j differs per cached token, so the up-projection can no longer be folded into the query path.
+The decoupled split
+
+The resolution K3 inherits from the DeepSeek lineage is to stop asking one set of channels to do both jobs. Each head's query and key are split into two parts with different rules:
+
+a no-position part ("nope"), qk_nope_head_dim = 128 per head in K3 and 16 in our miniature, which carries content matching. Keys for this part come from the latent exactly as in the previous chapter, and since no rotation ever touches them, the absorption fold remains legal.
+a rotary part, qk_rope_head_dim = 64 in K3 and 8 in our miniature, which carries position. This part is computed outside the compression: the query's rotary part comes from the query path per head, but the key's rotary part is a single small projection straight from the hidden state — one shared 64-dim rotary key per token, used by all 96 heads — rotated once and cached already-rotated, alongside the latent.3
+3 Sharing one rotary key across heads is multi-query attention applied to the position channels only. Heads still express different positional preferences because each head has its own rotary query part; what they share is the positional signal being queried.
+
+The attention score for a head is then the sum of two dot products — nope query against nope key, plus rotary query against the shared rotary key — which is algebraically just one dot product over a concatenated head of 128 + 64 = 192 dimensions (24 in the miniature), and is scaled accordingly. The cache gains one small line: per token, per layer, K3 stores the 512-dim latent plus the 64-dim rotated key, 576 elements instead of 512 — still about 43× smaller than the 24,576 elements of a conventional entry.
+
+The decoupled layer: content matching through the latent, position through a small uncompressed rotary branch with one shared key.
+The module, wired
+
+The implementation extends the previous chapter's class with the split query, the shared rotary key branch, and the two-term score. Everything else — latent, up-projections, causal mask, output projection — is unchanged.
+
+import torch.nn as nn
+import math
+
+class DecoupledMLA(nn.Module):
+    """MLA with the decoupled-RoPE split: nope dims from the latent,
+    rope dims outside the compression, one shared rotary key branch."""
+    def __init__(self, d_model, n_heads, kv_lora_rank, q_lora_rank,
+                 qk_nope_head_dim, qk_rope_head_dim, v_head_dim):
+        super().__init__()
+        self.n_heads = n_heads
+        self.d_nope, self.d_rope, self.d_v = qk_nope_head_dim, qk_rope_head_dim, v_head_dim
+        # query path (low-rank)
+        self.W_dq = nn.Linear(d_model, q_lora_rank, bias=False)
+        self.W_uq = nn.Linear(q_lora_rank,
+                              n_heads * (qk_nope_head_dim + qk_rope_head_dim), bias=False)
+        # KV path: compressed latent for the nope keys and the values
+        self.W_dkv = nn.Linear(d_model, kv_lora_rank, bias=False)
+        self.W_uk  = nn.Linear(kv_lora_rank, n_heads * qk_nope_head_dim, bias=False)
+        self.W_uv  = nn.Linear(kv_lora_rank, n_heads * v_head_dim, bias=False)
+        # rotary key branch: from x directly, ONE head shared by all heads
+        self.W_kr = nn.Linear(d_model, qk_rope_head_dim, bias=False)
+        self.W_o  = nn.Linear(n_heads * v_head_dim, d_model, bias=False)
+
+    def forward(self, x):                                # x: (T, d_model)
+        T = x.shape[0]
+        pos = torch.arange(T)
+        # cache line 1: the latent
+        c_kv = self.W_dkv(x)                             # (T, kv_lora_rank)
+        # cache line 2: the shared rotary key, rotated once, stored rotated
+        k_rope = rope(self.W_kr(x), pos)                 # (T, d_rope)
+
+        q = self.W_uq(self.W_dq(x)).view(T, self.n_heads, self.d_nope + self.d_rope)
+        q_nope, q_rope = q.split([self.d_nope, self.d_rope], dim=-1)
+        q_rope = rope(q_rope.transpose(0, 1), pos).transpose(0, 1)
+
+        k_nope = self.W_uk(c_kv).view(T, self.n_heads, self.d_nope)
+        v = self.W_uv(c_kv).view(T, self.n_heads, self.d_v)
+
+        scale = 1.0 / math.sqrt(self.d_nope + self.d_rope)
+        scores = (torch.einsum('thd,shd->hts', q_nope, k_nope)
+                  + torch.einsum('thd,sd->hts', q_rope, k_rope)) * scale
+        mask = torch.triu(torch.ones(T, T, dtype=torch.bool), diagonal=1)
+        att = torch.softmax(scores.masked_fill(mask, float('-inf')), dim=-1)
+        out = torch.einsum('hts,shd->thd', att, v).reshape(T, -1)
+        return self.W_o(out)
+
+Note the two einsum score terms: the first contracts per-head nope queries against per-head nope keys, while the second has no head index h on the key side at all — k_rope is (T, d_rope), one vector per token, broadcast across heads. That missing index is the shared rotary key, visible in the code as plainly as in the diagram. The rotary key is rotated at the moment it is computed, so what a decode loop caches is the post-rotation vector; queries are rotated fresh at their own position each step, and the relative-offset property does the rest.
+
+A shape check on the mini-K3 configuration, with the per-head split qk_nope_head_dim = 16, qk_rope_head_dim = 8, v_head_dim = 16 mirroring K3's 128/64/128:
+
+torch.manual_seed(3)
+layer = DecoupledMLA(d_model=64, n_heads=4, kv_lora_rank=16, q_lora_rank=32,
+                     qk_nope_head_dim=16, qk_rope_head_dim=8, v_head_dim=16)
+x = torch.randn(10, 64)
+print(layer(x).shape)                                  # torch.Size([10, 64])
+print(sum(p.numel() for p in layer.parameters()))      # 12800
+
+The layer keeps the sequence-in, sequence-out interface, and the whole decoupled apparatus costs our miniature 12,800 parameters. Its cache entry is 16 + 8 = 24 elements per token against the 128 of a conventional mini-K3 attention layer; K3's is 512 + 64 = 576 against 24,576. As shown in the figure above, every number that grows with context length now lives in one of two small cache lines, and the only channels that ever meet a rotation matrix are channels that were never compressed.
+
+What K3 actually caches per token in each of its 24 full-attention layers: a 512-dim latent and a 64-dim rotated key.
+
+Scaled up, each K3 attention head now scores over 192 query/key dimensions — 128 reconstructed from the latent, 64 carrying position — and outputs a 128-dim value, with 96 such heads per layer feeding a 7,168-wide output projection. The module above is that layer at one-eighth width and a quarter of the heads.
+
+What we have at this point is a faithful, position-aware MLA: it compresses, it caches two small lines, and it can in principle be absorbed for fast decode. It is not yet what K3's config calls the layer, because K3 wraps one more mechanism around the attention output — a learned elementwise gate, the "Gated" in Gated MLA. That gate is a small change to this module and a larger change to how the layer behaves in a hybrid stack, and it is the subject of the next chapter.
+
+CHAPTER COMPLETE
+Nicely done. You reached the end of this one.

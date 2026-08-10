@@ -1,0 +1,212 @@
+KIMI DELTA ATTENTION
+Position without RoPE, and chunkwise training
+YOUR GUIDE
+Let's get started.
+
+The KDA module we assembled in the previous chapter left two loose ends, and they are not small ones. First, nothing in its forward pass encodes position — no rotary embedding, no positional table — yet the layer is supposed to process language, where order is meaning. Second, its recurrence is a Python loop over T time steps, which is faithful to the mathematics and hopeless for training: a GPU fed one rank-1 update at a time spends its life waiting. This chapter resolves both. The first resolution is an absence that turns out to be a design, called NoPE (no positional encoding). The second is the chunkwise reformulation, which reorganizes the loop so that almost all of the work becomes matrix multiplication, and which we will verify against our loop to the last digit.
+
+Part one: where position comes from when nothing encodes it
+
+Standard attention needs positional encoding for a specific reason: it is permutation-equivariant. Shuffle the keys and values of the context, and each query's output is untouched, because a softmax-weighted sum has no idea which key came first. Every transformer since 2017 has patched this by injecting position into the tokens or, as with RoPE, into the queries and keys themselves.
+
+The delta recurrence has no such symmetry to patch. The state is built left to right, one write after another, and each write lands on a state shaped by all previous writes. Later writes partially overwrite earlier ones when keys overlap; with the gate, earlier writes have also decayed more by the time any query reads the state. Order is baked into the arithmetic. We can show this with the single-head loop from the start of Part 02 — no gate, even — by feeding the same eight tokens in two different orders and comparing the output at the final token, whose own position is unchanged:
+
+import torch
+import torch.nn.functional as F
+
+torch.manual_seed(3)
+d_k, d_v = 4, 4
+
+def delta_loop(q, k, v, beta):
+    T = q.shape[0]
+    S = q.new_zeros(d_v, d_k)
+    outs = []
+    for t in range(T):
+        error = v[t] - S @ k[t]
+        S = S + beta[t] * torch.outer(error, k[t])
+        outs.append(S @ q[t])
+    return torch.stack(outs), S
+
+T = 8
+q = F.normalize(torch.randn(T, d_k), dim=-1)
+k = F.normalize(torch.randn(T, d_k), dim=-1)
+v = torch.randn(T, d_v)
+beta = torch.sigmoid(torch.randn(T))
+
+o1, _ = delta_loop(q, k, v, beta)
+
+perm = torch.tensor([3, 1, 0, 2, 5, 4, 6, 7])   # shuffle the context, keep token 7 last
+o2, _ = delta_loop(q[perm], k[perm], v[perm], beta[perm])
+
+print("token 7 output, context in order:  ", o1[-1])
+print("token 7 output, context shuffled:  ", o2[-1])
+print("max abs difference:", (o1[-1] - o2[-1]).abs().max().item())
+token 7 output, context in order:   tensor([ 0.0208,  0.4435, -0.5463,  0.4514])
+token 7 output, context shuffled:   tensor([ 0.1680,  0.2409, -0.4911,  0.2106])
+max abs difference: 0.24083931744098663
+
+Token 7 sits in the last position in both runs and receives the same q, k, v, beta. Only the order of the preceding seven tokens changed, and its output moved by up to 0.24 — the layer distinguishes orderings that softmax attention, without positional encoding, provably cannot. A plain attention layer given the same shuffled inputs would return the identical last-token output both times.
+
+The gate sharpens this from "order matters" to something closer to a positional code. Trace one association through the gated update: a value written at time i under key channel j is multiplied by alpha[j] at every subsequent step, so by the time a query reads the state at time t the write has been attenuated by the product of t - i decay factors. The strength at which the memory returns a fact is a monotone function of how long ago it was written, with a per-channel rate the model learns. This is a relative position signal — it depends on the gap t - i, not on absolute indices — delivered by the recurrence for free. The released facts state this directly: K3's KDA layers use no explicit positional encoding, with position carried implicitly by the gating and decay.1
+1 There is also evidence that even ungated recurrences and plain causal transformers can infer some positional information from the causal structure alone (the NoPE line of work, e.g. Kazemnejad et al., 2023). KDA does not rely on that subtlety: the learned decay gives it an explicit, tunable recency scale per channel.
+
+Attention must have position injected; the gated recurrence produces order sensitivity and a learned recency scale by construction.
+
+Note what this means for the model as a whole. Of K3's 93 layers, the 69 KDA layers carry no positional machinery at all. The 24 Gated MLA layers — full attention with latent-compressed KV — do need explicit position, and they get RoPE in a decoupled form we will build in the next part of the book. One practical consequence is worth flagging now: rotary embeddings are tied to a trained context length in ways that complicate extrapolation, and a stack whose great majority of layers has no such tie behaves differently at extreme lengths. K3 sets max_position_embeddings to 1,048,576, and the layers doing most of the work at that length are position-free by construction.
+
+Part two: from a loop over tokens to a loop over chunks
+
+The second loose end is speed. Our recurrence executes T sequential steps, each a handful of small operations on a (d_v, d_k) state. Sequential means no parallelism across time during training, when the whole sequence is already sitting in memory; small means each step cannot even saturate a GPU on its own. Training 69 KDA layers on million-token sequences with this loop is out of the question, and this is not a constant-factor complaint: the loop's critical path grows linearly in T no matter how many tensor cores are idle.
+
+The resolution is chunkwise computation: split the sequence into chunks of size C, do all the work inside a chunk with dense matrix multiplications (which parallelize perfectly), and let the recurrence run only at chunk boundaries — T/C sequential steps instead of T. For this construction we drop the forget gate and work with the pure delta rule. The gated version exists and is what production kernels implement, however threading the per-channel decay products through every term roughly doubles the index bookkeeping without changing the idea, so we build the clean case and say so plainly.2
+2 The chunkwise delta rule is due to the DeltaNet parallelization work of Yang et al. (2024), which writes the update in a "WY"-style representation borrowed from blocked Householder QR. The gated extension appears in Gated DeltaNet and is the form a full-scale KDA implementation would use.
+
+The key object is the pseudo-value: the vector the delta rule actually adds to the state at step t,
+
+u_t = beta_t * (v_t - S_{t-1} k_t)        so that    S_t = S_{t-1} + u_t k_t^T
+
+If we somehow knew all the u_t in a chunk up front, the recurrence would collapse: the state after the chunk is just S += U^T K (summing all the rank-1 writes), and every output in the chunk is a matrix product away. The obstacle is that u_t depends on 
+𝑆
+𝑡
+−
+1
+S
+t−1
+	​
+
+, which depends on 
+𝑢
+𝑡
+−
+1
+u
+t−1
+	​
+
+, and so on. The escape is to expand that dependency within the chunk. Writing S_0 for the state entering the chunk and substituting 
+𝑆
+𝑡
+−
+1
+=
+𝑆
+0
++
+𝑠
+𝑢
+𝑚
+𝑖
+<
+𝑡
+𝑢
+𝑖
+𝑘
+𝑖
+𝑇
+S
+t−1
+	​
+
+=S
+0
+	​
+
++sum
+i<t
+	​
+
+u
+i
+	​
+
+k
+i
+T
+	​
+
+ into the definition of u_t:
+
+u_t = beta_t v_t - beta_t S_0 k_t - beta_t * sum_{i<t} (k_i^T k_t) u_i
+
+Every u_t equals a known quantity minus a weighted sum of earlier u_i, with weights beta_t (k_i^T k_t) — key overlaps we can compute for the whole chunk in one K K^T. Stacking the chunk's rows into matrices Q, K (C, d_k), V (C, d_v) and the unknown U (C, d_v), the relation becomes one linear system with a strictly lower-triangular coefficient matrix:
+
+(I + tril_strict(diag(beta) K K^T)) U = diag(beta) (V - K S_0^T)
+
+A triangular system of size C is solved exactly by forward substitution — torch.linalg.solve_triangular — and because the triangle is strict, the solve is exact arithmetic, not an iterative approximation. Outputs follow from the same expansion, using the inclusive triangle since position t reads the state after its own write, exactly as our loop does:
+
+O = Q S_0^T + tril(Q K^T) U          # (C, d_v)
+S_next = S_0 + U^T K                 # boundary handoff to the next chunk
+
+Here is the implementation, with the loop version left in as the reference:
+
+def delta_chunked(q, k, v, beta, C):
+    """Chunkwise delta rule (no forget gate). q, k: (T, d_k), L2-normalized."""
+    T = q.shape[0]
+    assert T % C == 0
+    S = q.new_zeros(d_v, d_k)
+    outs = []
+    for start in range(0, T, C):
+        Qc = q[start:start+C]                    # (C, d_k)
+        Kc = k[start:start+C]
+        Vc = v[start:start+C]
+        Bc = beta[start:start+C]                 # (C,)
+
+        A = torch.tril(Bc[:, None] * (Kc @ Kc.T), diagonal=-1)   # (C, C)
+        rhs = Bc[:, None] * (Vc - Kc @ S.T)                      # (C, d_v)
+        U = torch.linalg.solve_triangular(torch.eye(C) + A, rhs,
+                                          upper=False, unitriangular=True)
+
+        O = Qc @ S.T + torch.tril(Qc @ Kc.T) @ U                 # (C, d_v)
+        outs.append(O)
+
+        S = S + U.T @ Kc                                         # boundary update
+    return torch.cat(outs), S
+
+Everything inside the chunk loop is a matrix multiplication or a triangular solve on (C, C) and (C, d) tensors — dense, batched, tensor-core-friendly work. The only sequential dependency left is the S handoff between chunks. Whether all this reorganization computes the same function is not a matter of opinion; we check it against the loop:
+
+torch.manual_seed(3)
+T = 64
+q = F.normalize(torch.randn(T, d_k), dim=-1)
+k = F.normalize(torch.randn(T, d_k), dim=-1)
+v = torch.randn(T, d_v)
+beta = torch.sigmoid(torch.randn(T))
+
+o_loop, S_loop = delta_loop(q, k, v, beta)
+o_chunk, S_chunk = delta_chunked(q, k, v, beta, C=16)
+print("outputs match: ", torch.allclose(o_loop, o_chunk, atol=1e-5))
+print("final states match:", torch.allclose(S_loop, S_chunk, atol=1e-5))
+print("max output difference:", (o_loop - o_chunk).abs().max().item())
+
+for C in (8, 16, 32):
+    o_c, _ = delta_chunked(q, k, v, beta, C=C)
+    print(f"C={C:>2}: sequential chunk steps = {T//C:>2}, "
+          f"allclose = {torch.allclose(o_loop, o_c, atol=1e-5)}")
+outputs match:  True
+final states match: True
+max output difference: 4.76837158203125e-07
+C= 8: sequential chunk steps =  8, allclose = True
+C=16: sequential chunk steps =  4, allclose = True
+C=32: sequential chunk steps =  2, allclose = True
+
+All 64 outputs and the final state agree with the token-by-token loop to within 5 × 10⁻⁷ — float32 noise — and the agreement holds for every chunk size. The chunked form is the same mathematics with the dependency structure rearranged, which is exactly what we want from a training-time reformulation: nothing about the model changed, only the order of arithmetic.
+
+Chunking cuts the sequential critical path from 64 steps to 4 while leaving the computed function bit-for-bit equivalent up to float noise.
+
+The structure inside one chunk rewards a second look, because each matrix has a meaning. K K^T tabulates every key–key overlap in the chunk — the collisions the delta rule must resolve. Its strict lower triangle, scaled by beta, says how much each earlier write contaminates each later one. The triangular solve untangles those C writes jointly, producing pseudo-values that account for all within-chunk interference at once. And tril(Q K^T) is the causal read table: which earlier writes each query is allowed to see. It is the closest thing to an attention matrix in this whole part of the book, and it is only C × C, never T × T.
+
+The chunk's linear algebra: key overlaps feed a triangular solve for the pseudo-values, and a small causal table produces the outputs.
+What chunking buys at K3's scale
+
+Now the napkin arithmetic that makes this the enabling trick for the whole architecture. Take K3's maximum context of 1,048,576 tokens and a chunk size of 64 — a typical choice in practice, though K3's own kernel parameters are not published. The sequential critical path per KDA layer drops from 1,048,576 steps to 1,048,576 / 64 = 16,384 chunk steps, a 64-fold cut, and each step now carries dense (64, 64) and (64, d) matrix work that actually occupies the hardware. Multiply the saving across the 69 KDA layers of the released model and across every training batch, and the difference is not between slow and fast training but between impossible and routine. The chunk size trades off two costs — larger C means fewer sequential steps but a C × C solve and read table that grow quadratically — and the sweet spot on current accelerators sits in the tens-to-hundreds range.3
+3 Chunked kernels also tile these matrices to fit tensor-core shapes and fuse the boundary update, the same class of engineering that FlashAttention applies to softmax attention. Our four-line chunk loop is the mathematics of such a kernel with none of its scheduling.
+
+Decoding is the mirror image, and it is where the recurrence stops being a liability and becomes the product. At generation time tokens arrive one at a time, so there is nothing to chunk; every layer simply performs one gated delta step per token, exactly our loop from the previous chapter. But look at what it carries: a fixed-size state per head, unchanged whether the context holds one thousand tokens or one million — while a full-attention layer's KV cache at position one million holds a million entries to be stored, moved, and scanned. K3 leaves only 24 of its 93 layers paying that price (and those with compressed latents, as we will see in the next part). Moonshot reports up to 6.3× faster decoding at million-token context for this design; the number is theirs, but after this part of the book the shape of the claim should feel earned rather than mysterious — 69 layers doing constant work per token is precisely what the delta rule, the gate, and the chunked training path were built to deliver.
+
+Decoding at one million tokens: a full-attention layer drags its whole cache while a KDA layer performs one fixed-size update, and 69 of K3's 93 layers are KDA.
+
+As the figure shows, the claimed speedup is not one optimization but the sum of 69 layers whose per-token cost stopped depending on context length.
+
+That closes Part 02. We derived the delta rule and watched it overwrite; gave the memory per-channel forgetting with a floored gate; conditioned its inputs with a short convolution, a Swish, and an L2 norm; assembled the full layer; and now placed its position story and its training story on solid ground. What we have not answered is why K3 keeps any full attention at all — why 24 Gated MLA layers interleave with the 69 we just built, in a 3-to-1 pattern, and what exact retrieval buys that a fixed-size state cannot. That question opens the next part of the book.
+
+CHAPTER COMPLETE
+Nicely done. You reached the end of this one.

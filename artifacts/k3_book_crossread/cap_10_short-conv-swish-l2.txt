@@ -1,0 +1,208 @@
+KIMI DELTA ATTENTION
+Short convolutions, Swish and L2 normalization
+YOUR GUIDE
+Let's get started.
+
+A delta-rule memory is only as good as its keys. The state we built over the last two chapters stores values under keys, retrieves by key, and forgets per key channel; if two tokens that mean different things produce similar keys, they will fight over the same slot no matter how careful the write rule is. K3 therefore does not feed the recurrence raw linear projections. According to the released description, queries and keys pass through three small operations first: a short convolution with kernel size 4, a Swish activation, and L2 normalization. The convolution is not restricted to queries and keys: when we enumerated the tensors of the released checkpoint, every KDA layer turned out to carry three of them, q_conv1d, k_conv1d and v_conv1d, so values are convolved as well. This chapter builds each operation, shows what it buys, and ends with the pre-processing pipeline the full KDA layer will use.
+
+None of the three is exotic on its own. The interest is in why this memory needs them: the convolution puts local context into keys that would otherwise describe single tokens in isolation, the Swish keeps activations smooth and bounded below, and the L2 norm is what makes beta = 1 an exact overwrite and the recurrence stable — a claim we left in a sidenote in the delta-rule chapter and prove by experiment here.
+
+Short convolution: keys that see their neighbors
+
+Consider what a key is, mechanically. In the layer from the delta-rule chapter, k_t = W_k x_t — a linear function of one token's vector. Whatever the surrounding words are doing, the token "bank" produces the same key, so "river bank" and "central bank" write to the same address in the state, and interference between them is guaranteed at the memory's front door. Softmax attention has the same per-token projections, however it compares every query against every key at full precision each step and can afford to disambiguate later. A fixed-size recurrent memory cannot; whatever ambiguity enters the state stays there.
+
+The cheap fix is to let each channel of k (and of q, and as the checkpoint shows, of v) mix in the last few tokens before projecting the result into the recurrence. That is a depthwise causal 1-D convolution: depthwise meaning each channel is filtered independently with its own length-4 kernel and no cross-channel mixing, causal meaning position t may look at positions t-3 through t and never ahead. With kernel size 4, a key becomes a function of a 4-token window — enough to tell "river bank" from "central bank" — at almost no parameter cost.
+
+Here is the module. nn.Conv1d with groups=dim gives the depthwise part; causality comes from padding both ends by 3 and trimming the right overhang, so each output aligns with the rightmost element of its input window:
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+torch.manual_seed(3)
+
+class ShortConv(nn.Module):
+    """Depthwise causal 1-D convolution, kernel size 4."""
+    def __init__(self, dim, kernel_size=4):
+        super().__init__()
+        self.conv = nn.Conv1d(dim, dim, kernel_size,
+                              groups=dim,                # depthwise: one filter per channel
+                              padding=kernel_size - 1,   # pad 3 on both sides
+                              bias=False)
+
+    def forward(self, x):                    # x: (T, dim)
+        y = self.conv(x.T.unsqueeze(0))      # (1, dim, T + 3)
+        y = y[..., :x.shape[0]]              # trim the right overhang
+        return y.squeeze(0).T                # (T, dim)
+
+conv = ShortConv(dim=16)
+x = torch.randn(12, 16)
+y = conv(x)
+print(y.shape)
+print(sum(p.numel() for p in conv.parameters()))
+torch.Size([12, 16])
+64
+
+Sixteen channels times a kernel of 4 is 64 parameters — compare the 256 parameters of even our toy 16×16 linear projection. At K3 scale the same arithmetic holds: a kernel-size-4 depthwise convolution over the 7,168-dimensional hidden stream costs 4 × 7,168 = 28,672 parameters, while one square projection at that width costs 7,168² ≈ 51.4 million. The convolution is a rounding error that changes what the keys can express.
+
+The short convolution: each output position mixes its own channel over a 4-token causal window.
+
+The claim that matters for a language model is causality, and unlike most properties we can test it exactly rather than argue for it. If the convolution is causal, changing tokens 8 through 11 must leave outputs 0 through 7 bit-for-bit unchanged; and bumping a single token must affect only that token's output and the three after it:
+
+x2 = x.clone()
+x2[8:] = torch.randn(4, 16)                 # change tokens 8..11 only
+y2 = conv(x2)
+print(torch.equal(y[:8], y2[:8]))           # tokens 0..7
+print(torch.equal(y[8:], y2[8:]))           # tokens 8..11
+
+x3 = x.clone()
+x3[4] += 10.0                               # bump token 4
+y3 = conv(x3)
+changed = (y3 - y).abs().sum(dim=-1) > 1e-6
+print(changed.nonzero().flatten().tolist())
+True
+False
+[4, 5, 6, 7]
+
+Outputs 0 through 7 are exactly equal, outputs 8 through 11 differ, and perturbing token 4 touches only rows 4, 5, 6, 7 — the 4-token receptive field, aimed strictly backward. The module is causal by construction, not by masking, which is worth appreciating: there is no mask tensor anywhere, only left-aligned padding.1
+1 The same trimmed-padding trick appears in WaveNet-style convolutions and in the short convolutions of Mamba and other modern recurrent layers. K3's use is the same shape: a small local mixer in front of a global (recurrent or attention) operation.
+
+Swish: a smooth, bounded-below nonlinearity
+
+After the convolution K3 applies Swish, also published under the name SiLU: swish(z) = z · sigmoid(z). PyTorch ships it as F.silu. A few values show its character:
+
+z = torch.tensor([-5.0, -1.0, 0.0, 1.0, 5.0])
+print(F.silu(z))
+zz = torch.linspace(-10.0, 0.0, 100001)
+print(f"{F.silu(zz).min():.4f}")
+tensor([-0.0335, -0.2689,  0.0000,  0.7311,  4.9665])
+-0.2785
+
+For large positive inputs Swish is approximately the identity (5 → 4.9665), for large negative inputs it goes to zero (-5 → -0.0335), and in between it dips below zero, bottoming out near -0.2785 on a dense grid. The figure below sketches the shape and the three properties we care about.
+
+The Swish activation: smooth, bounded below, and close to the identity where inputs are large and positive.]] Two properties earn it the slot here. First, it is smooth everywhere, unlike ReLU's kink at zero; the recurrence downstream multiplies and accumulates these values for thousands of steps, and smooth activations give the gate and write-strength projections cleaner gradients to learn from. Second, its output is bounded below by about -0.28, so no channel of q or k can swing to large negative values after the convolution — one small piece of the boundedness story the next stage completes.[[sn: Swish was proposed by Ramachandran, Zoph and Le (2017) via architecture search; the identical function appeared earlier as SiLU in Elfwing et al. (2017). The two names persist in parallel, and PyTorch chose silu. The gated MLP variant SwiGLU, and K3's own SiTU-GLU activation, are relatives we meet in the mixture-of-experts part of the book.
+L2 normalization: exact overwrites and a stable recurrence
+
+The final stage projects each query and key onto the unit sphere: k ← k / ‖k‖. We have quietly used F.normalize on keys since the delta-rule chapter, with a sidenote promising the reason. The reason is arithmetic. Recall the update
+
+S_t = S_{t-1} + beta_t * (v_t - S_{t-1} k_t) k_t^T
+
+and ask what the memory answers for k immediately after writing v with beta = 1. The answer is 
+𝑆
+𝑡
+𝑘
+=
+𝑆
+𝑡
+−
+1
+𝑘
++
+(
+𝑣
+−
+𝑆
+𝑡
+−
+1
+𝑘
+)
+∗
+(
+𝑘
+𝑇
+𝑘
+)
+S
+t
+	​
+
+k=S
+t−1
+	​
+
+k+(v−S
+t−1
+	​
+
+k)∗(k
+T
+k). If ‖k‖ = 1, the factor k^T k is 1, everything cancels, and S_t k = v — a perfect overwrite. If ‖k‖ is anything else, the correction is scaled by ‖k‖² and the write overshoots or undershoots. With a key of norm 2, the factor is 4:
+
+def delta_step(S, k, v, beta):
+    return S + beta * torch.outer(v - S @ k, k)
+
+S = torch.zeros(4, 4)
+k_raw = torch.tensor([2., 0., 0., 0.])      # norm 2, not 1
+v = torch.tensor([1., 2., 3., 4.])
+
+S1 = delta_step(S, k_raw, v, beta=1.0)
+print(S1 @ k_raw)
+
+k_hat = F.normalize(k_raw, dim=-1)
+S2 = delta_step(S, k_hat, v, beta=1.0)
+print(S2 @ k_hat)
+tensor([ 4.,  8., 12., 16.])
+tensor([1., 2., 3., 4.])
+
+The unnormalized key stores an answer four times too large; the normalized key stores exactly v. Worse than a one-off error, the overshoot compounds. Repeating the same write, which for a correct delta memory should be a no-op after the first time, instead feeds each step's error back with a factor whose magnitude exceeds 1:
+
+S = torch.zeros(4, 4)
+for i in range(8):
+    S = delta_step(S, k_raw, v, beta=1.0)
+    if i in (0, 3, 7):
+        print(f"write {i+1}: ||S|| = {S.norm():.1f}")
+write 1: ||S|| = 11.0
+write 4: ||S|| = 219.1
+write 8: ||S|| = 17965.3
+
+Eight repetitions of one write and the state norm is 17,965 — the recurrence has diverged. The clean way to see why is through the state transition. Between writes, the update multiplies the state by the matrix (I - beta k k^T), whose eigenvalues decide whether repeated application shrinks or amplifies:
+
+for name, kk in [("raw ", k_raw), ("unit", k_hat)]:
+    M = torch.eye(4) - 1.0 * torch.outer(kk, kk)
+    print(name, torch.linalg.eigvalsh(M))
+raw  tensor([-3.,  1.,  1.,  1.])
+unit tensor([0., 1., 1., 1.])
+
+Along the key direction the eigenvalue is 1 - beta ‖k‖². For the unit key at beta = 1 it is exactly 0: the old content in that direction is erased in one step, the definition of an overwrite. For the norm-2 key it is -3: each write flips the sign of the residual error and triples it, which is the divergence we just watched. Stability requires |1 - beta ‖k‖²| ≤ 1; with L2-normalized keys and beta = sigmoid(·) ∈ (0, 1), the eigenvalue lies in (0, 1) for every token, and the recurrence contracts no matter what the projections emit.2
+2 The exact boundary is beta ‖k‖² < 2. A model could in principle learn projections that respect this without normalization, but it would be one gradient step away from violating it at some token. Normalizing keys makes stability a property of the architecture rather than of the current weights.
+ This is why the normalization is not cosmetic: it converts a recurrence that is stable only for well-behaved weights into one that is stable for all weights.
+
+S||", with points annotated in green at "11.0", "219.1", "17965.3", curving up steeply, and a flat dashed line at the bottom labeled in blue "unit key: flat after write 1 (no-op)". Purple margin note with the code line "k = F.normalize(k, dim=-1)". Numbered circles (1) on panel A, (2) on panel B. Dashed takeaway box: "L2 norm makes beta=1 an exact overwrite and keeps every eigenvalue inside [0, 1]". || Without normalization the write overshoots by the squared key norm and repeated writes diverge; on the unit sphere the recurrence contracts.
+
+There is one more benefit worth naming. On the unit sphere, the dot product k_i^T k_j is a cosine similarity in [-1, 1], so "how much do these two tokens collide in memory" has a fixed scale that the write strength beta and the gate alpha can calibrate against. Queries get the same treatment so that read magnitudes are likewise controlled by the state's contents, not by the query's length.
+
+The assembled pipeline
+
+Stacking the three stages in order — convolve, activate, normalize — gives the pre-processing that K3 applies to queries and keys before the recurrence:
+
+class QKPreprocess(nn.Module):
+    """conv -> Swish -> L2 norm, the KDA pre-processing for one stream."""
+    def __init__(self, dim):
+        super().__init__()
+        self.conv = ShortConv(dim)
+
+    def forward(self, x):
+        return F.normalize(F.silu(self.conv(x)), dim=-1)
+
+torch.manual_seed(3)
+pre = QKPreprocess(dim=16)
+x = torch.randn(12, 16)
+with torch.no_grad():
+    k = pre(x)
+print(k.shape)
+print(k.norm(dim=-1))
+torch.Size([12, 16])
+tensor([1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000,
+        1.0000, 1.0000, 1.0000])
+
+Every position emits a unit-norm key that has seen its three predecessors, passed through a smooth nonlinearity, and landed on the sphere. The ordering matters: normalizing before the convolution would destroy the unit-norm guarantee we just established, and activating after normalization would knock keys off the sphere again. Conv, then Swish, then L2, is the only ordering in which each stage's guarantee survives to the recurrence.
+
+A note on values. The public description specifies this pipeline for queries and keys and stops there, but the checkpoint supplies the missing piece: v_conv1d sits alongside q_conv1d and k_conv1d in every one of the 69 KDA layers, so K3 convolves all three streams. Our miniature convolves v on the same footing as q and k, and that is now a measured property of the model rather than a convention we borrowed. The normalization is the part still open. It has no parameters, so it leaves no tensor behind for us to count, and our reading remains that the L2 norm applies to queries and keys only: values must be free to carry magnitude, since the state stores them literally and a value rescaled to the unit sphere would lose the quantity the memory is meant to return.
+
+The full pre-processing: queries and keys are convolved, activated and normalized; values follow the same path except the final norm.
+
+With this pipeline the ingredient list for Kimi Delta Attention is complete: the delta rule from two chapters ago supplies the write, the per-channel gate from the previous chapter supplies forgetting, and the three operations built here condition what enters the state. In the next chapter we assemble all of it — four heads, the projections, the convolutions, beta, alpha, the recurrence, and an output path — into a single PyTorch module with the same interface as standard attention, and check that it runs, trains, and stays causal end to end.
+
+CHAPTER COMPLETE
+Nicely done. You reached the end of this one.

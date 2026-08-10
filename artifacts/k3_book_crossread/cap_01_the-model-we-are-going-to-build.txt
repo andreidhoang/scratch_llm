@@ -1,0 +1,69 @@
+START HERE
+The model we are going to buildfree preview
+YOUR GUIDE
+Let's get started.
+00 · START HERE
+The model we are going to build
+
+On July 27, 2026, Moonshot AI released the weights of Kimi K3: a mixture-of-experts language model with 2.8 trillion total parameters, 104 billion of them active per token, a context window of 1,048,576 tokens, native vision, and reasoning that is on by default.1
+1 Some independent analyses put the total at 2.78T rather than 2.8T; the difference comes down to what you count (vision encoder, embeddings, routers). We reproduce the accounting ourselves in the chapter "Counting to 2.8 trillion" and see where the ambiguity lives.
+ The checkpoint arrived as 96 safetensors shards, about 1.56 TB on disk, in the moonshotai/Kimi-K3 repository on Hugging Face. This book is about what is inside those shards.
+
+Our plan is the one Sebastian Raschka used for GPT-2 in Build a Large Language Model (From Scratch): take the released architecture apart into its components, rebuild each component in plain PyTorch at dimensions small enough to print, and then assemble the components into a complete working model that we can train on a laptop. The result is a faithful miniature, which we call mini-K3: every architectural idea in Kimi K3 is present and wired the way the real model wires it, at roughly one-hundredth of the width and one-tenth of the depth.
+
+A scope note before we begin. We do not train a 2.8-trillion-parameter model, we do not reproduce Moonshot's training run, and we do not need a GPU cluster; every code block in this book runs on an ordinary machine. What we build is the architecture, because the architecture is the part that is fully public, fully inspectable, and fully understandable at small scale. Where the release documents a number, we use that number. Where it does not, we say so and pick a clearly labeled teaching value.
+
+The headline numbers of the July 27, 2026 release, all of which we will earn one chapter at a time.
+What Moonshot released
+
+The release consists of the weights, the configuration file, the tokenizer, and serving support. The license is a custom Kimi K3 License, a modified-MIT-style community license; we will not paraphrase its clauses here, because paraphrased license terms are a reliable source of error, and the exact text lives in the repository.2
+2 A hosted API is also available at platform.kimi.ai with OpenAI- and Anthropic-compatible endpoints, priced at launch at $0.30 per million cache-hit input tokens, $3.00 cache-miss, and $15.00 output. For self-hosting, Moonshot recommends vLLM, SGLang, or TokenSpeed, and publishes an official Docker image, vllm/vllm-openai:kimi-k3.
+ The 1.56 TB figure is worth pausing on. A 2.8T-parameter model stored in BF16 would need roughly 5.6 TB; the released checkpoint is smaller than that by a factor of about 3.6 because the expert weights are stored in a four-bit format the model was trained to tolerate. That story occupies Part 07 of this book.
+
+Running the real model is a data-center exercise: the recommended single-node setup is 8× B300 GPUs with 288 GB of memory each, about 2.3 TB of HBM in total. This is precisely why the miniature matters. The ideas in K3 do not require 2.3 TB of HBM; they require careful reading and a few hundred lines of PyTorch, and they behave the same way at d_model=64 as they do at 7,168.
+
+What is architecturally new
+
+Kimi K3 is a decoder-only transformer in the loosest sense: tokens go in, layers are stacked, next-token probabilities come out. Almost every component between the embedding and the output head, however, differs from the textbook transformer, and each difference exists to serve either the 1M-token context or the 2.8T-parameter scale. There are five ideas to meet.
+
+Kimi Delta Attention (KDA) is the workhorse. Of the 93 layers, 69 replace softmax attention with a linear-attention layer built on the delta rule, an update that lets a fixed-size memory matrix correct itself instead of only accumulating, extended with a per-channel forget gate. A KDA layer holds a small recurrent state per head rather than a KV cache that grows with sequence length, which is the single most important fact for million-token inference. KDA layers also carry no explicit positional encoding; position is carried implicitly by the gating, an arrangement usually called NoPE. Moonshot reports up to 6.3× faster decoding at million-token context from this design. Part 02 builds KDA from nothing, starting with the chapter "The delta rule from scratch".
+
+Gated MLA covers what linear attention cannot. The remaining 24 layers, roughly every fourth, are full softmax attention in the DeepSeek lineage: Multi-head Latent Attention (MLA), which caches a compressed 512-dimensional latent per token instead of full keys and values, with an output gate added on top. These are the only layers in the model that can look back at any token exactly, and the only layers that keep a global KV cache.3
+3 The output gate is the one part of that description that is not confined to these 24 layers. We enumerated the released checkpoint's tensors and found a self_attn.g_proj on all 93 layers, so every attention layer in K3 is gated, KDA layers included. The chapter "The output gate" builds it and says which parts of its arithmetic are measured and which are ours.
+ Why a 3:1 mixture of approximate and exact attention works, and how to build MLA, is Part 03, beginning with "Why keep any full attention at all".
+
+The hybrid attention stack: 69 KDA layers with fixed-size state, interleaved with 24 Gated MLA layers that keep the only KV cache.
+
+As the figure shows, the attention stack is a division of labor: cheap approximate memory almost everywhere, exact retrieval at regular intervals. The third idea changes how information moves between layers. Attention Residuals (AttnRes) replace the assumption that each layer reads only the accumulated residual stream: K3 partitions its 93 layers into blocks of roughly 12, and each layer can attend over the embedding and the preceding block outputs through learned pseudo-queries. Moonshot claims about 25% higher training efficiency for under 2% extra cost. The mechanism is not something we have to take on trust, because it is in the weights under its own names: our tensor inventory of the checkpoint found self_attention_res_proj and self_attention_res_norm and mlp_res_proj and mlp_res_norm, 93 of each, plus one pathway on the stack's output, so a projection and a normalization sit at both sublayers of every layer. What is still unpublished is the geometry, the pseudo-query dimensions and the exact block boundaries, so our implementation in Part 04 uses stated teaching values for those.
+
+Stable LatentMoE is where the 2.8 trillion parameters live. Every layer except the first replaces its MLP with a mixture of 896 routed experts, of which 16 are active per token, plus 2 shared experts that every token uses. Two details distinguish it from earlier MoE designs: routing happens in a 3,584-dimensional latent space, half the hidden size, which cuts communication and expert width; and stability comes from a recipe of normalization, a GLU-style activation the config calls situ, and a load-balancing scheme Moonshot names Quantile Balancing. Moonshot credits this recipe with roughly 2.5× better scaling efficiency than Kimi K2. Part 05 builds all of it, from "From one MLP to many experts" through "Load balancing and training stability".
+
+Sparsity is the trick that makes 2.8T parameters affordable: each token computes with about 104B of them.
+
+The fifth idea is about storage rather than computation. MXFP4 is a microscaling four-bit floating-point format: weights are stored as e2m1 values in 32-element blocks, each block sharing one power-of-two scale. K3 stores its MoE expert weights this way and, unusually, was trained with quantization in the loop from the SFT stage onward, through RL, rather than being quantized after the fact. Activations in the expert path use the eight-bit sibling MXFP8, while attention, embeddings, and routers stay in higher precision. This is what makes 2.8T parameters fit in 1.56 TB, and Part 07 rebuilds the format and the training trick from first principles.
+
+Two more properties round out the release. Vision is native rather than adapter-based: a 401M-parameter encoder called MoonViT-V2 feeds the language stack directly, trained jointly with it. The checkpoint gives that encoder a definite shape, a vision_tower of 27 blocks with a patch embedding and its own positional embeddings, joined to the language stack by a two-layer projector with a normalization on its output. And reasoning is always on, with configurable effort; the API defaults to a maximum completion of 131,072 tokens and allows up to 1,048,576. We do not rebuild the vision encoder or the reasoning training, however the chapter "Always-on reasoning and native vision" explains how both attach to the stack we do build.
+
+The miniature
+
+Every chapter in this book works at fixed toy dimensions, chosen once so that all chapters agree: a model width of 64, eight layers in K3's 3:1 attention pattern, 16 experts with 2 active, a 512-entry vocabulary, a 256-token context. Each dimension mirrors a K3 ratio where possible; the full configuration, with the K3 value beside each miniature value, is stated in the next chapter, "How to read this book", and every later chapter imports it. By the chapter "Assembling mini-K3" the pieces snap together into one model class, and in "Training the miniature" we train it on real text and sample from it.
+
+What we build: a miniature that keeps K3's structure and ratios at laptop scale.
+What you need
+
+The prerequisites are modest and spelled out in the next chapter: working Python, basic PyTorch (tensors, nn.Module, calling backward), and a high-level picture of what a transformer is. Everything else is built on the page, starting from a tokenizer in Part 01. The only setup worth doing now is confirming that PyTorch imports:
+
+import torch
+print(torch.__version__)
+2.10.0
+
+We use PyTorch 2.10 throughout; any reasonably recent version works, because we use nothing beyond core tensor operations and torch.nn. No GPU is required for any chapter, though training in "Training the miniature" is faster with one.
+
+The road ahead
+
+The book runs in the order the dependencies run. Part 01 builds the shared foundations: the tokenizer and embeddings, a standard transformer block as our baseline, and the cost analysis in "What attention costs at one million tokens" that motivates everything after it. Part 02 builds KDA, Part 03 builds Gated MLA, Part 04 adds Attention Residuals, and Part 05 builds Stable LatentMoE. Part 06 assembles and trains mini-K3 and does the parameter accounting that reproduces the 2.8T and 104B figures from the released numbers. Part 07 covers MXFP4 and quantization-aware training, Part 08 examines the million-token claim, and Part 09 closes with serving, the components we did not rebuild, and what open weights of this scale make possible.
+
+Before any of that, the next chapter fixes the method: the toy dimensions, the shape-check habit, and the one configuration object that every chapter after it shares.
+
+CHAPTER COMPLETE
+Nicely done. You reached the end of this one.

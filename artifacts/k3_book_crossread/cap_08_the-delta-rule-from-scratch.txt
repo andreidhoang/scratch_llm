@@ -1,0 +1,140 @@
+KIMI DELTA ATTENTION
+The delta rule from scratchfree preview
+YOUR GUIDE
+Let's get started.
+
+Kimi K3 runs 69 of its 93 layers on Kimi Delta Attention (KDA), a linear-attention layer built around an update called the delta rule. Before we can build KDA, we need the delta rule itself, and the delta rule is best understood as a fix for a specific failure in plain linear attention. In this chapter we implement both, side by side, on tensors small enough to print, and watch the failure and the fix happen in the numbers.
+
+The previous chapter left us with linear attention as a running memory: a matrix S of shape (d_k, d_v) per head, updated once per token, read once per token. We will keep exactly that framing. What changes is one line — the update — and that one line is the difference between a memory that can only pile things up and a memory that can correct itself.
+
+A scope note: this chapter covers the update rule alone, in a plain Python loop, with a single head and no gating. Forgetting (the "delta" part of KDA that involves decay) arrives in the next chapter, and the efficient chunked form that makes training practical comes at the end of Part 02.
+
+The failure: additive memory cannot overwrite
+
+Recall the linear-attention state update from the last chapter. At step t, given a key k_t of dimension d_k and a value v_t of dimension d_v, we write
+
+S_t = S_{t-1} + v_t k_t^T        # write
+o_t = S_t^T q_t                  # read
+
+The outer product v_t k_t^T is a rank-1 matrix of shape (d_v, d_k); storing it in S means "when someone later queries with something like k_t, answer with something like v_t".1
+1 We write the state as (d_v, d_k) here so the write is v k^T and the read is S q. Some papers transpose this. The content is identical; only the bookkeeping changes.
+ The read is a matrix-vector product, so retrieval costs O(d_k · d_v) per token no matter how long the sequence is. That fixed cost is the entire appeal of linear attention.
+
+Now consider what this memory does when a fact changes. Suppose the model reads "the meeting is at 3pm" and later reads "the meeting moved to 5pm". Both statements produce a similar key — they are about the same meeting — but different values. The additive update stores both:
+
+S = ... + v_3pm k_meeting^T + v_5pm k_meeting^T
+
+A later query about the meeting retrieves the sum of the two values, roughly v_3pm + v_5pm. The memory has no mechanism for replacing an association; it can only accumulate interference. Over thousands of tokens of a real document, where entities are mentioned repeatedly with updated states, this is not a corner case. It is the normal condition.
+
+Additive linear attention accumulates both values for the same key; the delta rule replaces the old one.
+
+As the figure shows, the problem is not capacity in the storage sense — S has d_k × d_v numbers either way — but the write policy. We need a write that first checks what the memory already says.
+
+The fix: write the error, not the value
+
+The delta rule dates to Widrow and Hoff's 1960 adaptive filter and reappears throughout the fast-weight-programmer literature.2
+2 The direct ancestor of KDA's use of it is DeltaNet (Schlag, Irie & Schmidhuber, 2021), which framed the delta rule as a linear-attention update and showed it fixes exactly this interference problem. Gated DeltaNet (Yang et al., 2024) added the decay we meet in the next chapter.
+ Applied to our state, it reads:
+
+prediction:  v_hat = S_{t-1} k_t          # what the memory currently answers for k_t
+error:       e_t   = v_t - v_hat          # how wrong that answer is
+write:       S_t   = S_{t-1} + beta_t * e_t k_t^T
+
+Three things are worth noting before we run it. First, if the memory knows nothing about k_t (so v_hat ≈ 0), the update reduces to the plain additive write — the delta rule contains linear attention as a special case. Second, if the memory already stores exactly v_t for this key, the error is zero and nothing is written; the rule is idempotent where the additive rule keeps inflating. Third, the scalar beta_t (between 0 and 1) is a write strength: beta_t = 1 replaces the stored association outright, beta_t = 0 leaves the memory untouched. In KDA, beta_t is produced per token by a learned projection, so the model decides, token by token, how hard to write.3
+3 For unit-norm keys, beta_t = 1 gives exact replacement: after the update, S k = v_hat + 1·(v − v_hat) = v. This is one reason K3 L2-normalizes keys, which we cover properly in the chapter on short convolutions and normalization.
+
+There is a second reading of the same equation that is worth holding onto: it is one step of gradient descent on the objective L = ½‖S k_t − v_t‖² with learning rate beta_t. The memory is being trained online, at inference time, to map keys to values — which is why this family of models is called fast-weight programmers. The slow weights (the projections that produce q, k, v, beta) are learned by backpropagation; the fast weights S are learned by the delta rule, inside the forward pass.
+
+Implementing both rules
+
+The following code implements the two updates in the most literal form possible: a Python loop over time steps. It is deliberately slow — the point is to be able to read every operation. Throughout Part 02 we use a single head with d_k = d_v = 4 so states fit on screen.
+
+import torch
+
+torch.manual_seed(3)
+d_k, d_v = 4, 4
+
+def linear_attn_step(S, k, v):
+    return S + torch.outer(v, k)              # S: (d_v, d_k)
+
+def delta_step(S, k, v, beta):
+    v_hat = S @ k                             # (d_v,)  current answer for k
+    error = v - v_hat                         # (d_v,)
+    return S + beta * torch.outer(error, k)   # rank-1 correction
+
+def read(S, q):
+    return S @ q                              # (d_v,)
+
+Both updates are rank-1 writes; the only difference is what gets multiplied by k^T — the raw value, or the error. Now the experiment. We store a value under a key, then store a different value under the same key, then query that key:
+
+k = torch.tensor([1., 0., 0., 0.])       # unit-norm key: "the meeting"
+v1 = torch.tensor([3., 0., 0., 0.])      # "3pm"
+v2 = torch.tensor([5., 0., 0., 0.])      # "5pm"
+
+S_lin = torch.zeros(d_v, d_k)
+S_lin = linear_attn_step(S_lin, k, v1)
+S_lin = linear_attn_step(S_lin, k, v2)
+
+S_del = torch.zeros(d_v, d_k)
+S_del = delta_step(S_del, k, v1, beta=1.0)
+S_del = delta_step(S_del, k, v2, beta=1.0)
+
+print(read(S_lin, k))   # tensor([8., 0., 0., 0.])
+print(read(S_del, k))   # tensor([5., 0., 0., 0.])
+
+The additive memory answers 8.0 — the sum of 3 and 5, an answer that was never in the data. The delta memory answers 5.0, the current value. As the output shows, the correction mechanism is not an optimization; it changes what the layer can represent.
+
+The delta rule computes the error 5 − 3 = 2 and writes only that, leaving the state at the correct value.
+
+It is worth running one more case: write v1 twice with the delta rule. After the first write the error is zero, so the second write is a no-op and S is unchanged. The additive rule doubles the stored value to 6.0. Repetition — the most common thing in natural text — is precisely where additive memory degrades fastest.
+
+A full sequence layer
+
+To use the delta rule inside a transformer-shaped model, we wrap the recurrence in a module with the same interface as the attention layers from Part 01: token vectors in, token vectors out, with q, k, v and now beta produced by learned projections. This is the skeleton that the real KDA layer will grow from over the next three chapters.
+
+import torch.nn as nn
+import torch.nn.functional as F
+
+class DeltaRuleAttention(nn.Module):
+    """Single-head delta-rule sequence layer (no gating yet)."""
+    def __init__(self, d_model, d_k, d_v):
+        super().__init__()
+        self.W_q = nn.Linear(d_model, d_k, bias=False)
+        self.W_k = nn.Linear(d_model, d_k, bias=False)
+        self.W_v = nn.Linear(d_model, d_v, bias=False)
+        self.W_beta = nn.Linear(d_model, 1, bias=False)
+        self.W_o = nn.Linear(d_v, d_model, bias=False)
+
+    def forward(self, x):                      # x: (T, d_model)
+        T = x.shape[0]
+        q = self.W_q(x)                        # (T, d_k)
+        k = F.normalize(self.W_k(x), dim=-1)   # unit-norm keys
+        v = self.W_v(x)                        # (T, d_v)
+        beta = torch.sigmoid(self.W_beta(x))   # (T, 1) in (0, 1)
+
+        S = x.new_zeros(v.shape[-1], k.shape[-1])
+        outs = []
+        for t in range(T):                     # the recurrence, spelled out
+            error = v[t] - S @ k[t]
+            S = S + beta[t] * torch.outer(error, k[t])
+            outs.append(S @ q[t])
+        return self.W_o(torch.stack(outs))     # (T, d_model)
+
+Two details deserve attention. The keys are L2-normalized, matching K3 and making beta = 1 an exact overwrite, as computed in the sidenote above. And beta comes through a sigmoid, so the model can only choose write strengths between "ignore this token" and "fully commit it" — the same parameterization KDA uses. A quick shape check on our mini-K3 dimensions from FACTS (d_model = 64, per-head d_k = d_v = 16):
+
+layer = DeltaRuleAttention(d_model=64, d_k=16, d_v=16)
+x = torch.randn(10, 64)
+print(layer(x).shape)    # torch.Size([10, 64])
+
+The layer consumes a sequence and returns one, causally — position t's output depends only on tokens up to t, because the state was built left to right. Nothing about the interface reveals that there is no attention matrix inside.
+
+The delta-rule layer: four learned projections around a fixed-size recurrent state.
+What this costs, and what it still cannot do
+
+The loop makes the costs easy to state. Per token we do one (d_v, d_k) matrix-vector product, one outer product, and one addition: O(d_k · d_v) compute and — the number that matters for long context — O(d_k · d_v) memory, independent of T. For K3's real dimensions this is why a KDA layer holds a fixed-size state per head while a full-attention layer's KV cache grows by two vectors every token.4
+4 The loop is honest about cost per step but terrible for GPUs: T sequential steps cannot be parallelized as written. The chunkwise reformulation in the last chapter of this part recovers matrix-multiply parallelism over the sequence, which is what makes training 69 such layers feasible.
+
+However, two gaps remain between this layer and KDA, and they are the subject of the next two chapters. The first: our memory never forgets. Errors are corrected per key, but stale information under keys that never recur sits in S forever, and over a million tokens the state saturates into noise. KDA adds a learned per-channel forget gate — the decay that gives "Delta Attention" its gated character. The second: raw q and k straight from a linear projection turn out to be poorly conditioned for this recurrence, which is why K3 passes them through a short convolution, a Swish, and the L2 normalization we already borrowed. With the delta rule in hand, both additions are one-line changes to the loop you just wrote.
+
+CHAPTER COMPLETE
+Nicely done. You reached the end of this one.
