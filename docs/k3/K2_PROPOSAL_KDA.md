@@ -78,9 +78,11 @@ FACTS A18 — `param_count.py` closes EXACT, residual 0, only with `a_log_size=1
 per-head `[n_heads]` in the released code") is **RETRACTED 2026-08-03**: per-head-96 is exactly
 what the census falsified — it leaves the pre-census residual 69×(128−96) = 2,208 unclosed. The
 released code's per-head framing does not explain the [128] shapes; how A_log maps to the
-per-channel decay Diag(α) (broadcast / interpolation per channel group?) is **OPEN — pre-flight
-for the hand-build**: resolve by direct read of `modeling_kimi_linear.py` checkpoint loading
-before `core/kda.py`.
+per-channel decay Diag(α) (broadcast / interpolation per channel group?) was **OPEN — RESOLVED
+2026-08-10** ([`KDA_ALOG_MAPPING.md`](KDA_ALOG_MAPPING.md)): A_log is per-head [96]; the [128]
+storage is 96 live entries + 32 dead zeros (tail ≡ 0.0 in all 69 layers, MEASURED; every FLA/vLLM
+consumer reads [0:96] by head). K3-mode decay: `log α[h,k] = −5·σ(exp(A_log[h])·(z+dt_bias))`;
+load contract in §3 of the mapping doc.
 Init: K3 paper §2.1.1 says A^h = 0; K3 released code defaults `log(U(1,16))` (Mamba lineage);
 fla uses 0 under `safe_gate=True`. **Proposal: init 0 in k3 mode, `log(U(1,16))` in kimi_linear
 mode** — and note R0's measured A_log means drift only −0.17 → +0.29 with depth, so the choice
@@ -161,9 +163,9 @@ Mastery bar (HANDCRAFTED.md): delete-test + chunkwise≡recurrent≡f64 + FLA pa
 ## 7. mini-K3 instantiation (from ROADMAP K6 table — the shapes your module must accept)
 
 hidden 1024 · 16 heads × 64 (d_k = d_v = 64) · conv k=4 · g_min = −5 · full-rank gate ·
-β per head · A_log per head init 0 (k3 mode — our mini-scale choice; the real checkpoint carries
-[128] per-dim and its mapping is OPEN, §2 — resolve before loading real weights). New parameter
-tensors per layer vs GDN:
+β per head · A_log per head init 0 (k3 mode — our mini-scale choice, now confirmed
+checkpoint-compatible 2026-08-10: the real [128] storage is 96 live + 32 dead zeros; load
+[0:96] and assert the dead tail, KDA_ALOG_MAPPING.md §3). New parameter tensors per layer vs GDN:
 `f_a_proj 1024×64`, `f_b_proj 64×1024`, `dt_bias [1024]`, 3 depthwise convs `[1024, 1, 4]`,
 `g_proj 1024×1024`; dropped: none (q/k/v/out same widths at expand_v=1). `param_count.py`
 owns the exact accounting; K0's closure discipline applies.
