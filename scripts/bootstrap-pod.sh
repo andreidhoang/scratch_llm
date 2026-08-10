@@ -20,6 +20,9 @@ uv pip install --python .venv/bin/python -e ".[dev]"
 # sm120 (RTX PRO 4000 Blackwell / RTX 50xx) needs a CUDA >= 12.8 wheel; this repo measured
 # torch 2.12.1+cu130. On a DIFFERENT GPU, drop the --index-url and let uv pick the default build.
 uv pip install --python .venv/bin/python torch --index-url https://download.pytorch.org/whl/cu130
+# K2 KDA parity-gate oracle (docs/k3/K2_PROPOSAL_KDA.md §5): fla-core >= 0.4.0 ships chunk_kda /
+# fused_recurrent_kda. Installed at bootstrap so the GPU parity day is execution, not setup.
+uv pip install --python .venv/bin/python "fla-core>=0.4.0"
 
 say "2/4 · Re-link green-CI pre-commit hook (.git/hooks is not version-controlled)"
 ln -sf ../../.claude/hooks/green-ci-gate.sh .git/hooks/pre-commit
