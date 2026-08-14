@@ -6,6 +6,21 @@
 > Nothing here re-sequences those documents' content — it interleaves them so every kernel
 > session lands exactly when the K3 build needs it, and every K3 component doubles as a
 > kernel-engineering rep. Authored 2026-08-09, operator request.
+>
+> **Reality binding (2026-08-11, FAST_TRACK Rev 2 + mentorship session).** This overlay is
+> technically sound and stays the technical spine — but it was authored against FAST_TRACK Rev 1,
+> which carried premises now falsified. Three corrections govern how to read it:
+> 1. **The flagship artifact is the KDA decode kernel (M2), and it is now the whole spine's target,
+>    not one item among many.** `Layer 0 roofline → understand KDA state → K2 core/kda.py → KDA
+>    decode kernel (≥85% mem roofline) → wrap in KernelGym → apply to Anthropic Performance RL.`
+>    Everything else is pulled only when that spine needs it (the node-pull rule already in §2).
+> 2. **d20 is demoted from "anchor artifact" to "run when a lane funds it."** It does not launch at
+>    HEAD (SDPA off ⇒ ~107 GB > 80 GB HBM; no torchrun shim; no 10B streamer). It is a debugging job
+>    *then* a rental — not a Week-0 booking.
+> 3. **The market claim in §0 below is corrected in place.** There is no verified "+35–85% CUDA
+>    premium" — that figure was fabricated (no dataset breaks out premia by skill). What is verified:
+>    the interview language is CUDA C++, and every documented no-PhD frontier hire won with measured
+>    numbers in public. The output unit is unchanged: a ledger number defended aloud.
 
 ---
 
@@ -38,10 +53,12 @@ inflection in 2026 postings (Anthropic: "co-design attention mechanisms for next
 hardware"). The merge converts 30 kernel sessions + 11 K3 phases from two competing
 backlogs into one critical path.
 
-**Market first principles (FAST_TRACK §0, verified):** CUDA-from-scratch carries the
-highest skill premium (+35–85%); the interview language is CUDA C++; every documented
-no-PhD frontier hire won with **measured numbers in public**. So the merge's output unit is
-never "session completed" — it is a ledger number defended aloud.
+**Market first principles (FAST_TRACK §0, corrected 2026-08-11):** there is **no verified
+per-skill salary premium** — the old "+35–85%" was fabricated; title-level averages for "CUDA
+engineer" are in fact *low* (~$107k). What is verified and load-bearing: the interview language is
+**CUDA C++**, and **every documented no-PhD frontier hire won with measured numbers in public**. So
+the merge's output unit is never "session completed" — it is **a ledger number defended aloud**, and
+the one that ends the search is the KDA decode kernel's roofline %.
 
 ## 1. The reasoning method — how to analyze hard, per node
 
@@ -75,10 +92,15 @@ protocol, sharpened for the merge:
 Kernel sessions are **node-pulled by K3 phases** — the same rule the book maps already use.
 K2 (KDA) remains the critical path; d20-GQA runs regardless (decision of record 2026-08-02).
 
-### M0 · Now — close the open loops (Week 0)
-- Book the d20 8×H100 rental (the control-family anchor; also unblocks reasoningLLM's GPU band).
+### M0 · Now — Lane 0 + the KDA on-ramp (Week 0)
+- **Lane 0 (FAST_TRACK §3.0):** make `scratch_llm` public with `bench/RESULTS.md` numbers up top;
+  submit Mercor; bookmark NVIDIA-Vietnam as **GATED** (no employment applications until the Mastery
+  Gate — Rev 2.2); ship one Prime Intellect Open-Access bounty. Three counters off zero.
 - CPU gates green; K0/K1 already banked (config.py, param_count.py, 2.78T closure).
-- Reasoning rep: re-derive the d20 memory envelope (18,246 MiB @ B=16) from the equation, cold.
+- **The on-ramp rep (bridges Layer 0 → K2):** by hand, derive full-attention KV bytes/token `= 2·H·d·2·t`
+  vs KDA state bytes `= 16·64·64·2` (constant), and find the crossover context `t`. That number is
+  *why the frontier went linear-attention.* Then re-derive the d20 memory envelope (18,246 MiB @ B=16)
+  from the equation, cold — d20 itself is deferred until a lane funds it, not booked now.
 
 ### M1 · "Bytes are all that matter" — KDA × memory-bound kernels (Weeks 1–3)
 - **Build:** `core/kda.py` hand-built per K2 proposal — per-channel Diag(α), scaled sigmoid
@@ -140,12 +162,17 @@ K2 (KDA) remains the critical path; d20-GQA runs regardless (decision of record 
   (KDA state + latent KV) serving mini-K3.
 - **Interview yield:** "serve a 2.8T MoE" system design, answered with your own numbers.
 
-### M6 · Convergence + the offer trigger (Weeks 11–12)
-- Three public measured numbers exist now: **d20 loss curves + CORE**, **KDA decode kernel
-  roofline %**, **K9 three-way serving ledger**. That is the Keller-Jordan-shaped artifact
-  set, K3-flavored.
-- Lane C triggers: applications out (Anthropic RL/inference, NVIDIA kernel, inference
-  providers) per FAST_TRACK §2 — not before the numbers are public.
+### M6 · Convergence — deepen while the loops run (Weeks 11–12)
+- **Applications are GATED on mastery (Rev 2.2, operator decision 2026-08-11 — supersedes the
+  Week-6 trigger):** no employment application until the six-item **MASTERY GATE** in FAST_TRACK §3
+  Lane 3 is green (G1 decode-kernel ≥85% roofline · G2 KernelGym v0 public · G3 ≥30/64 D+N incl. all
+  merged-path ★ · G4 five cold derivations defended · G5 ≥10 recorded defenses · G6 upstream PR
+  merged/in review). **Gate review Day 90 = Sun 2026-11-08, hard.** M6 (W11–12) is the natural
+  landing zone: the schedule already targets exactly G1–G6 by here. The weekly recorded defense rep
+  (G5) has been running since W1 — it is the ladder's DEFENDED step, not interview theater.
+- Three public measured numbers exist by now: **KDA decode kernel roofline %**, **KernelGym's
+  documented reward-hacking incident + verifier design**, **K9 three-way serving ledger**. (d20
+  loss curves join only if a lane funded the rental — demoted, never assumed.)
 - K10 remainder (GGUF/A100-tier quant-of-quant, EP/EPLB notes) is opt-in, EV-ranked.
 
 ## 3. The weekly rhythm (non-negotiable skeleton)
@@ -163,7 +190,7 @@ failure mode, not the plan.
 
 ## 4. What "mastered" means at the end of M6
 
-- Every ★ K-row on the merged path at DEFENDED + NUMBERED (target: 30/89 total ladder by day 90).
+- Every ★ K-row on the merged path at DEFENDED + NUMBERED (target: 30/64 total ladder by day 90).
 - You can derive, cold: the decode memory wall, KDA state arithmetic, MLA absorption,
   4.25-bit accounting, MFU envelope — each with its measured number from *your* hardware.
 - Three public artifacts with numbers, defended in ≥10 recorded mocks.

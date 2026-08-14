@@ -74,3 +74,4 @@ artifacts/k3_anatomy/index.json
 artifacts/k3_anatomy/census.json
 artifacts/k3_anatomy/tensors/
 artifacts/k3_anatomy/fetch.log
+_to_delete/

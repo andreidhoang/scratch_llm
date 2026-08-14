@@ -21,7 +21,11 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
@@ -29,7 +33,11 @@
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint-on-edit.sh\"", "timeout": 30 }
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint-on-edit.sh\"",
+            "timeout": 30
+          }
         ]
       }
     ],
@@ -38,13 +46,34 @@
         "matcher": "Bash",
         "if": "Bash(git commit*)",
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/green-ci-gate.sh\"", "timeout": 600, "statusMessage": "Running green-CI gate before commit..." }
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/green-ci-gate.sh\"",
+            "timeout": 600,
+            "statusMessage": "Running green-CI gate before commit..."
+          }
         ]
       },
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/kernel-write-guard.sh\"", "timeout": 10, "statusMessage": "Checking the kernel meat boundary..." }
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/kernel-write-guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking the kernel meat boundary..."
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/oracle-guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking the mastery/oracle boundary..."
+          }
         ]
       }
     ]

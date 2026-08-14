@@ -523,3 +523,32 @@ Sanity questions on the context-engineering choices above — if any answer is s
    *improves* the next day's output rather than throwing away useful context.
 
 If any answer is shaky, that's the section to re-read — then we discuss it.
+
+---
+
+## 7. Addendum — 2026-08-14: wiring the daily op into the harness
+
+Three changes, all Lever 4 (enforcement) feeding Lever 1 (always-on context). Rationale: the corpus
+could describe a *quarter* and a *gate* but not a **day**, so the unit of work that actually compounds
+was the only unit with no machine backing. The fix is state that is **computed, never asserted**.
+
+### `.claude/hooks/session-start.sh` — rewritten (Lever 4 → Lever 1)
+Was: static prose about which repo is canonical. Now: computes the **one process metric** (is the remote
+public? — `gh repo view --json isPrivate`, 4 s timeout, honest `unknown` fallback), the E001 instrument
+state (oracle stub vs written · ledger blanks · unwritten predictions · result files), and from those
+**names THE ONE NEXT ACTION**. Two design rules worth reusing: (1) a line that stops mattering deletes
+itself — the pre-registration seal prints only while predictions are unwritten, so it cannot rot into
+stale nagging; (2) the hook never restates `CLAUDE.md`, it only reports what `CLAUDE.md` cannot know.
+
+### `.claude/commands/op.md` — new (Lever 2)
+`/op [open|measure|close]`, auto-detecting the phase from repo state. Carries the exact sweep commands
+with the **underflow envelope guard** (`|log_gate| x chunk < 88`) and the in-distribution caveat on
+`beta_scale`, so an agent cannot silently produce a NaN and report it as a finding. Complements
+`/standup` and `/eod` (repo-wide rhythm); `/op` is the mastery-lane loop specifically.
+
+### `CLAUDE.md` — FOP-6 corrected + `## The daily op` block added
+**Defect found and fixed 2026-08-14:** FOP-6 labelled `delegate` as *"(current, 2026-07-03)"* and `learn`
+as *"the historical contract"*, while `.claude/execution-mode` has said `learn` since 2026-08-12. The
+2026-08-13 reconciliation patched the "four active fronts" block but missed the FOP block **above** it —
+so the first mode statement a fresh agent read was the wrong one. Generalise the lesson: *when a
+contract changes, grep for **every** statement of it, not the one you remember writing.*

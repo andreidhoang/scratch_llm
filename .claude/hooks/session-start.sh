@@ -1,36 +1,65 @@
 #!/usr/bin/env bash
 # SessionStart — CONTEXT-INJECTION hook (Lever 4 feeding Lever 1).
 # stdout on exit 0 is added to the session context. Surface only DYNAMIC state the static CLAUDE.md
-# cannot know — branch, uncommitted count, venv, the latest commits, and the current perf-curriculum
-# node — so every session can "orient before you build" (CLAUDE.md) from real state, not assumption.
-# Every line is paid once per session; each must out-earn its tokens (don't echo static CLAUDE.md).
+# cannot know. REWRITTEN 2026-08-14: state is now COMPUTED from the filesystem, never asserted, and
+# the hook names THE ONE NEXT ACTION rather than describing the plan. Lines that stop mattering
+# (the pre-registration seal) delete themselves once the state says they are moot.
 set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
-branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '(no git yet — run: git init)')"
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '(no git)')"
 dirty="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
-venv=$([ -d .venv ] && echo 'ready' || echo 'missing → uv venv && source .venv/bin/activate')
 
-echo "scratch_llm · CS336 from-scratch | branch: ${branch} | uncommitted: ${dirty} files | venv: ${venv}"
-echo "green-CI is hook-enforced on git commit. | open the day with /standup, close with /eod (docs/OPERATING_RHYTHM.md)."
+# ---- THE ONE PROCESS METRIC: is the remote PUBLIC? A private commit scores zero. -----------------
+vis="$(timeout 4 gh repo view --json isPrivate -q .isPrivate 2>/dev/null || echo unknown)"
+case "$vis" in
+  false) pub="PUBLIC ✔" ;;
+  true)  pub="PRIVATE ✘ — the process metric is 0 until this changes: gh repo edit --visibility public --accept-visibility-change-consequences" ;;
+  *)     pub="unknown (gh unavailable) — verify before claiming a public-change day" ;;
+esac
 
-# Orient-before-you-build (CLAUDE.md): the DYNAMIC 'what just shipped / where we are' the static docs
-# can't hold. This is the STARTING slice — read deeper (git log -15, PERF_PLAN, bench/RESULTS.md) before building.
-recent="$(git log --oneline -5 2>/dev/null || true)"
-if [ -n "$recent" ]; then
-  echo "latest commits — analyze before proceeding:"
-  echo "$recent" | sed 's/^/  /'
+# ---- E001 instrument state, computed ------------------------------------------------------------
+oracle="WRITTEN"
+grep -q "NotImplementedError" src/scratch_llm/mastery/reference.py 2>/dev/null && oracle="STUB"
+blanks="$(grep -c '________' MASTERY_LEDGER.md 2>/dev/null || echo 0)"
+preds="$(grep -c '1e-__' MASTERY_LEDGER.md 2>/dev/null || echo 0)"
+runs="$(ls results/*.json 2>/dev/null | wc -l | tr -d ' ')"
+
+echo "scratch_llm — ONE repo, ONE vehicle | branch ${branch} | uncommitted ${dirty} | remote ${pub}"
+echo "execution-mode=$(cat .claude/execution-mode 2>/dev/null || echo '?') · L2 is the DEFAULT posture (propose N variants, ranking hidden; human predicts; then measure)."
+echo "SEALED — agents never write these four: mastery/reference.py · the measurement harness · RL loss math · verifier logic + tolerances. Everything else is delegable and SHOULD be delegated."
+echo "E001 state — oracle: ${oracle} · ledger blanks: ${blanks} · predictions unwritten: ${preds} · result files: ${runs}"
+
+# ---- name the ONE next action from that state ---------------------------------------------------
+if [ "$vis" = "true" ]; then
+  echo "NEXT ▶ make the remote public. Nothing else today outranks it: legibility multiplies evidence, and it is currently 0."
+elif [ "$blanks" -gt 0 ] && [ "$oracle" = "STUB" ]; then
+  echo "NEXT ▶ Row 000 derivations on paper (D1 intensity · D2 dependency chain · D3 what chunking buys/costs), THEN the ~5 lines of recurrent_reference, then --self-test."
+elif [ "$oracle" = "STUB" ]; then
+  echo "NEXT ▶ write recurrent_reference (~5 lines; equation is in its docstring), then: python -m experiments.e001_gate_sweep --self-test"
+elif [ "$preds" -gt 0 ]; then
+  echo "NEXT ▶ write the three predictions + falsifier in MASTERY_LEDGER.md Row 001. NO PREDICTION, NO RUN."
+elif [ "$runs" -eq 0 ]; then
+  echo "NEXT ▶ python -m experiments.e001_gate_sweep --run   (gate axis; separates H2 from H3)"
+else
+  echo "NEXT ▶ conditioning axis (--chunks / --beta-scale), then the cost axis (--solve-dtype), then figures + write-up + the #42960 comment."
 fi
-node="$(grep -m1 '^Phase:' performance/PERF_PLAN.md 2>/dev/null || true)"
-[ -n "$node" ] && echo "perf node → ${node#Phase: } (source: performance/PERF_PLAN.md)"
-# Close-the-loop / frontier-ablation front (ADR-0018): the buildable next rung for a fresh session.
-# The marker is an HTML comment opening line ('<!-- Next-node: …', ~3.7KB single line at :32) — anchor
-# on the line prefix so prose mentions (e.g. :4) can't match, and inject only the first 200 chars + pointer.
-fnode="$(grep -m1 '^<!-- Next-node:' docs/FRONTIER_2026_TASKSPEC.md 2>/dev/null | sed -E 's/^<!-- Next-node: *//' | cut -c1-200 || true)"
-[ -n "$fnode" ] && echo "frontier node → ${fnode}… → see docs/FRONTIER_2026_TASKSPEC.md:32 (START HERE block + §0)"
-# Learning track (teach-back mastery): the next Bài to master so a /master session resumes seamlessly.
-lnode="$(grep -m1 '^Learning-node:' docs/learning/PROGRESS.md 2>/dev/null | sed -E 's/^Learning-node: *//' || true)"
-[ -n "$lnode" ] && echo "learning node → ${lnode} (source: docs/learning/PROGRESS.md — 89-Bài teach-back ledger; ✅=owned, don't re-derive)"
-[ -n "$lnode" ] && echo "  teach via PRR loop (default): Navigator predicts COLD → run real code/number → reconcile only the gap → re-derive+draw → teach-back gate. NO monologue; open with a spaced recall Q. (CLAUDE.md §How we build)"
-[ -n "$lnode" ] && echo "  hiring linkage (PRR step 6): each Bài earns a named interview gate + FOP trait + build-vs-know-it + scarce bucket → docs/learning/FRONTIER_HIRING_MAP.md. Hired on EXECUTION/shipped artifacts, not plans (FOP-1)."
+
+# ---- the pre-registration seal: printed ONLY while it can still be violated ----------------------
+if [ "$preds" -gt 0 ]; then
+  echo "SEAL ▶ do NOT run 'pytest tests/test_wy_identity.py' yet — it asserts fp64 agreement at log_gate=0.0, which IS prediction #1. Predict first, then it is free."
+fi
+
+# ---- verified operating envelope: cheaper to print than to rediscover at 23:00 -------------------
+echo "ENVELOPE ▶ |log_gate| x chunk < 88, else fp32 underflows (a=exp(log_gate*C) -> 0, beta/a -> inf). C=256 needs |gate| <= 0.25. fp64 survives every cell: a NaN fp64 survives is UNDERFLOW, not a hypothesis."
+echo "FINDING ▶ cond(T) is EXACTLY gate-invariant (measured spread 0.000e+00) — H1 cannot be tested on the gate axis; its knobs are --beta-scale and --chunks."
+echo "DAY ▶ one binary externally-checkable outcome · predict before you measure · ship before 21:00 or the day scores 0 · close with one ledger row (predicted/measured/bound/root cause). Run /op."
+
+# ---- one-repo tripwire (ERRATA-C C7) ------------------------------------------------------------
+if [ -d "$HOME/Desktop/mastery_llm" ]; then
+  echo "!! WARNING: ~/Desktop/mastery_llm exists again — a RETIRED duplicate oracle (ERRATA-C C7). Do not work in it."
+fi
+
+recent="$(git log --oneline -3 2>/dev/null || true)"
+[ -n "$recent" ] && { echo "latest commits:"; echo "$recent" | sed 's/^/  /'; }
 exit 0

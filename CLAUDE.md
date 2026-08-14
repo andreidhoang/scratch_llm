@@ -21,15 +21,71 @@
 3. **Roofline-first / predict-the-number.** Predict the bound (comm vs flop vs memory) and the number before the run. Kernel & perf DoD is a *profile*, not a green test. Name the next unmodeled constraint a coding agent misses (launch / latch / occupancy / bank-conflict).
 4. **Claims honesty.** Label `[FACT]` / `[INFERENCE]` / `[UNCERTAIN]`. "Implemented" ≠ "measured" — only a measured/profiled run is a result. Verify against primary sources; never overclaim.
 5. **Research-as-MDP / taste.** One active experiment at a time. Pull the high-variance signal node (A5 convergence, DELTA roofline), not deterministic scaffolding. Ruthless kill criteria. Subtract-before-add.
-6. **AI-mode boundary — governed by the execution-mode switch ([ADR-0013](docs/adr/ADR-0013-execution-mode-full-delegation.md)).** The taxonomy stands: Mode 1 delegate (plumbing) · Mode 2 human-leads-AI-assists (research-critical) · Mode 3 AI-OFF (the RL-math + kernel reps the interview tests). *Which* contract applies is set by `.claude/execution-mode`: **`delegate`** (current, 2026-07-03) — agents implement everything end-to-end, kernel bodies included; mastery is post-hoc via the `docs/learning/INDEX.md` study queue; the teach-back gate never blocks the build. **`learn`** — the historical contract: agents MUST refuse to write Mode-3 targets from scratch — offer failing tests, a Socratic critique, or a post-hoc review instead. All other FOPs (pre-registration, roofline-first, claims honesty, green-CI, adversarial review) apply identically in both modes.
+6. **AI-mode boundary — governed by the execution-mode switch ([ADR-0013](docs/adr/ADR-0013-execution-mode-full-delegation.md)).** The taxonomy stands: Mode 1 delegate (plumbing) · Mode 2 human-leads-AI-assists (research-critical) · Mode 3 AI-OFF (the RL-math + kernel reps the interview tests). *Which* contract applies is set by `.claude/execution-mode`: **`delegate`** (HISTORICAL — in force 2026-07-03, superseded 2026-08-12; **not the contract that applies today**) — agents implemented everything end-to-end, kernel bodies included, with mastery post-hoc. **`learn`** (**CURRENT** — set 2026-08-12, verify with `cat .claude/execution-mode`): agents MUST refuse to write Mode-3 targets from scratch — offer failing tests, a Socratic critique, or a post-hoc review instead. All other FOPs (pre-registration, roofline-first, claims honesty, green-CI, adversarial review) apply identically in both modes.
 7. **Citation-tree mastery.** Traverse to the non-redundant gap; reuse before re-deriving; don't rebuild owned work.
 <!-- FOP:end -->
 
+## The daily op (added 2026-08-14 — the unit of work that compounds)
+
+> This repo could describe a **quarter** and a **gate** but not a **day**. That was the gap: the day is
+> the only unit that compounds, and it had no machine backing. It has one now — `.claude/hooks/session-start.sh`
+> computes the state below from the filesystem on every session, `/op` runs the loop, and three scheduled
+> tasks referee it. Nothing here is willpower.
+
+**The one process metric: days on which something PUBLIC changed.** A commit to a repo with no public
+remote scores **zero**. Planning, audits, errata, and agent-written code that is not pushed score zero.
+Three consecutive zeros → drop everything and do the smallest public-change item.
+
+**A day is well-formed iff all five hold:**
+
+1. **One binary outcome, named before starting** — externally checkable: a URL, a public diff, a number
+   in `MASTERY_LEDGER.md`. "Worked on X" is not an outcome.
+2. **A written prediction precedes every measurement** — with a mechanism and a falsifier. This applies
+   to *agent output too*: the human's prediction exists before my result reaches him.
+3. **Ship before 21:00** or the day scores zero.
+4. **Analysis budget 30 minutes**, and the output goes to project memory or to code — **never a new
+   `.md` on the Desktop.** The corpus is ~87 planning files against a handful of code files; that ratio
+   is the diagnosis, not a style preference.
+5. **Close with one ledger row**: predicted · measured · bound · root cause. No mechanism, no row.
+
+**The sealed four (hook-enforced by `oracle-guard.sh`, and the list is COMPLETE):**
+`mastery/reference.py` · the measurement harness · RL loss math (advantage, KL estimators, IS ratio,
+clipping) · verifier logic and tolerances. **Everything else is delegable and should be delegated** —
+plumbing, argparse, JSON I/O, CI, drivers, sweeps, plots, scaffolds, PR boilerplate. Default posture is
+**L2**: propose N variants with the ranking hidden, the human predicts ranking + mechanism, then measure.
+
+**Verified experiment envelope (E001) — do not rediscover these:**
+
+- **`|log_gate| × chunk < 88`.** `a = exp(log_gate·C)` falls below fp32 min normal (1.18e-38, ln −87.3),
+  flushes to zero, and `β/a → inf`. C=256 needs `|gate| ≤ 0.25`. **fp64 survives every cell — so a NaN
+  that fp64 survives is underflow, not a hypothesis.** Never report it as one.
+- **`cond(T)` is exactly gate-invariant** (measured spread 0.000e+00): the step-2 substitution removes α
+  from the homogeneous part by construction. **H1 cannot be tested on the gate axis**; its knobs are
+  `--beta-scale` (cond 1.13→2.85) and `--chunks` (1.76 @C=16 → 6.26 @C=256).
+- **`paths.py` is verified self-consistent to 3.1e-15**, ragged chunks included. A `--self-test` failure
+  is unambiguously `reference.py`; the error's two suspects (time off-by-one · eraser after write) are
+  trustworthy. Do not send the human to debug `paths.py`.
+- **Pre-registration seal:** `pytest tests/test_wy_identity.py` asserts fp64 agreement at `log_gate=0.0`,
+  which **is** Row 001's prediction #1. Refuse to run it while those cells still read `1e-__`.
+
+**Gate scoring is 16 externally checkable atoms**, not five prose items (E1 = 8 · E2 = 3 · E3 = 3 ·
+D1/D2 = 2). Applications are **ungated** and fire when the divergence map is public — atom 7 — not at the
+Nov 8 review, which reviews progress and grants no permission. If the human says "not ready yet", **name
+it out loud**: the documented failure mode is infinite preparation, and the counter is still 0.
+
+**Landing zone:** vLLM **#42960** (batch-invariant GDN_ATTN) — open, unassigned, zero linked PRs, filed
+2026-05-18. Its reporter offers a Docker repro and **A100 patch-testing**. It has waited this long
+because implementing it requires knowing where the numerics break; E001 is that characterization.
+
 ## ⚡ Four active fronts (2026-07-04; K3 track chartered 2026-07-31) — pick your lane before building
 
-> Execution mode is **`delegate`** (`.claude/execution-mode`,
-> [ADR-0013](docs/adr/ADR-0013-execution-mode-full-delegation.md)): agents implement everything
-> end-to-end; mastery is post-hoc via the study queue / mastery-debt ledger. Agent fronts run
+> Execution mode is **`learn`** (`.claude/execution-mode`, switched 2026-08-12; supersedes
+> [ADR-0013](docs/adr/ADR-0013-execution-mode-full-delegation.md)'s `delegate` default):
+> agents MUST NOT write kernel bodies, the measurement harness, RL loss math, or verifier
+> logic for a component under active study. Everything else — plumbing, CI, drivers, sweeps,
+> plots, scaffolds — is delegated freely, and the default posture is **L2** (agent proposes N
+> variants with its ranking hidden; the human predicts ranking + mechanism; then measure).
+> Working contract: project memory `srp-tutoring-contract`. Mastery is NOT post-hoc. Agent fronts run
 > concurrently on this checkout ([ADR-0014](docs/adr/ADR-0014-cs336-main-track-delivery-sprint.md)):
 >
 > - **Perf front** — the `performance/` curriculum. **✅ ALL sm120-runnable rungs A1–A6 COMPLETE
@@ -192,6 +248,20 @@ every load-bearing concept as something they must own, not just ship.
 > builds and could teach, the chat-side explanation is part of the deliverable, not an optional
 > follow-up. (Consistent with the senior-frontier-RE voice already mandated above — this fixes the
 > *priority* and the *channel*.)
+>
+> **Amendment — K3×kernels merged mentoring program (2026-08-10, user-set).** The kernel-engineering
+> ladder (JOB_SPRINT `KERNEL_MASTERY_2026.md`, S1–S30) and the K3 rebuild (`docs/k3/ROADMAP.md`,
+> K0–K10) are ONE merged program: plan of record =
+> [`docs/k3/MERGED_KERNELS_K3_ROADMAP.md`](docs/k3/MERGED_KERNELS_K3_ROADMAP.md); lesson/checkpoint
+> ledger = [`docs/k3/MENTORING_LOG.md`](docs/k3/MENTORING_LOG.md) (update it after every mentoring
+> session — lesson given, checkpoints set, pass/fail of the last ones). Delivery style, binding every
+> mentor turn: **English for the first-principles deep dive** (derivation in human-readable math → code
+> trace → measured number → frontier value: what this buys at a 2026 frontier lab), **interleaved
+> Vietnamese Feynman blocks** (plain-words restatement, WHY-this-structure-not-alternatives, gap-hunt),
+> **visualization-first** (ASCII/byte-layout/toy-4-lane machines built from real numbers), and the
+> **PRR loop** — Navigator predicts COLD before the Driver reveals, one micro-concept per exchange,
+> teach-back gates advancement. The reset lesson (Lesson 0-R: silicon → memory wall → pallets →
+> roofline) is the canonical example of the depth bar.
 
 **Master understanding — the PRR loop (Predict → Run → Reconcile) [DEFAULT modality, 2026-07-05].**
 Internalization is a function of the **Navigator's retrieval effort**, not the Driver's explanation

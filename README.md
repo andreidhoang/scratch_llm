@@ -4,6 +4,48 @@
 > ("Language Modeling from Scratch", Stanford) — every layer owned end to end,
 > from the byte to the RL update.
 
+## Measured results
+
+All numbers below are `[FACT]` rows from [`bench/RESULTS.md`](bench/RESULTS.md) — measured under
+`cuda.synchronize`, fixed seed, with warm-ups, on one consumer card. The discipline is
+**predict the number and the roofline bound first, then measure, then log the gap and the root cause.**
+Unmeasured expectations are marked `[INFERENCE]` and are kept out of the ledger.
+
+**Hardware baseline —** RTX PRO 4000 Blackwell (sm120): **72 TF/s** bf16 · **0.55 TB/s** HBM ·
+ridge ≈ **130 FLOP/byte** (measured, not from a spec sheet).
+
+| Artifact | Measured | Bound |
+|---|---|---|
+| CUDA GEMM ladder (naive → WMMA → mma.sync + XOR swizzle) | **4.1% → 38.9% → 81.9% of cuBLAS**, rel err 6.6e-6 | compute |
+| Triton tiled GEMM, autotuned @4096³ | **134.3% of cuBLAS-proxy** (101.9 TF/s) | compute |
+| FlashAttention-2 (Triton) fwd @ seq 4k | **50.0% of SDPA**; **44× leaner peak memory @ 8K** | memory |
+| Decode @B=1: eager → `torch.compile` → CUDA graphs | **51 → 173 → 253 tok/s** = **16% → 53% → 77%** of the memory roofline | overhead → memory |
+| CUDA-graph decode step time | **15.38 → 3.96 ms (−74.3%)**; ~955 kernel launches/token collapsed | overhead |
+| Fused Triton paged decode | **5.90 ms/step · ×3.52 vs wave-dense · 3,528 tok/s agg** | memory |
+| Continuous batching vs static wave (heavy-tail trace) | **2.30× wall · 2.93× by step count** | memory |
+| PagedKVCache | fragmentation **5.0%**, capacity **×9.3** | memory |
+| Batched decode scaling | agg(B=32)/agg(B=1) = **24.9×**; peak **12,220 tok/s @B=256**; roofline crosses memory→compute at **B≈128** | memory→compute |
+| Speculative decode (n-gram draft) | **×1.21–1.39 wall**, token-exact | latency |
+
+The decode row is the one to read closely: the workload is memory-bound in *theory* (arithmetic
+intensity ≈ 1, ~130× below the ridge), but the eager run sat at 16% of the wall because it was
+**launch-overhead-bound, not memory-saturated** — ~955 kernel launches per token. Killing the launch
+tax (compile → CUDA graphs) is what actually walked it to 77%. Diagnosing *which* wall you are
+against, rather than assuming, is the point of the whole ledger.
+
+### Honest limitations
+
+Stated up front rather than buried:
+
+- **No kernel here has run on datacenter silicon.** Every number above is sm120 (consumer Blackwell).
+- **`csrc/` is partly aspirational:** of 6 `.cu` files, 3 (`wgmma_sm90`, `tcgen05_sm100`, `fa3_hopper`)
+  are **compile-verified only** — runtime correctness is deferred to a rental that has not happened —
+  and 3 (`fp8_gemm_sm90`, `stream_k_sm90`, `persistent_gemv_sm90`) are **stubs** that raise. The
+  working kernel ladder is Triton + the CUDA GEMM ladder.
+- **The d20 speedrun has never been run** (see [`deploy/runbooks/d20_speedrun_8xH100.md`](deploy/runbooks/d20_speedrun_8xH100.md), which documents its own blockers).
+- **The S3 scaling sweep failed its own gate** — R² 0.77/0.83 against a pre-registered ≥0.98 — so the
+  fit was **rejected** and no extrapolation is quoted. A failed pre-registered gate is logged, not hidden.
+
 This is the **mastery vehicle**: built by hand to the engineering standard a frontier lab
 screens for, not glued together from libraries. The official course — lecture code plus the
 five assignment scaffolds with their `tests/adapters.py` — lives in [`../lectures/`](../lectures/)

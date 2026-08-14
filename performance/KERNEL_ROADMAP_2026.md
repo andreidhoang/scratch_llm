@@ -12,6 +12,57 @@
 > (`bench/RESULTS.md`, `MASTERY_LEDGER`), postmortems, or code.
 >
 > **Provenance.** Synthesized 2026-07-14 from five parallel deep-research streams (vendor/hardware ·
+
+> ⚠️ **ERRATA-D (+ REVISION 1) — stamped 2026-08-14.** This document was **not consulted** when ERRATA-D
+> was written, and it should have been. Its §3 already held a session-by-session Vizuara dissection
+> against the measured ledger, dated 2026-07-14, with the verdict *"strictly dominated — skip; poach the
+> sabotage drill, the CPU session, and the book packaging."* A market-side pass on 2026-08-14 (51 postings,
+> live syllabus re-extraction, field-state survey) reached the same verdict independently. **This §3
+> verdict stands and is not superseded.** Full list: the ERRATA-D block in
+> `Desktop/plan/KERNEL_RL_MASTERY_EXECUTION_2026.md`; citations in memory `demand_surface_2026`.
+>
+> **What ERRATA-D adds to this document — evidence, and four deltas:**
+>
+> - **§2's "recurring JD nouns" now has counts** (45 postings with full bullet text): profiling/root-cause
+>   **38/45** · Python+C++/Rust **30** · CUDA C++ **22** · TP/PP/EP/CP/FSDP **18** · low precision **17** ·
+>   vLLM/SGLang internals **13** (named as a *pair* in 9) · NCCL **12** · **RL infra bundled with perf 11** ·
+>   Triton **11** · TPU/XLA **11** · determinism/numerics **10** · CUTLASS/CuTe **7** · **ROCm 3** ·
+>   **Pallas 1** · hand-written GEMM **0** · sparse/long-context attention **0** · "batch invariance" **0**.
+>   §2's instinct was right on every noun; the counts change only the *ordering* of effort.
+> - **§3's omissions list anticipated ERRATA-D · D7 and D8 by a month** — *"determinism &
+>   batch-invariance… now a vLLM/SGLang product feature and an RL-correctness lever"*, *"perf-regression CI
+>   & kernel packaging"*, *"multi-platform hedge (ROCm/HIP, Pallas/NKI)"*. **Confirmed with evidence:**
+>   the Anthropic *Research Engineer, Performance RL* req puts **ROCm and Pallas in the *required* block**;
+>   and **zero postings use the words "batch invariance"** while 10/45 demand it as *numerics · correctness
+>   · reproducibility · **regression detection***. So the hedge is a checkbox, and the determinism work has
+>   to be **translated on contact**, never named by its mechanism first.
+> - **§4's authoring assumption flips (D5).** FlashAttention-4 is written in **CuTe DSL**, not CUDA C++;
+>   PyTorch 2.13 ships a CuTeDSL Inductor backend; CUTLASS 4.7.0 added a Primitives API *beneath* CuTe.
+>   **P-phase authoring targets Triton first, Gluon or CuTe DSL second**; CUDA C++ is for reading. This
+>   sharpens §3's "IV.d3 = P2" rather than reopening it.
+> - **§4's P1/P2 rental framing needs one correction and one release.** Correction: vast.ai has **zero
+>   VM-mode offers for H100/H200/B200/B300/A100** — but per memory `hardware_truth`, **root on any real VM
+>   or bare metal is always granted `ncu` counters**, so P1 is bookable at **Latitude.sh $1.68–1.99 bare
+>   metal / Hyperstack $2.50 / Crusoe $3.90** (Crusoe ships the only first-party ncu how-to). The
+>   ERR_NVGPUCTRPERM debt in §3's I.3 row is therefore payable now. Release: **sm_120 has native
+>   block-scaled FP4** (`mma.sync.m16n8k64.mxf4nvf4`) — which this repo's own A5 R3 row already
+>   demonstrated on 2026-07-04 (**NVFP4 20.43 dB vs MXFP4 18.74 dB = 1.48×**). Only NVFP4-**MMA
+>   throughput** stays B200-gated, exactly as §7 says.
+>
+> **And the correction that runs the other way — ERRATA-D was wrong and this repo proved it.**
+> ERRATA-D claimed the plan lacked analytical performance modelling, multi-GPU collectives, and host-side
+> overhead work. All three were **already here**: `utils/comms_calc.py` (~25 closed-form functions) +
+> `memory_math.py`; `ddp.py`/`zero1.py`/`fsdp.py` with **767 lines of green tests** and the written
+> `deploy/runbooks/A2_multigpu_nccl_bench.md`; and the A1 R1 ledger row whose root cause is *"955 kernel
+> launches/token + a `.item()` host-sync — 84% of the wall."* The revised, much narrower gaps are:
+> **cost-to-serve** ($/1M tokens from microbenchmarks), **running A2** rather than building it, and the
+> **RL-loop / Python-GIL** half of host-side work. **The durable rule: before writing "the plan lacks X",
+> grep the repo for X.** This corpus has now made that mistake twice — §3.3 once, ERRATA-D once.
+>
+> Two items from §3 that ERRATA-D endorses and the Desktop corpus does not carry: **the "debug 3 sabotaged
+> kernels" drill** — §3 calls it the best idea in the syllabus, and it is the cheapest possible rehearsal
+> for the live optimize-this-kernel round — and **the marketing fact-check habit** (FA4 *"first attention
+> kernel to break a petaflop"* is false as stated; FA3 FP8 hit ~1.2 PF on H100 in 2024). Keep both.
 > attention/GEMM frontier · serving/MoE/distributed · AI-written kernels/DSLs · hiring), each returning
 > dated primary sources tagged [VERIFIED]/[REPORTED]. Claims here carry the repo's [FACT]/[INFERENCE]
 > convention; a [FACT] below means a primary source was fetched or cross-corroborated on 2026-07-14.
