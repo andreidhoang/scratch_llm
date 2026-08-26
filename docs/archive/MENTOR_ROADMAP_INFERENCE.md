@@ -1,5 +1,13 @@
 # Inference + Kernel Engineering — the Merged Mentor Roadmap (one spine, one capstone)
 
+> ⚠️ **ERRATA-G binding (2026-08-26).** This document is a **pre-audit planning generation** and is
+> NOT current law. The sealed measure-first 60-day corpus governs (Desktop `plan/` docs + the memory
+> progress-tracker; stamp precedence F > E > D > C > B > body). Where this document assigns
+> sequencing, gates, or flagship artifacts, the sealed corpus supersedes it — the 2026-08-13 audit
+> falsified the KDA-decode-kernel flagship (five shipped implementations), and the K3-from-scratch
+> rebuild runs as the **post-gate season W9–W16**, with E001/E002 as its numerics CI. Full binding:
+> the ERRATA-G blocks in `docs/k3/ROADMAP.md` and `docs/k3/MERGED_KERNELS_K3_ROADMAP.md`.
+
 > **What this is — MERGED 2026-08-06.** The Vizuara Inference workshop and the Vizuara Kernel workshop
 > are **one discipline** at the 2026 frontier: both attack the single physical fact that *decode is
 > memory-bandwidth-bound (AI≈1) while prefill is compute-bound* (`PERFORMANCE_TRACK.md` §0). Every

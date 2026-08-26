@@ -22,6 +22,19 @@
 >    the interview language is CUDA C++, and every documented no-PhD frontier hire won with measured
 >    numbers in public. The output unit is unchanged: a ledger number defended aloud.
 
+> **⚠ ERRATA-G (2026-08-26) — the 08-11 "reality binding" above is itself superseded.** The
+> 2026-08-13 corpus audit falsified correction 1: the fused KDA decode kernel is NOT a novel flagship
+> (five shipped implementations exist — Moonshot FlashKDA, Qwen FlashQLA, FlashInfer
+> `fused_kda_decode`, vLLM's fused kernel, SGLang `cutedsl_kda`) and kernel-parity was demoted from
+> gate to by-product. **Current law is the sealed measure-first 60-day corpus** (Desktop plan docs +
+> memory; precedence F > E > D > C > B > body): trunk E001 (two-path divergence oracle) → measured
+> review of vLLM PR #45819 → PR opened ≤ 09-20 (G-C) → E2 rollout-vs-trainer divergence on
+> **Kimi-Linear-48B-A3B** (G-D ≤ 09-27) → day-60 audit 10-16. **What survives of this overlay now:**
+> §0's roofline-decomposition table and the node-pull rule live on as the daily teaching lens
+> (problem-first arcs); correction 2 (d20 demoted) stands. **Its sequencing is inert until W9** —
+> the K0–K10 build runs as the post-gate K3 SEASON (W9–W16) on owned math, with E001/E002 as its
+> numerics CI and the $5k budget revision (2026-08-25) funding its silicon.
+
 ---
 
 ## 0. First principles — why the merge is the correct move

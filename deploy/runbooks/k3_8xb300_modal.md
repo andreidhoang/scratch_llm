@@ -1,5 +1,10 @@
 # K9 runbook — serve the real Kimi K3 on 8×B300 (Modal + vLLM), measured by us
 
+> ⚠️ **ERRATA-G binding (2026-08-26).** Pre-audit planning generation — NOT current law. The sealed
+> measure-first corpus governs (Desktop `plan/` + memory tracker; precedence G > F > E > D > C > B >
+> body). K3-from-scratch = post-gate season W9–W16. Full binding: ERRATA-G blocks in
+> `docs/k3/ROADMAP.md` and `docs/k3/MERGED_KERNELS_K3_ROADMAP.md`.
+
 > Purpose: convert the hosting book's unverifiable claims (0.93 s TTFT · 92.1 tok/s ·
 > $190.13/M tokens · 27-min cold boot · "fp8 KV trap") into **measured-by-us** ledger entries
 > (`bench/RESULTS.md §K3` + `docs/k3/FACTS.md` S5/S6). Discipline: ADR-0012 — this runbook is

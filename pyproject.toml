@@ -86,6 +86,14 @@ ignore = ["E501"]  # line length enforced softly; long math/comments allowed
 # `_harness.py` lookup), so their E402 (import-not-at-top) is intentional too.
 "tests/kernels/test_flash_attention_triton.py" = ["E402", "I001"]
 "tests/kernels/test_flash_attention_fa3.py" = ["E402", "I001"]
+# E001/mastery instrument: `O` (output) and `I` (identity) are the symbols of the gated delta
+# rule as written in reference.py's docstring — `S_t = a_t (I - b_t k k^T) S_{t-1} + b_t k v^T`.
+# Here E741's premise is inverted: matching the equation is what makes these names unambiguous,
+# and equation-to-code correspondence is the whole point of the oracle. Scoped to these files
+# only — E741 still binds everywhere else, where `l`/`O`/`I` genuinely do read as `1`/`0`.
+"src/scratch_llm/mastery/*.py" = ["E741"]
+"tests/test_wy_identity.py" = ["E741"]
+"tests/test_e001_regression.py" = ["E741"]
 "bench/kernels/**/*.py" = ["E402"]
 "scripts/analyze_s35.py" = ["E402"]
 "scripts/f6_moe_ablation.py" = ["E402"]

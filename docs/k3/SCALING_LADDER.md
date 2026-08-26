@@ -1,5 +1,10 @@
 # THE SCALING LADDER — how frontier labs sequence ablations vs scaling laws, and our order
 
+> ⚠️ **ERRATA-G binding (2026-08-26).** Pre-audit planning generation — NOT current law. The sealed
+> measure-first corpus governs (Desktop `plan/` + memory tracker; precedence G > F > E > D > C > B >
+> body). K3-from-scratch = post-gate season W9–W16. Full binding: ERRATA-G blocks in
+> `docs/k3/ROADMAP.md` and `docs/k3/MERGED_KERNELS_K3_ROADMAP.md`.
+
 > Compiled 2026-07-31 from a 3-angle primary-source pass (DeepSeek + NVIDIA · Moonshot ·
 > Meta/Qwen/MiniMax/open-labs). Question answered: **architecture ablations first, or scaling
 > laws first?** Answer the evidence gives, with near-zero dissent: **calibration fit on a proven

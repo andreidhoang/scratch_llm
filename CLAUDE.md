@@ -10,6 +10,14 @@
 >
 > **Harness manual:** [`docs/CONTEXT_ENGINEERING.md`](docs/CONTEXT_ENGINEERING.md) explains why
 > every file under `.claude/` exists. Read it once.
+>
+> ⚠️ **Planning-docs binding (ERRATA-G, 2026-08-26).** The plan documents inside this repo
+> (`docs/k3/*`, `docs/FRONTIER_2026_*`, `docs/PERFORMANCE_TRACK.md`, `docs/IMPLEMENTATION_PLAN.md`,
+> `docs/MENTOR_ROADMAP_INFERENCE.md`) are **pre-audit generations — not current law**; each carries
+> an ERRATA-G stamp saying so. Current law = the sealed measure-first 60-day corpus
+> (`~/Desktop/plan/` + the memory progress-tracker; precedence G > F > E > D > C > B > body).
+> K3-from-scratch is the post-gate season (W9–W16). Do not schedule any `docs/k3` item in-window
+> except the four assets named in its ERRATA-G block.
 
 <!-- FOP:start (generated from cs336/FEINBERG_INTERVIEW_MAP.md — edit the 7 below, keep the markers) -->
 ## Frontier Operating Principles (FOP)
@@ -35,6 +43,23 @@
 **The one process metric: days on which something PUBLIC changed.** A commit to a repo with no public
 remote scores **zero**. Planning, audits, errata, and agent-written code that is not pushed score zero.
 Three consecutive zeros → drop everything and do the smallest public-change item.
+
+**Every task handed to the human ships as a DAILY TASK BRIEF — 10 mandatory fields, spec in
+`.claude/commands/op.md` § THE DAILY TASK BRIEF (Rev 5, 2026-08-18).** Order is fixed: **evidence →
+frame → why(mechanism) → where+why-that-machine → then the table**, and each task row carries when ·
+how · book anchor (`Vol N · Ch M`, canonical index in memory `measured-stack-book`) · mastery brick
+(⬛→🟨→🟦→🟩, artifact `mastery-ownership-tracker`) · measurement chain (what it measures, what consumes
+it later) · failure triage + shrink order. **A bare task table is a contract violation even when every
+acceptance criterion is correct** — issuing one is drift D-1. State the machine on every task even when
+it is "laptop CPU, $0", and say *why* that machine: rent when the hardware is the object of study, not
+when the object is algebra.
+
+**Day shape (Rev 2, 2026-08-19): morning deep block = Path K (kernels) · afternoon deep block =
+Path R (Anthropic-RL research) · evening ≤60′ job lane.** Still ONE public atom/day, owned by the
+gate-holding path (W1–W5 K, W6 R); the other block closes with a written trace. **Pre-atom-7
+exception: until E1 is public, a failed trunk morning commandeers the afternoon — R waits.** Spec +
+week×block map: memory `two-path-spec` · artifact `two-path-spec-k-r` · `.claude/commands/op.md`
+§ THE TWO-BLOCK DAY.
 
 **A day is well-formed iff all five hold:**
 
@@ -262,6 +287,17 @@ every load-bearing concept as something they must own, not just ship.
 > **PRR loop** — Navigator predicts COLD before the Driver reveals, one micro-concept per exchange,
 > teach-back gates advancement. The reset lesson (Lesson 0-R: silicon → memory wall → pallets →
 > roofline) is the canonical example of the depth bar.
+>
+> **ORDERING SUPERSEDED 2026-08-14 (user-set twice: 2026-08-13 in project memory `srp-tutoring-contract`,
+> reaffirmed verbally 2026-08-14 — *"you teach me first before ask me anything"*).** Withholding the
+> explanation pending an attempt **was tried and rejected**. The binding order is the **T-loop**: frame →
+> build from zero (code-anchored `file · func · line`) → worked **NEIGHBOR** example, never the target →
+> technique + trap → hand the target back → **then** predict → run → reconcile.
+> **Prediction precedes MEASUREMENT, not EXPLANATION.** PRR's prediction requirement is intact; only its
+> ordering relative to teaching is superseded. **Depth is the default; brevity is the exception the user
+> must ask for.** The mentor is scored on **M1–M4** at every close (`.claude/commands/op.md` §close):
+> M1 opened with a frame · M2 at least one L2 menu · M3 his prediction preceded every number, including
+> ones the agent already held · M4 explanations code-anchored where the code exists. Do not re-litigate.
 
 **Master understanding — the PRR loop (Predict → Run → Reconcile) [DEFAULT modality, 2026-07-05].**
 Internalization is a function of the **Navigator's retrieval effort**, not the Driver's explanation
@@ -468,5 +504,8 @@ kernels, KV-cache decode, real-precision) is exercised on the standing GPU as yo
 Track project state from the **GitHub remote**, never the local working tree alone — the user works across machines and pushes to GitHub, so a local clone may be stale.
 - **SHIPPED = green CI on the remote.** A DoD is shipped only when the GitHub Actions run for its commit concluded `success` on the working branch (`main`). A green *local* run is not shipped; an unpushed commit is not shipped.
 - **Evidence order:** CI run `success` → merged PR → commit on `main` within the day (ICT/+07) → local clone (last resort, may be behind).
-- Keep CI green from every push (`.github/workflows/ci.yml`, CPU). Private repo under `andreidhoang/`.
+- Keep CI green from every push (`.github/workflows/ci.yml`, CPU). **PUBLIC** repo under
+  `andreidhoang/` — verified 2026-08-26 (unauthenticated GitHub API returns 200), which closes
+  gate atom 1. The earlier "private repo" note here was stale; a push therefore *is* a public
+  change, and the Actions tab is public too.
 - When asked "did X ship / what's the state?", check the **remote + CI**, not local files. Cowork's `sprint-morning-brief` / `sprint-evening-verify` already do; Claude Code must too.

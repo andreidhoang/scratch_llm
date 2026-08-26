@@ -21,7 +21,7 @@ def _explicit_transition_product(q, k, v, log_alpha, beta, S0=None):
     O = torch.empty(T, dv, dtype=q.dtype)
     I = torch.eye(dk, dtype=q.dtype)
     for t in range(T):
-        M = I - beta[t] * torch.outer(k[t], k[t])          # dense, dk x dk
+        M = I - beta[t] * torch.outer(k[t], k[t])  # dense, dk x dk
         S = torch.exp(log_alpha[t]) * (M @ S) + beta[t] * torch.outer(k[t], v[t])
         O[t] = S.transpose(0, 1) @ q[t]
     return O, S

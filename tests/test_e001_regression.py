@@ -33,13 +33,13 @@ from __future__ import annotations
 import pytest
 import torch
 
-from scratch_llm.mastery.divergence import make_inputs, _rel
+from scratch_llm.mastery.divergence import _rel, make_inputs
 from scratch_llm.mastery.paths import chunked_wy
 
 # (log_gate, dtype, solve_dtype) -> measured rel_err_o from YOUR first --run.
 BASELINE: dict[tuple[float, str, str], float | None] = {
-    (0.0,  "float64",  "auto"): None,
-    (0.0,  "bfloat16", "auto"): None,
+    (0.0, "float64", "auto"): None,
+    (0.0, "bfloat16", "auto"): None,
     (-1.0, "bfloat16", "auto"): None,
 }
 
@@ -57,13 +57,13 @@ def _measure(log_gate: float, dtype: str, solve_dtype: str) -> float:
     rather than errors at collection time."""
     from scratch_llm.mastery.reference import recurrent_reference
 
-    q, k, v, la, b = make_inputs(_FIXED["T"], _FIXED["dh"], _FIXED["dh"],
-                                 log_gate, _FIXED["seed"])
+    q, k, v, la, b = make_inputs(_FIXED["T"], _FIXED["dh"], _FIXED["dh"], log_gate, _FIXED["seed"])
     O_ref, _ = recurrent_reference(q, k, v, la, b)
     dt = _DT[dtype]
     sd = None if solve_dtype == "auto" else _DT[solve_dtype]
-    O_c, _ = chunked_wy(q.to(dt), k.to(dt), v.to(dt), la.to(dt), b.to(dt),
-                        chunk_size=_FIXED["C"], solve_dtype=sd)
+    O_c, _ = chunked_wy(
+        q.to(dt), k.to(dt), v.to(dt), la.to(dt), b.to(dt), chunk_size=_FIXED["C"], solve_dtype=sd
+    )
     return _rel(O_c, O_ref)
 
 

@@ -26,6 +26,16 @@ preds="$(grep -c '1e-__' MASTERY_LEDGER.md 2>/dev/null || echo 0)"
 runs="$(ls results/*.json 2>/dev/null | wc -l | tr -d ' ')"
 
 echo "scratch_llm — ONE repo, ONE vehicle | branch ${branch} | uncommitted ${dirty} | remote ${pub}"
+
+# Stale-lock detector. An interrupted git write leaves .git/*.lock behind and every later git
+# call dies with "Unable to create '.git/index.lock'". Two were found on 2026-08-26 (19/08 21:24
+# and 21/08 11:27) and had been silently blocking git since. Report, never auto-delete: deleting
+# a lock a LIVE git process holds corrupts the index. Confirm no git is running, then remove.
+_locks="$(find .git -maxdepth 2 -name '*.lock' 2>/dev/null)"
+if [ -n "${_locks}" ]; then
+  echo "⚠ STALE GIT LOCK ▶ $(echo "${_locks}" | tr '\n' ' ')"
+  echo "   git writes are BLOCKED. Check nothing is live (ps ax | grep git), then: rm -f ${_locks}"
+fi
 echo "execution-mode=$(cat .claude/execution-mode 2>/dev/null || echo '?') · L2 is the DEFAULT posture (propose N variants, ranking hidden; human predicts; then measure)."
 echo "SEALED — agents never write these four: mastery/reference.py · the measurement harness · RL loss math · verifier logic + tolerances. Everything else is delegable and SHOULD be delegated."
 echo "E001 state — oracle: ${oracle} · ledger blanks: ${blanks} · predictions unwritten: ${preds} · result files: ${runs}"

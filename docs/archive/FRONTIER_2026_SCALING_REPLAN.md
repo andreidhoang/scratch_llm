@@ -1,5 +1,13 @@
 # Scaling from first principles — re-plan after two rejected fits (2026-08-11)
 
+> ⚠️ **ERRATA-G binding (2026-08-26).** This document is a **pre-audit planning generation** and is
+> NOT current law. The sealed measure-first 60-day corpus governs (Desktop `plan/` docs + the memory
+> progress-tracker; stamp precedence F > E > D > C > B > body). Where this document assigns
+> sequencing, gates, or flagship artifacts, the sealed corpus supersedes it — the 2026-08-13 audit
+> falsified the KDA-decode-kernel flagship (five shipped implementations), and the K3-from-scratch
+> rebuild runs as the **post-gate season W9–W16**, with E001/E002 as its numerics CI. Full binding:
+> the ERRATA-G blocks in `docs/k3/ROADMAP.md` and `docs/k3/MERGED_KERNELS_K3_ROADMAP.md`.
+
 Status: **analysis + decision recommendation**, research-grounded. Supersedes nothing; amends
 `FRONTIER_2026_SCALING_PROGRAM.md` (whose S3.5 "no third attempt" clause stands) and feeds the
 P5/d20 gate. Honesty labels per claim: **[measured]** = measured by us · **[reported]** = published

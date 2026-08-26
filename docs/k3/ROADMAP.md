@@ -16,6 +16,19 @@
 
 ---
 
+> **⚠ ERRATA-G (2026-08-26) — sequencing binding to the sealed 60-day corpus.** This track is the
+> **POST-GATE season (W9–W16)**, not an in-window lane. In-window (→ 2026-10-16) exactly four of its
+> assets are live, each inside an existing slot of the measure-first spine: **KDA_ALOG_MAPPING /
+> A18** → W4 gate-distribution measurement on a real checkpoint · **F10.1/F10.2's
+> chunkwise==recurrent==float64 contract** → E001/E002, the trunk itself (that contract, made public
+> and swept, IS experiment E1) · **serving Kimi-Linear-48B-A3B** → E2b measurement (W6, 1×H200 bf16,
+> budget rev 2026-08-25) · **HANDCRAFTED.md + `k3/core`** → quarry-K rebuild reps on the mastery
+> board. Everything else — mini pretrain ladder, SiTU, LatentMoE, Per-Head Muon, MXFP4 QAT, d20,
+> the 8×B300 runbook — waits for W9. This is the Moonshot pattern this document itself cites: **the
+> open intermediate artifact ships before the flagship rebuild** (their Kimi Linear = our E1 + E2 +
+> the vLLM PR). Rationale + audit trail: Desktop corpus ERRATA-B/C (2026-08-13) and the
+> progress-tracker memory.
+
 ## 0. Decision — build in THIS repo (monorepo), no new repo
 
 **Verdict: `scratch_llm` monorepo, new `k3` subpackage. Do not create a new repo.**

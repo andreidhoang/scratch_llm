@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 
 import torch
 
@@ -45,11 +45,11 @@ class Point:
     chunk_size: int
     seq_len: int
     d_head: int
-    rel_err_o: float          # ||O_chunked - O_ref|| / ||O_ref||,  vs fp64 reference
+    rel_err_o: float  # ||O_chunked - O_ref|| / ||O_ref||,  vs fp64 reference
     max_abs_err_o: float
     rel_err_state: float
-    cond_T_max: float         # H1 diagnostic
-    max_inv_a: float          # H2 diagnostic
+    cond_T_max: float  # H1 diagnostic
+    max_inv_a: float  # H2 diagnostic
     ref_norm: float
 
 
@@ -123,24 +123,42 @@ def sweep(
         for dh in d_heads:
             for lg in log_gates:
                 q, k, v, la, b = make_inputs(T, dh, dh, lg, seed, device, beta_scale)
-                O_ref, S_ref = reference_fn(q, k, v, la, b)   # fp64 oracle
+                O_ref, S_ref = reference_fn(q, k, v, la, b)  # fp64 oracle
                 for C in chunk_sizes:
                     for dn in dtypes:
                         dt = DTYPES[dn]
                         O_c, S_c, diag = chunked_wy(
-                            q.to(dt), k.to(dt), v.to(dt), la.to(dt), b.to(dt),
-                            chunk_size=C, return_diagnostics=True,
-                            solve_dtype=DTYPES.get(solve_dtype) if isinstance(solve_dtype, str) else solve_dtype,
+                            q.to(dt),
+                            k.to(dt),
+                            v.to(dt),
+                            la.to(dt),
+                            b.to(dt),
+                            chunk_size=C,
+                            return_diagnostics=True,
+                            solve_dtype=DTYPES.get(solve_dtype)
+                            if isinstance(solve_dtype, str)
+                            else solve_dtype,
                         )
-                        res.points.append(Point(
-                            log_gate=lg, dtype=dn, chunk_size=C, seq_len=T, d_head=dh,
-                            rel_err_o=_rel(O_c, O_ref),
-                            max_abs_err_o=(O_c.to(torch.float64) - O_ref.to(torch.float64)).abs().max().item(),
-                            rel_err_state=_rel(S_c, S_ref),
-                            cond_T_max=max(diag["cond_T"]) if diag["cond_T"] else float("nan"),
-                            max_inv_a=max(diag["max_inv_a"]) if diag["max_inv_a"] else float("nan"),
-                            ref_norm=O_ref.to(torch.float64).norm().item(),
-                        ))
+                        res.points.append(
+                            Point(
+                                log_gate=lg,
+                                dtype=dn,
+                                chunk_size=C,
+                                seq_len=T,
+                                d_head=dh,
+                                rel_err_o=_rel(O_c, O_ref),
+                                max_abs_err_o=(O_c.to(torch.float64) - O_ref.to(torch.float64))
+                                .abs()
+                                .max()
+                                .item(),
+                                rel_err_state=_rel(S_c, S_ref),
+                                cond_T_max=max(diag["cond_T"]) if diag["cond_T"] else float("nan"),
+                                max_inv_a=max(diag["max_inv_a"])
+                                if diag["max_inv_a"]
+                                else float("nan"),
+                                ref_norm=O_ref.to(torch.float64).norm().item(),
+                            )
+                        )
     return res
 
 
@@ -155,7 +173,7 @@ def verdict(res: SweepResult) -> dict:
         # H3 dies if fp64 divergence is well above machine eps anywhere.
         out["H3_precision_only"] = "SUPPORTED" if out["fp64_max_rel_err"] < 1e-11 else "REFUTED"
     if bf16:
-        by_gate = sorted(bf16, key=lambda p: -p.log_gate)      # 0.0 first, most negative last
+        by_gate = sorted(bf16, key=lambda p: -p.log_gate)  # 0.0 first, most negative last
         out["bf16_rel_err_by_gate"] = [(p.log_gate, p.rel_err_o) for p in by_gate]
         if len(by_gate) > 1:
             hi, lo = by_gate[0].rel_err_o, by_gate[-1].rel_err_o
@@ -165,18 +183,22 @@ def verdict(res: SweepResult) -> dict:
         es = [p.rel_err_o for p in bf16 if math.isfinite(p.cond_T_max)]
         if len(cs) > 2:
             out["corr_err_vs_condT"] = _pearson(
-                [math.log10(max(c, 1e-30)) for c in cs],
-                [math.log10(max(e, 1e-30)) for e in es])
+                [math.log10(max(c, 1e-30)) for c in cs], [math.log10(max(e, 1e-30)) for e in es]
+            )
             out["corr_err_vs_inv_a"] = _pearson(
                 [math.log10(max(p.max_inv_a, 1e-30)) for p in bf16],
-                [math.log10(max(p.rel_err_o, 1e-30)) for p in bf16])
+                [math.log10(max(p.rel_err_o, 1e-30)) for p in bf16],
+            )
     return out
 
 
 def _pearson(x, y):
     n = len(x)
     mx, my = sum(x) / n, sum(y) / n
-    num = sum((a - mx) * (b - my) for a, b in zip(x, y))
+    # strict=True: a length mismatch here would silently truncate to the shorter series and
+    # return a perfectly plausible correlation computed over the wrong set of points. In the
+    # file that adjudicates H1/H2/H3, a wrong-but-believable number is the worst failure mode.
+    num = sum((a - mx) * (b - my) for a, b in zip(x, y, strict=True))
     dx = math.sqrt(sum((a - mx) ** 2 for a in x))
     dy = math.sqrt(sum((b - my) ** 2 for b in y))
     return num / (dx * dy) if dx > 0 and dy > 0 else float("nan")

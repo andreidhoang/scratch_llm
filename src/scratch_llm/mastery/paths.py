@@ -24,6 +24,8 @@ is the point of this repo.
 
 from __future__ import annotations
 
+from typing import Literal, overload
+
 import torch
 
 
@@ -33,6 +35,38 @@ import torch
 # requires inverting a CxC triangular matrix.  Written here in pure PyTorch so
 # the MECHANISM is separable from any particular kernel implementation.
 # ---------------------------------------------------------------------------
+@overload
+def chunked_wy(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    log_alpha: torch.Tensor,
+    beta: torch.Tensor,
+    chunk_size: int = ...,
+    S0: torch.Tensor | None = ...,
+    *,
+    return_diagnostics: Literal[True],
+    solve_dtype: torch.dtype | None = ...,
+) -> tuple[torch.Tensor, torch.Tensor, dict]: ...
+
+
+@overload
+def chunked_wy(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    log_alpha: torch.Tensor,
+    beta: torch.Tensor,
+    chunk_size: int = ...,
+    S0: torch.Tensor | None = ...,
+    return_diagnostics: Literal[False] = ...,
+    solve_dtype: torch.dtype | None = ...,
+) -> tuple[torch.Tensor, torch.Tensor]: ...
+
+
+# The two @overload stubs above are TYPE-ONLY: they tell the checker that the return arity is
+# decided by `return_diagnostics`, which it cannot infer from the conditional return on its own.
+# The implementation signature and body below are unchanged.
 def chunked_wy(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -88,17 +122,19 @@ def chunked_wy(
         la, bc = log_alpha[s:e], beta[s:e]
 
         # a_t = prod_{i<=t} alpha_i, computed in log space (as every real kernel does)
-        a = torch.exp(torch.cumsum(la, dim=0))              # (C,)
-        b_hat = bc / a                                       # step 2: the rescaled write strength
+        a = torch.exp(torch.cumsum(la, dim=0))  # (C,)
+        b_hat = bc / a  # step 2: the rescaled write strength
 
-        B = bc.unsqueeze(1)                                  # (C,1)
+        B = bc.unsqueeze(1)  # (C,1)
         # Step 3: the CxC triangular system.  strictly-lower so it is unit-triangular.
         A = torch.tril(B * (kc @ kc.transpose(0, 1)), diagonal=-1)
         I = torch.eye(C, dtype=solve_dtype, device=device)
-        rhs = b_hat.unsqueeze(1) * vc - B * (kc @ S)         # (C, dv)
+        rhs = b_hat.unsqueeze(1) * vc - B * (kc @ S)  # (C, dv)
         U = torch.linalg.solve_triangular(
-            I + A.to(solve_dtype), rhs.to(solve_dtype),
-            upper=False, unitriangular=True,
+            I + A.to(solve_dtype),
+            rhs.to(solve_dtype),
+            upper=False,
+            unitriangular=True,
         ).to(dtype)
 
         # Step 4: outputs, two matmuls.  diagonal=0 -> o_t sees the update at t.
