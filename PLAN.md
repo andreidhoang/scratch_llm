@@ -92,3 +92,5 @@ Wall: 21:00.
 - AI-Infra hackathon: automated gate-check fires 04/09; ignore otherwise
 - Batch-2 applications (NVIDIA new-grad, DeepMind, Fireworks, Baseten…) when E002 is public
 - Vietnamese share-doc (`~/Desktop/ke_hoach_60_ngay_first_principles.html`) — regenerate only after E1
+- Kernel-path curriculum map: `docs/KERNEL_MASTERY_SPEC.md` (Vizuara workshop fully dissected 26/08,
+  live syllabus → our receipts/slots; skip verdict ×4; their week-order = free K3-season quarry skeleton)
