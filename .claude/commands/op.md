@@ -36,7 +36,7 @@ mandatory, in this order. The narrative fields (0–3) come **before** any table
 | # | Field | Rule |
 |---|---|---|
 | **0** | **EVIDENCE** | Probe before speaking. One line per claim with the grep/diff/number/URL behind it. Never "as of last session," never a relayed claim. |
-| **1** | **FRAME** | The object under study today, and **where today sits in the causal chain** (5 lines → E001 → atom 7 → applications → PR). One paragraph. Do **not** skip it because "he already knows" — the chain is the thing that makes the task bearable. |
+| **1** | **FRAME** | The object under study today, and **where today sits in the causal chain** (`5 dòng → E1 map → review #45819 + claim #48613 → PR vLLM → E2/K2 → seat` — the North Star chain, CLAUDE.md top). One paragraph. Do **not** skip it because "he already knows" — the chain is the thing that makes the task bearable, and it is where a hard problem's "why am I doing this" gets answered. |
 | **2** | **WHY — mechanism** | Name **what breaks downstream if today is skipped**, and which atom / gate item / JD line it serves. Motivation is not a why; a failure mode is. **If I cannot name the failure, the task is unjustified and gets cut.** |
 | **3** | **WHERE + WHY THAT MACHINE** | CPU or which GPU, which provider, $/hr, **and the rent-vs-algebra justification**. State it *even when the answer is "your laptop, $0"* — especially then, because that is the non-obvious case. Rule: *rent when the hardware is the object of study; don't when the object is algebra.* |
 | **4** | **WHEN** | Per-task timebox · the day's ONE binary outcome · the 21:00 wall · **days remaining to the next dated gate** (E1 public, atom 13 PR, day-60 audit). |
@@ -49,6 +49,14 @@ mandatory, in this order. The narrative fields (0–3) come **before** any table
 **Vietnamese is interleaved per field group, never appended.** The brief is depth-by-default; brevity is
 an exception he must ask for. **Ordering is fixed: frame → why → where → then the table.** A table that
 arrives first is drift D-1 even if fields 0–9 appear later in the message.
+
+**Rev 6 (2026-08-26) — production-first binding (operator redirect; PLAN.md header + CLAUDE.md
+"Production-first binding").** Field 8's FIRST entry is the **external consumer** (the upstream
+thread/PR/recipe/payer that consumes the number); a task that cannot name one is cut or backlogged.
+Every kernel/perf task closes in the **landed-PR evidence shape** (`docs/KERNEL_MASTERY_SPEC.md`
+§9.3: correctness gate first · same-hardware before/after + repro command · root-cause narrative ·
+scope honesty · not-a-duplicate · AI-disclosure) under the §9.2 variance regimen. The mastery-brick
+field (7) stays but never justifies a task by itself.
 
 **Rev 5.5 (2026-08-21) — D-1 covers ALL procedure-before-frame.** A reading plan, a setup block, a
 numbered procedure, or a component→chapter map placed before the frame is D-1 too. The frame must
@@ -78,7 +86,7 @@ quarry-R 15′ → R's week item; **RL loss math is L0 — his hand, paper first
 harness.** Evening ≤60′ = job lane → push before 21:00 → close. **Still ONE public atom per day**
 (ERRATA-E untouched) — owned by the path holding the nearest gate (W1–W5 K · W6 R); the other block
 closes with a written trace, no ship requirement. **PRE-ATOM-7 EXCEPTION: until E1 is public
-(≤08-24), a morning that fails to close the trunk atom hands the afternoon to the trunk — R waits.**
+a morning that fails to close the trunk atom hands the afternoon to the trunk — R waits.**
 Field 4 (WHEN) of every task names its block: SÁNG-K / CHIỀU-R / TỐI-job.
 
 **PER-PATH EVIDENCE TRAILS (2026-08-19):** K's trace = code/measurements/URLs (probe: reference.py
@@ -88,7 +96,7 @@ committed ⇒ the R block did not close, regardless of how the afternoon felt. B
 the same probe (`git log -- <path>`), so path progress is always evidence, never recollection.
 
 ## measure
-**No prediction, no run.** Verify Row 001's prediction cells contain no `1e-__` before executing anything.
+**No prediction, no run.** Verify `tests/test_e001_regression.py::PREDICTED` has no `None` entries before executing anything. (Changed 29/08: predictions moved out of MASTERY_LEDGER's markdown blanks into that dict, because a pre-registration needs a commit timestamp to be worth anything.)
 
 ```bash
 # gate axis — separates H2 from H3.  |gate|max x C = 1.0 x 64 = 64 < 88  ✔
@@ -155,6 +163,11 @@ agreement at `log_gate=0.0`, which is prediction #1.
 | **T4** | **Technique + trap** | The invariant that generalizes, and the trap that yields a plausible-looking wrong answer. |
 | **T5** | **Hand the target back** | With an acceptance criterion he can check himself. |
 | **T6** | **Predict → run → reconcile** | *Only now.* His written prediction precedes every measurement, **including any number the agent already holds**. Depth lands as gap-reconciliation. |
+
+**Rev 6.1 (2026-08-26): the T-loop teaches through the Altitude Ladder A0–A4** (`docs/
+KERNEL_MASTERY_SPEC.md` §10.2: A0 production frame → A1 forcing constraint → A2 real code → A3 bytes/
+roofline → A4 one measured number) — altitudes are CONTENT structure inside T1–T6, never a new
+interaction order; a concept is presented only when all five are touched or a deferral is named.
 
 **Ordering, settled — do not re-litigate.** Teach first; predict before **measurement**, not before
 **explanation**. `CLAUDE.md`'s 2026-07-05 PRR note is superseded on ordering only; its prediction

@@ -19,13 +19,21 @@ case "$vis" in
 esac
 
 # ---- E001 instrument state, computed ------------------------------------------------------------
+# 29/08: predictions moved OUT of MASTERY_LEDGER.md (markdown blanks are not pre-registration)
+# and INTO tests/test_e001_regression.py::PREDICTED, where the commit timestamp proves ordering.
+# Count the dicts, not the prose.
+_reg="tests/test_e001_regression.py"
 oracle="WRITTEN"
 grep -q "NotImplementedError" src/scratch_llm/mastery/reference.py 2>/dev/null && oracle="STUB"
-blanks="$(grep -c '________' MASTERY_LEDGER.md 2>/dev/null || echo 0)"
-preds="$(grep -c '1e-__' MASTERY_LEDGER.md 2>/dev/null || echo 0)"
+# match only unfilled dict ENTRIES ("): None"), never the "float | None" type annotation
+preds="$(awk '/^PREDICTED/,/^}/' "$_reg" 2>/dev/null | grep -c '): None' || echo 0)"
+base="$(awk '/^BASELINE/,/^}/' "$_reg" 2>/dev/null | grep -c '): None' || echo 0)"
+grep -q '^TOL_RATIO.*None' "$_reg" 2>/dev/null && base=$((base + 1))
 runs="$(ls results/*.json 2>/dev/null | wc -l | tr -d ' ')"
 
 echo "scratch_llm — ONE repo, ONE vehicle | branch ${branch} | uncommitted ${dirty} | remote ${pub}"
+echo "PLAN ▶ PLAN.md (repo root) is the ONLY plan — production-first, fork resolved (X) 26/08. Read it before building; deep detail: docs/KERNEL_MASTERY_SPEC.md (§9 = production operating system)."
+echo "VISION ▶ 5 dòng → E1 map → review #45819 + claim #48613 → PR vLLM → E2/K2 → seat. Every task names its link (rule 7). Why-depth: CLAUDE.md North Star · wall-map artifact (5 min, VN)."
 
 # Stale-lock detector. An interrupted git write leaves .git/*.lock behind and every later git
 # call dies with "Unable to create '.git/index.lock'". Two were found on 2026-08-26 (19/08 21:24
@@ -38,26 +46,35 @@ if [ -n "${_locks}" ]; then
 fi
 echo "execution-mode=$(cat .claude/execution-mode 2>/dev/null || echo '?') · L2 is the DEFAULT posture (propose N variants, ranking hidden; human predicts; then measure)."
 echo "SEALED — agents never write these four: mastery/reference.py · the measurement harness · RL loss math · verifier logic + tolerances. Everything else is delegable and SHOULD be delegated."
-echo "E001 state — oracle: ${oracle} · ledger blanks: ${blanks} · predictions unwritten: ${preds} · result files: ${runs}"
+echo "E001 state — oracle: ${oracle} · PREDICTED unset: ${preds}/3 · BASELINE+TOL unset: ${base}/4 · result files: ${runs}"
+
+# ---- hardware, COMPUTED — the repo asserted a GPU it does not have until 29/08 -------------------
+if command -v nvidia-smi >/dev/null 2>&1; then
+  echo "GPU ▶ $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1) · ncu: $(command -v ncu >/dev/null 2>&1 && echo yes || echo NO)"
+else
+  echo "GPU ▶ NONE on this host (no nvidia-smi; nvcc/ncu/nsys absent too — no local compile gate). Every kernel/profile rung is RENTAL-gated — not '\$0 on the standing card'. 5090 KVM vms_enabled ≈\$0.33/hr is the ncu path; RunPod/Modal/Vast-docker are ncu-BLOCKED. Law: every rental names its measurement + consumer (PLAN.md)."
+  echo "ARCH ▶ Route rungs by the KERNEL'S TARGET ARCH, never by the biggest card (PLAN.md § arch-routing, 30/08). sm_120 does NOT load on sm_90; a Triton recompile is a different kernel instance. 4 of 5 ncu-debt metrics in bench/ sat 57 days misfiled to 'the H100 day' — they are sm_120, \$0.33/hr. Same CC != same card: ledger rows are 70 SMs/0.551 TB/s, a 5090 is ~170 SMs/~1.8 TB/s — re-run R0 to re-anchor before comparing."
+fi
+[ -d "$HOME/Desktop/oss/fla" ] && echo "OSS ▶ ~/Desktop/oss/{fla,vllm} cloned — read upstream FIRST-PARTY, never from memory. Dispatch findings F1-F4: spec §12.2."
 
 # ---- name the ONE next action from that state ---------------------------------------------------
 if [ "$vis" = "true" ]; then
   echo "NEXT ▶ make the remote public. Nothing else today outranks it: legibility multiplies evidence, and it is currently 0."
-elif [ "$blanks" -gt 0 ] && [ "$oracle" = "STUB" ]; then
-  echo "NEXT ▶ Row 000 derivations on paper (D1 intensity · D2 dependency chain · D3 what chunking buys/costs), THEN the ~5 lines of recurrent_reference, then --self-test."
-elif [ "$oracle" = "STUB" ]; then
-  echo "NEXT ▶ write recurrent_reference (~5 lines; equation is in its docstring), then: python -m experiments.e001_gate_sweep --self-test"
-elif [ "$preds" -gt 0 ]; then
-  echo "NEXT ▶ write the three predictions + falsifier in MASTERY_LEDGER.md Row 001. NO PREDICTION, NO RUN."
+elif [ "$oracle" = "STUB" ] || [ "$preds" -gt 0 ]; then
+  echo "NEXT ▶ ONE commit: the ~5 lines of recurrent_reference (equation is in its docstring) + the 3 PREDICTED values in tests/test_e001_regression.py. Same commit = the timestamp proves prediction preceded measurement. Then: python -m experiments.e001_gate_sweep --self-test"
 elif [ "$runs" -eq 0 ]; then
   echo "NEXT ▶ python -m experiments.e001_gate_sweep --run   (gate axis; separates H2 from H3)"
+elif [ "$base" -gt 0 ]; then
+  echo "NEXT ▶ fill BASELINE ×3 + TOL_RATIO from the run, plus the one-line tolerance argument. That turns a script into a regression gate — which is the artifact class the JDs ask for."
 else
-  echo "NEXT ▶ conditioning axis (--chunks / --beta-scale), then the cost axis (--solve-dtype), then figures + write-up + the #42960 comment."
+  echo "NEXT ▶ conditioning axis (--chunks / --beta-scale), then the cost axis (--solve-dtype, incl. tf32 emulation per F2), then the adjudicating review on vLLM #45819 + the harness claim-comment on #48613 (PLAN.md lane 1 — the clock is external)."
 fi
 
 # ---- the pre-registration seal: printed ONLY while it can still be violated ----------------------
+# NARROWED 29/08: test_wy_identity.py imports chunked_wy ONLY -- it never touches reference.py, and
+# its assertion is a BOUND (rel < 1e-10), printed only on failure. It leaks a bound, not a value.
 if [ "$preds" -gt 0 ]; then
-  echo "SEAL ▶ do NOT run 'pytest tests/test_wy_identity.py' yet — it asserts fp64 agreement at log_gate=0.0, which IS prediction #1. Predict first, then it is free."
+  echo "SEAL ▶ PREDICTED still has blanks. 'pytest tests/test_wy_identity.py' asserts rel < 1e-10 in fp64 — a bound overlapping prediction #1's range, so predict first. It does NOT import reference.py; a full 'pytest -m \"not gpu\"' sweep collects it and leaks only that bound."
 fi
 
 # ---- verified operating envelope: cheaper to print than to rediscover at 23:00 -------------------

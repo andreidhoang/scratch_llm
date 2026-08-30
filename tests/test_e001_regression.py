@@ -36,6 +36,16 @@ import torch
 from scratch_llm.mastery.divergence import _rel, make_inputs
 from scratch_llm.mastery.paths import chunked_wy
 
+# (log_gate, dtype, solve_dtype) -> what you PREDICT rel_err_o will be, written and
+# committed BEFORE the first --run. This dict is the pre-registration: git's timestamp
+# on the commit that fills it is the proof the prediction preceded the measurement, which
+# a markdown blank can never be. Order of magnitude is the claim -- 1e-15, not 1.7e-15.
+PREDICTED: dict[tuple[float, str, str], float | None] = {
+    (0.0, "float64", "auto"): None,
+    (0.0, "bfloat16", "auto"): None,
+    (-1.0, "bfloat16", "auto"): None,
+}
+
 # (log_gate, dtype, solve_dtype) -> measured rel_err_o from YOUR first --run.
 BASELINE: dict[tuple[float, str, str], float | None] = {
     (0.0, "float64", "auto"): None,
