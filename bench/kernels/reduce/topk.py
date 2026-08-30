@@ -35,7 +35,9 @@ from _harness import Roofs, bench_ms, provenance_line, spread_pct  # noqa: E402
 sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
 from scratch_llm.kernels.reduce.topk import fused_softmax_topk, topk_last_dim  # noqa: E402
 
-# The ncu metric this rung would inspect on the H100 day (counters blocked here).
+# The ncu metric this rung would inspect (counters blocked here). Discharge on sm_120 + counters
+# (KVM 5090) — NOT the H100 day this was misfiled to: a Hopper recompile is a different kernel
+# instance, so its stall profile would not discharge the sm_120 claim.
 NCU_DEBT = "launch__waves_per_multiprocessor + warp state 'No Eligible' (dependent-reduction stall)"
 
 
@@ -118,7 +120,7 @@ def run(m: int, n: int, k: int, dtype: torch.dtype) -> None:
         f"{twopass_bytes / fused_bytes:.2f}x less ideal HBM traffic "
         f"({twopass_bytes / 1e6:.1f}MB -> {fused_bytes / 1e6:.1f}MB)"
     )
-    print(f"# ncu-debt (blocked here; H100 day): {NCU_DEBT}")
+    print(f"# ncu-debt (blocked here; discharge on sm_120 + counters): {NCU_DEBT}")
 
 
 def _parse_dtype(s: str) -> torch.dtype:

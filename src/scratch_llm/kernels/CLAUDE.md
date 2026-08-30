@@ -93,11 +93,15 @@ has (a) an oracle-first correctness test, (b) a measured roofline line in
 ---
 
 > **MODE SWITCH ([ADR-0013](../../../docs/adr/ADR-0013-execution-mode-full-delegation.md)).** This
-> file describes the **`learn`-mode** contract. When `.claude/execution-mode` is **`delegate`**
-> (current since 2026-07-03), agents implement kernel bodies end-to-end; what survives is
-> oracle-first tests written by an independent context (bench-writer), the adversarial
-> kernel-ship-reviewer gate, and the profile-DoD. The sections below apply as written only in
-> `learn` mode; in `delegate` mode read them as the *study syllabus* for the post-hoc mastery pass.
+> file describes the **`learn`-mode** contract. When `.claude/execution-mode` is **`delegate`**,
+> agents implement kernel bodies end-to-end; what survives is oracle-first tests written by an
+> independent context (bench-writer), the adversarial kernel-ship-reviewer gate, and the
+> profile-DoD. The sections below apply as written only in `learn` mode; in `delegate` mode read
+> them as the *study syllabus* for the post-hoc mastery pass.
+>
+> **Current mode: `learn`** (root `CLAUDE.md`; `.claude/execution-mode` verified 30/08). The line
+> here previously read "`delegate` (current since 2026-07-03)", which contradicted the root
+> constitution — corrected 30/08. Read the file, never this sentence, if they disagree again.
 
 > **Why this file exists.** In the CUDA-for-Deep-Learning kernel sprint, **you reconstruct the kernel
 > from blank; agents do everything *around* it.** This isn't a preference: copying a kernel — from the

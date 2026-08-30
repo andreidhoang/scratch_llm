@@ -3,7 +3,10 @@
 > A2 kernel optimization, standing GPU sm120 (RTX PRO 4000 Blackwell, 0.551 TB/s HBM, 72 TF/s bf16,
 > ridge ≈131 FLOP/byte). Triton-primary (ADR-0011). Every number `[FACT]` in `bench/RESULTS.md`,
 > workflow-built + adversarially verified + main-thread gpu-tested (79 gpu tests). ncu blocked on this
-> box → bounds established by achieved-vs-measured-peak % + nsys; per-kernel ncu-debt for the H100 day.
+> box → bounds established by achieved-vs-measured-peak % + nsys; per-kernel ncu-debt discharged on
+> **sm_120 + counters** (KVM 5090 ~$0.33/hr), NOT the H100 day it was misfiled to until 2026-08-30 —
+> these kernels are sm_120 and a Hopper recompile is a different kernel instance. Only the WGMMA
+> tensor-pipe metric is genuinely Hopper. (The "standing GPU" above is also gone — see PLAN.md.)
 
 ## 1. The one idea: four of five kernels are memory-bound forever
 

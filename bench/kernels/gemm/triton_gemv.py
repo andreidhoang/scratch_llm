@@ -28,8 +28,9 @@ from _harness import Roofs, bench_ms, provenance_line, spread_pct, waves  # noqa
 sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
 from scratch_llm.kernels.gemm.triton.gemv import gemv_blockrow, gemv_naive, gemv_split  # noqa: E402
 
-# The ncu section this kernel would inspect on the H100 day (counters BLOCKED on this box,
-# ERR_NVGPUCTRPERM): a GEMV lives or dies on load efficiency, so the sector/request ratio is the one.
+# The ncu section this kernel would inspect (counters BLOCKED on this box, ERR_NVGPUCTRPERM): a GEMV
+# lives or dies on load efficiency, so the sector/request ratio is the one. Discharge on sm_120 +
+# counters (KVM 5090) — NOT the H100 day this was misfiled to; see kernel_roofline.py routing note.
 NCU_DEBT = "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum / requests (sectors/request, ideal 4 = fully coalesced)"
 
 
@@ -105,7 +106,7 @@ def run(shapes: list[tuple[int, int]], dtype: torch.dtype) -> None:
         "\n# legend: %HBM = GB/s / measured-HBM-peak (absolute headroom); %mv vs torch.mv; "
         "wv = CTA waves over SMs (* under-fills once); ±% = p20–p80 spread (! >5% clock-noisy)."
     )
-    print(f"# ncu-debt (blocked on this box; H100 day): {NCU_DEBT}")
+    print(f"# ncu-debt (blocked on this box; discharge on sm_120 + counters): {NCU_DEBT}")
 
 
 def _parse_dtype(s: str) -> torch.dtype:

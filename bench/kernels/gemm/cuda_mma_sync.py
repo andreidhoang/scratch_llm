@@ -12,7 +12,12 @@ reduced-precision reduction OFF, the fairest apples-to-apples proxy.
 ncu-debt (blocked here — ERR_NVGPUCTRPERM, unprivileged): the shared-load bank-conflict count
 (l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum, target ~0) is UNMEASURABLE on this box.
 The XOR swizzle's correctness is argued structurally (see the kernel header + the printout below);
-the metric is recorded for the H100 day, not claimed as measured.
+the metric is recorded, not claimed as measured.
+
+Discharge on **sm_120 silicon with counters enabled** (a `vms_enabled` KVM 5090, ~$0.33/hr) — NOT
+the H100 day, which this was misfiled to on 2026-07-04 and which cannot discharge it even in
+principle: this kernel is built `-arch=sm_120` and a compute_120 cubin does not load on sm_90 (PTX
+compat is forward-only). The bank-conflict claim is about THIS compilation on THIS arch.
 """
 
 from __future__ import annotations
@@ -73,7 +78,8 @@ def main() -> None:
     print(f"# %-of-72-TF-bf16  : {100 * tf / _BF16_PEAK_TF:5.1f}%")
     print(
         "# ncu-debt: l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum ~0 "
-        "(UNMEASURABLE here — ERR_NVGPUCTRPERM; swizzle correctness is structural, H100-day metric)"
+        "(UNMEASURABLE here — ERR_NVGPUCTRPERM; swizzle correctness is structural; discharge on "
+        "sm_120 + counters, NOT H100 — compute_120 does not load on sm_90)"
     )
 
     del a, b, out, ref

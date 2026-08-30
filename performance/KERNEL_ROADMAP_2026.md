@@ -182,7 +182,7 @@ product = autonomous AI GPU-performance-engineer agents [FACT]; sponsor identity
 | I.0 CPU parallelism (SIMD/threads/OoO) | mental model | not built | **Steal as a 1-day awareness drill** (P0-Q6): AVX sum vs np.sum, why GPUs differ. Interview-adjacent, low priority |
 | I.1 Roofline lab | predict-then-measure | A2 R0 harness; 0.55 TB/s / 72 TF/s peaks measured; constitution FOP-3 | Done, deeper than theirs |
 | I.2 CUDA model + GPU puzzles | first kernels, read SASS | A2 R1–R4 GEMV→softmax→RMSNorm→TopK ladder, 96–100% HBM | Done; SASS-reading reps continue in P0 |
-| I.3 Transpose ladder (coalescing/banks/occupancy) | Nsight lab | equivalent rungs measured; **ncu blocked on standing box** (ERR_NVGPUCTRPERM) | ncu-debt rides the H100 day (P1) |
+| I.3 Transpose ladder (coalescing/banks/occupancy) | Nsight lab | equivalent rungs measured; **ncu blocked** (ERR_NVGPUCTRPERM) | **ncu-debt is sm_120-bound — KVM 5090 ~$0.33/hr, NOT the H100 day (P1) it was misfiled to until 2026-08-30** |
 | II.4–5 GEMM worklog (1.3%→36.5%→93.7% cuBLAS) | Simon Boehm arc (verified numbers: kernel-1 1.3% → warptiling 93.7%, A6000 FP32 [FACT]) | A2 R5/R6 GEMM 134% of cuBLAS-proxy on sm120; CUDA C++ smem GEMM built | Done (yours is tensor-core-era; theirs is FP32/SGEMM pedagogy) |
 | II.6 WMMA tensor-core GEMM | WMMA beats SIMT | A3 R0–R2: 4.1%→38.9%→81.9% cuBLAS (mma.sync + wmma) | Done to 82%; the 94%+ tier is WGMMA/H100 = P1 |
 | III.7 Profiling + debug 3 sabotaged kernels | pro NCU workflow | profiling discipline everywhere; **sabotage drills absent** | **Steal — best idea in their syllabus** → P0-Q4 standing drill |
@@ -440,7 +440,7 @@ Building viz code = Mode-1 delegate (teaching aid, not the tested skill).
 | When | Milestone | Evidence produced |
 |---|---|---|
 | Jul 15 → ≈ Aug 1 (dual-block) | **P0.5 Rebuild Ladder L0–L8** (`/rebuild`, mastery/, from blank) + P0 quarry daily | every core kernel re-typed by the human vs oracle + ledger; teach-backs 4/89 → ≥30/89; diff-defend notes |
-| ≈ Aug 1–2 (post-ladder) | **P1 H100 day** — now the human hand-writes the WGMMA upgrade from THEIR L5 GEMM (agent version = reference-after-attempt) | ≥80%-cuBLAS WGMMA GEMM + FA3-sight number, ncu-debt cleared — numbers the human can defend cold |
+| ≈ Aug 1–2 (post-ladder) | **P1 H100 day** — now the human hand-writes the WGMMA upgrade from THEIR L5 GEMM (agent version = reference-after-attempt) | ≥80%-cuBLAS WGMMA GEMM + FA3-sight number — numbers the human can defend cold. **(30/08: "ncu-debt cleared" REMOVED from this DoD — 4 of 5 metrics are sm_120 and clear on the $0.33/hr KVM, not here; only WGMMA tensor-pipe util belongs to this day.)** |
 | ≈ Aug 6–8 | **P2 B200 day** | tcgen05/CuTe-DSL/NVFP4/FA4 ledger rows + worklog post |
 | from ≈ Aug 12 (niche re-check at open) | **P3 DELTA** — human-typed by construction; the ladder was its training camp | the niche kernel vs FLA baseline, roofline-placed, quality-evaluated |
 | Sep, parallel with applications | **P4 extraction volley** | FLA/vLLM PR merged-or-in-review · public worklog series · torch-custom-op CI · comp submission if open |

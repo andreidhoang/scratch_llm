@@ -24,9 +24,12 @@ SRAM. We print both the analytic byte ledger (exact) and the measured latencies 
 and never conflate them.
 
 Triton owns the CUDA-level detail (coalescing, float4 vectorization, SMEM bank-conflict swizzle) — see
-the kernel docstring. ncu is blocked here (ERR_NVGPUCTRPERM); the metric to discharge on the H100 day
-is ``l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum / requests`` (sectors/request → coalescing) plus
+the kernel docstring. ncu is blocked here (ERR_NVGPUCTRPERM); the metric to discharge is
+``l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum / requests`` (sectors/request → coalescing) plus
 ``sm__throughput`` Memory% (Speed-of-Light: confirm the kernel is DRAM-bound, not launch-bound).
+Discharge on **sm_120 + counters** (KVM 5090, ~$0.33/hr) — NOT the H100 day this was misfiled to:
+Hopper would recompile to different SASS and different autotune configs, i.e. a different kernel
+instance, which does not discharge a claim made about this one.
 
 Run on the GPU box:  PYTHONPATH=../../src python -m bench.kernels.reduce.softmax   (--help for shape overrides)
 """

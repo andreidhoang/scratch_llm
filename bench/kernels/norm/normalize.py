@@ -49,7 +49,8 @@ from _harness import Roofs, bench_ms, provenance_line, spread_pct  # noqa: E402
 sys.path.insert(0, str(_BENCH_ROOT.parent / "src"))
 from scratch_llm.kernels.norm.normalize import layernorm_triton, rmsnorm_triton  # noqa: E402
 
-# The ncu metric the raw-CUDA float4 variant would inspect on the H100 day (counters blocked here).
+# The ncu metric the raw-CUDA float4 variant would inspect (counters blocked here). Discharge on
+# sm_120 + counters (KVM 5090) — NOT the H100 day this was misfiled to; see kernel_roofline.py.
 NCU_DEBT = "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum / requests (sectors/request, ideal 4 = fully coalesced 128-bit loads)"
 
 
@@ -163,7 +164,7 @@ def run(ns: tuple[int, ...], m: int) -> None:
             f"{n:>7} {rms_gbps:>9.1f} {100.0 * rms_gbps * 1e9 / roofs.bw_bytes_s:>8.1f}% "
             f"{ln_gbps:>9.1f} {100.0 * ln_gbps * 1e9 / roofs.bw_bytes_s:>8.1f}% {faster:>10.1f}%"
         )
-    print(f"\n# ncu_debt (blocked here; discharged on the H100 day): {NCU_DEBT}")
+    print(f"\n# ncu_debt (blocked here; discharge on sm_120 + counters): {NCU_DEBT}")
 
 
 if __name__ == "__main__":

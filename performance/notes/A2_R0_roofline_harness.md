@@ -19,7 +19,17 @@ roofline arithmetic, already CPU-tested in `src/scratch_llm/bench/roofline.py`):
 unavailable. Re-base (documented in the module as `A2_ncu_debt`, 5 registered metrics): a kernel's
 bound is established by **achieved-vs-measured-peak %** (this harness) + **nsys** for launch/timeline;
 each A2 kernel names the ncu metric it WOULD inspect (sectors/request, bank conflicts, warp stalls,
-tensor-pipe util), and the **H100 rental day** — where counters are enabled — discharges the list.
+tensor-pipe util).
+
+**Routing corrected 2026-08-30.** The list was filed against "the H100 rental day" and sat 57 days.
+**4 of the 5 are sm_120-bound and Hopper cannot discharge them even in principle:** the CUDA rungs are
+`-arch=sm_120` (compute_120 does not load or JIT on sm_90 — PTX compat is forward-only), and the
+Triton rungs would only run on Hopper by recompiling to different SASS + autotune configs, i.e. a
+different kernel instance. Only tensor-pipe util (WGMMA) is genuinely Hopper. **Route ncu-debt by the
+kernel's target arch, never by the largest card available** — the discharging card is a `vms_enabled`
+KVM 5090 (~$0.33/hr), available now. Same compute capability ≠ same card: these rows are 70 SMs /
+0.551 TB/s, a 5090 is ~170 SMs / ~1.8 TB/s, so re-run R0 first to re-anchor peaks; the counter claims
+and the %-of-peak method transfer, the absolute numbers do not.
 
 ## Measured (2026-07-04, `bench/kernel_roofline.py`)
 
@@ -31,6 +41,7 @@ tensor-pipe util), and the **H100 rental day** — where counters are enabled �
 - Artifacts: `bench/a2_roofline.{csv,png}`.
 
 **Verdict — SHIPPED.** The A2 measurement spine reproduces the baseline and places kernels on the
-roofline with mem/cmp classification + CSV/plot; the ncu gap is documented as debt for the H100 day.
-Ready for R1 (GEMV ladder). The R1–R6 CUDA-core kernels are sm_120-runnable; the §4.1–4.6 WGMMA/TMA/FP8
-rungs are H100-code-only (rental runbook).
+roofline with mem/cmp classification + CSV/plot; the ncu gap is documented as debt discharged on
+sm_120 + counters (4 of 5) and Hopper (tensor-pipe only). Ready for R1 (GEMV ladder). The R1–R6
+CUDA-core kernels are sm_120-runnable; the §4.1–4.6 WGMMA/TMA/FP8 rungs are H100-code-only (rental
+runbook).

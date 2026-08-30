@@ -33,7 +33,8 @@ Done (2026-07-04, R4.5+R4.6, A1 CLOSED): MLA toy (mla.py, weight-absorption iden
 Next action (A2 R0 — profiler + roofline harness): ncu automation is BLOCKED on this box
   (ERR_NVGPUCTRPERM, unprivileged) → re-base on nsys traces + CUDA-event timing + analytic
   bytes/FLOPs vs measured peaks (0.55 TB/s, 72 TF/s); reproduce the bench/RESULTS.md R0 baseline; a
-  per-kernel "ncu debt" list feeds the H100 rental runbook. Then A2 R1 GEMV ladder (naive→coalesced→
+  per-kernel "ncu debt" list discharges on an sm_120 KVM (~$0.33/hr) — NOT the H100 runbook it was
+  filed to until 2026-08-30; Hopper cannot discharge an sm_120 claim. Then A2 R1 GEMV ladder (naive→coalesced→
   vectorized float4, target >80% of 0.55 TB/s) → R2 softmax → R3 RMSNorm → R4 TopK → R5/R6 GEMM.
 Done (2026-07-04, R4.4): CUDA-graph decode over the fixed-address paged pool — serving/cudagraph.py
   CudaGraphDecoder (manual torch.cuda.CUDAGraph capture; the paged kernel's fixed (B,H) grid +

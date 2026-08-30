@@ -7,9 +7,25 @@ R0 gate is reproduction of the `bench/RESULTS.md` R0 baseline (~0.55 TB/s HBM, ~
 
 **ncu is BLOCKED on this box** (`ERR_NVGPUCTRPERM`, unprivileged container) — so the Speed-of-Light
 / MemoryWorkloadAnalysis / bank-conflict counters the A2 spec's ncu command would give are recorded
-as **ncu-debt** (see `A2_ncu_debt` below): each A2 kernel names the ncu metric it WOULD inspect, and
-the H100 rental day (where counters are enabled) discharges the list. In the meantime a kernel's
-bound is established by achieved-vs-measured-peak % (this harness) + nsys traces for launch/timeline.
+as **ncu-debt** (see `A2_ncu_debt` below): each A2 kernel names the ncu metric it WOULD inspect. In
+the meantime a kernel's bound is established by achieved-vs-measured-peak % (this harness) + nsys
+traces for launch/timeline.
+
+**Routing (CORRECTED 2026-08-30 — these metrics were misfiled to "the H100 day" from 2026-07-04).**
+Route ncu-debt by the KERNEL'S TARGET ARCH, never by the largest card available. The A2/A3/A4 rungs
+are sm_120: the CUDA rungs are built `-arch=sm_120` and a compute_120 cubin/PTX does not load or JIT
+on sm_90 at all (PTX compat is forward-only), and the Triton rungs would only run on Hopper by
+RECOMPILING — different SASS, different autotune configs — so H100 counters would describe a
+different kernel instance, not discharge these claims. `BankConflicts ~= 0 after XOR swizzle` is a
+claim about THAT compilation on THAT arch. **Only sm_120 silicon with counters enabled discharges
+it** — a `vms_enabled` KVM 5090 (~$0.33/hr), not a Hopper day. `TensorPipe` below is the one genuine
+H100 item (WGMMA util); §4.1-4.6 WGMMA/TMA/FP8 (sm_90a) and tcgen05 (sm_100a) stay correctly routed.
+
+**A rented 5090 is the same compute capability, NOT the same card.** These rows were measured on an
+RTX PRO 4000 Blackwell (sm120, 70 SMs, 0.551 TB/s / 72.1 TF/s); a 5090 is ~170 SMs / ~1.8 TB/s —
+peaks differ ~3x. The counter claims (access-pattern / layout properties) and the %-of-peak
+methodology transfer; the ABSOLUTE rows do not. Re-run R0 first to re-anchor peaks, then the ledger
+is re-anchorable — never "reproduced".
 
 Run:  python bench/kernel_roofline.py --device cuda   # reproduces peaks, writes CSV + roofline.png
 """
@@ -21,9 +37,11 @@ import csv
 from dataclasses import dataclass
 
 import torch
+
 from _harness import Roofs, bench_ms, provenance_line, spread_pct
 
-# The A2 spec's ncu sections, mapped to the metric each kernel will inspect on the H100 day.
+# The A2 spec's ncu sections, mapped to the metric each kernel will inspect. All sm_120 except
+# TensorPipe (WGMMA util) — see the routing note in the module docstring.
 A2_ncu_debt: dict[str, str] = {
     "SpeedOfLight": "sm__throughput.avg.pct_of_peak_sustained_elapsed (Memory% vs Compute%)",
     "MemoryWorkload": "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum / requests (sectors/request, ideal 4)",
@@ -164,7 +182,8 @@ def main() -> None:
     plot_roofline(profiles, roofs, args.png)
     print(f"\n# wrote {args.csv} + {args.png}")
     print(
-        f"# ncu-debt (blocked on this box; discharged on the H100 day): {len(A2_ncu_debt)} metrics registered"
+        f"# ncu-debt (blocked on this box; sm_120 KVM discharges all but TensorPipe): "
+        f"{len(A2_ncu_debt)} metrics registered"
     )
 
 

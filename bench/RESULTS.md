@@ -485,8 +485,22 @@ A1 design note next, then A2 (CUDA-core kernel ladder).
 ### Measured — A2 R0 profiler + roofline harness (2026-07-04, `bench/kernel_roofline.py`)
 
 The reusable A2 measurement spine. Gate = reproduce the R0 baseline. ncu BLOCKED
-(ERR_NVGPUCTRPERM) → re-based on achieved-vs-peak % + nsys; 5 ncu metrics registered as debt for the
-H100 day. Spec/note: `performance/notes/A2_R0_roofline_harness.md`.
+(ERR_NVGPUCTRPERM) → re-based on achieved-vs-peak % + nsys; 5 ncu metrics registered as debt.
+Spec/note: `performance/notes/A2_R0_roofline_harness.md`.
+
+> **ROUTING CORRECTED 2026-08-30.** These 5 metrics were filed against "the H100 day" on 2026-07-04
+> and sat unmoved for 57 days. **4 of the 5 are sm_120-bound and H100 cannot discharge them even in
+> principle** — the CUDA rungs are `-arch=sm_120` (compute_120 does not load or JIT on sm_90; PTX
+> compat is forward-only) and the Triton rungs would only run on Hopper by recompiling to different
+> SASS + different autotune configs, i.e. a different kernel instance. Only `TensorPipe` (WGMMA util)
+> is genuinely Hopper. **Route ncu-debt by the kernel's target arch, never by the largest card
+> available.** The discharging card is a `vms_enabled` KVM 5090 (~$0.33/hr), available now.
+>
+> **It is NOT the same card, only the same compute capability.** These rows are an RTX PRO 4000
+> Blackwell (sm120, **70 SMs**, 0.551 TB/s / 72.1 TF/s); a 5090 is ~170 SMs / ~1.8 TB/s — peaks
+> differ ~3×. Transfers: the counter claims (access-pattern/layout properties) + the %-of-peak
+> methodology. Does NOT transfer: the absolute rows below. **Re-run R0 first to re-anchor peaks** —
+> the ledger then becomes re-anchorable, never "reproduced".
 
 | date | rung | hardware | metric | predicted | measured | bound | root cause | next |
 |---|---|---|---|---|---|---|---|---|
@@ -496,7 +510,7 @@ H100 day. Spec/note: `performance/notes/A2_R0_roofline_harness.md`.
 **Verdict (A2 R0 — SHIPPED).** The profiler+roofline harness reproduces the baseline `[FACT]` and
 places kernels on the roofline (%-of-binding-roof + mem/cmp) with CSV + plot; ncu counters (blocked
 on this unprivileged box) are re-based on achieved-vs-peak % + nsys, with 5 metrics registered as
-"ncu debt" for the H100 rental day. Next: A2 R1 GEMV ladder (naive→coalesced→two-stage→float4, target
+"ncu debt" (4 discharge on sm_120 + counters, 1 on Hopper — see the routing box above). Next: A2 R1 GEMV ladder (naive→coalesced→two-stage→float4, target
 >80% of 0.55 TB/s) → R2 softmax → R3 RMSNorm → R4 TopK → R5/R6 GEMM (sm120); §4.1–4.6 WGMMA/TMA/FP8
 are H100-code-only.
 
@@ -525,7 +539,8 @@ the failure"), redeemed by a **3.4× fused-softmax+topk** traffic win; GEMM cros
 heuristic at 4096³, honestly disclosed). Honesty (ADR-0011 Triton-primary): float4 vectorization,
 coalescing, and bank-conflict avoidance are Triton-compiler-managed — the raw-CUDA ladder step is noted
 per kernel as what a hand kernel would add, not fabricated. ncu counters blocked → each kernel names its
-ncu-debt metric for the H100 day. Node → A2 §4 (H100 code-only) + A3.
+ncu-debt metric, discharged on **sm_120 + counters** (KVM 5090), not the H100 day these were misfiled
+to until 2026-08-30. Node → A2 §4 (H100 code-only, genuinely sm_90a) + A3.
 
 ---
 
@@ -924,10 +939,14 @@ WMMA 38.9% → mma.sync+swizzle 81.9% of cuBLAS**, all element-exact vs `torch.m
 34 gpu tests. WMMA's ~8× jump over the scalar SMEM baseline IS the tensor-core win; the FP16-accumulate
 variant's error growing with K justifies FP32 accumulation (tested). mma.sync + `ldmatrix` +
 XOR-swizzled SMEM reaches **82% of the cuBLAS proxy** — exceeding the ≥60% DoD — with the warp-collective
-fragment load and a conflict-free SMEM layout (the bank-conflict=0 gate is ncu-debt, blocked here,
-H100-day). Honest gap: the next rung is `cp.async` double-buffering (hide the SMEM load behind the MMA,
-the book's climb into the higher band) and then WGMMA/TMA — **H100-gated** (`H100_day_runbook.md` §3),
-where the PTX artifact (`performance/artifacts/wgmma_descriptor_manual.md`) is the decode reference.
+fragment load and a conflict-free SMEM layout (the bank-conflict=0 gate is ncu-debt, blocked here —
+**sm_120 + counters discharges it, NOT the H100 day: this kernel is `-arch=sm_120` and a compute_120
+cubin does not load on sm_90**). Honest gap: the next rung is `cp.async` double-buffering (hide the
+SMEM load behind the MMA, the book's climb into the higher band) — **`cp.async` is sm_80+, so this
+rung runs on the same sm_120 KVM and is NOT Hopper-gated**; the sentence that bundled it with
+WGMMA/TMA was corrected 2026-08-30. Only WGMMA/TMA after it are **H100-gated**
+(`H100_day_runbook.md` §3), where the PTX artifact
+(`performance/artifacts/wgmma_descriptor_manual.md`) is the decode reference.
 
 ---
 

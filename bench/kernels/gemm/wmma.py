@@ -83,7 +83,8 @@ def main() -> None:
     )
     print(
         "# ncu-debt: l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum ~= 0 target "
-        "(SMEM padded APAD/BPAD=8) — UNMEASURABLE here (ERR_NVGPUCTRPERM); verify on the H100 day."
+        "(SMEM padded APAD/BPAD=8) — UNMEASURABLE here (ERR_NVGPUCTRPERM); verify on sm_120 + "
+        "counters (KVM 5090), NOT H100: this kernel is -arch=sm_120 and cannot load on sm_90."
     )
 
     del a, b
