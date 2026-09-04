@@ -1,8 +1,0 @@
-   Building scratch-llm @ file:///workspace/scratch_llm
-      Built scratch-llm @ file:///workspace/scratch_llm
-Uninstalled 4 packages in 4ms
-Installed 4 packages in 1ms
-[W731 10:02:01.110099455 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 0 while trying to allocate 2644508672 bytes (free: 247529472, total: 33668988928).
-[W731 10:03:51.649829736 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 0 while trying to allocate 4294967296 bytes (free: 878772224, total: 33668988928).
-
-CLIMBMIX DONE: val_bpb=1.302051 -> /workspace/scratch_llm/artifacts/f12_corpus_ablation/climbmix_result.json
