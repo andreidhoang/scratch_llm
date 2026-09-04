@@ -10,6 +10,9 @@
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel 2>/dev/null || echo /root/cs336/scratch_llm)"
 
+# shellcheck source=scripts/_tokenizer_guard.sh
+. scripts/_tokenizer_guard.sh
+
 PY=.venv/bin/python
 DATA=artifacts/s3_scaling_sweep/data
 LOG=artifacts/s35_phase1.log
@@ -30,14 +33,13 @@ run() { # point grid batch lr outdir
 
 step "phase 1 starting"
 
-# 1. ClimbMix tokenizer (lost with the old pod; deterministic rebuild — see script docstring)
-if [ ! -f "$TOK_DIR/tokenizer.json" ]; then
-  step "rebuilding climbmix tokenizer"
-  $PY scripts/rebuild_arm_tokenizer.py --arm climbmix 2>&1 | tee -a "$LOG" || {
-    step "FATAL: tokenizer rebuild failed"; exit 1; }
-else
-  step "tokenizer present, skipping rebuild"
-fi
+# 1. ClimbMix tokenizer — COPY THE PINNED COPY, NEVER REBUILD (fixed 2026-08-31).
+#    This step used to call rebuild_arm_tokenizer.py, whose own docstring admits identity with
+#    the lost original is NOT verifiable. That is the exact mechanism that shifted bytes/token
+#    4.08 -> 1.93 and invalidated s1-s7 (docs/S35_DATA_PROVENANCE.md). assets/PROVENANCE.md
+#    said "New pods MUST copy it into place ... and verify md5 before any run" — now enforced.
+require_pinned_tokenizer "$TOK_DIR/tokenizer.json" 2>&1 | tee -a "$LOG"
+[ "${PIPESTATUS[0]}" -eq 0 ] || { step "FATAL: tokenizer guard failed — refusing to run"; exit 1; }
 
 # 2. Corpus staging (~4B tokens; the GPU idles here — CPU + network bound)
 if [ ! -f "$DATA/tokenizer.json" ]; then
@@ -47,6 +49,9 @@ if [ ! -f "$DATA/tokenizer.json" ]; then
 else
   step "corpus staged, skipping"
 fi
+
+report_staged_tokenizer "$DATA/tokenizer.json" 2>&1 | tee -a "$LOG"
+[ "${PIPESTATUS[0]}" -eq 0 ] || { step "FATAL: staged tokenizer missing"; exit 1; }
 
 # 3. s7 batch de-confound pair — SAME fresh tokenizer/data/seed/GPU; only batch differs.
 #    (batch-4 is not skippable: the original s7 record was measured with the lost tokenizer,

@@ -232,12 +232,12 @@ def gated_delta_rule_reference(
     q, k, v, alpha, beta = (x.to(torch.float64) for x in (q, k, v, alpha, beta))
     bsz, n_heads, seq_len, d_k = q.shape
     d_v = v.shape[-1]
-    y = torch.zeros(bsz, n_heads, seq_len, d_v, dtype=torch.float64)
-    s_final = torch.zeros(bsz, n_heads, d_k, d_v, dtype=torch.float64)
-    eye = torch.eye(d_k, dtype=torch.float64)
+    y = torch.zeros(bsz, n_heads, seq_len, d_v, dtype=torch.float64, device=q.device)
+    s_final = torch.zeros(bsz, n_heads, d_k, d_v, dtype=torch.float64, device=q.device)
+    eye = torch.eye(d_k, dtype=torch.float64, device=q.device)
     for b in range(bsz):
         for h in range(n_heads):
-            s = torch.zeros(d_k, d_v, dtype=torch.float64)
+            s = torch.zeros(d_k, d_v, dtype=torch.float64, device=q.device)
             for t in range(seq_len):
                 k_t = k[b, h, t]  # [d_k]
                 erase = eye - beta[b, h, t] * torch.outer(k_t, k_t)  # I − β k kᵀ

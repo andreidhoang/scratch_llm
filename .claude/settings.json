@@ -7,10 +7,10 @@
       "Bash(pyright *)",
       "Bash(python -m *)",
       "Bash(python3 -m *)",
-      "Bash(git status)",
-      "Bash(git status *)",
-      "Bash(git diff *)",
-      "Bash(git log *)"
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(nvidia-smi*)"
     ]
   },
   "env": {
@@ -44,35 +44,12 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "if": "Bash(git commit*)",
         "hooks": [
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/green-ci-gate.sh\"",
             "timeout": 600,
-            "statusMessage": "Running green-CI gate before commit..."
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/kernel-write-guard.sh\"",
-            "timeout": 10,
-            "statusMessage": "Checking the kernel meat boundary..."
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/oracle-guard.sh\"",
-            "timeout": 10,
-            "statusMessage": "Checking the mastery/oracle boundary..."
+            "statusMessage": "green-CI gate (lint+types on commit; +tests on push)"
           }
         ]
       }

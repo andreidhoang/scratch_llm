@@ -1,4 +1,13 @@
-# Frontier ablation results — predicted vs measured
+# Pre-registration ledger — predictions written BEFORE the run
+
+> **Renamed 2026-08-31** (was `docs/RESULTS.md`). Two files called `RESULTS.md` was the confusion;
+> the split itself is correct and is the repo's core discipline: **this file holds the predictions
+> and kill criteria registered before a run**, `bench/RESULTS.md` holds the **measured** ledger.
+> Record rows elsewhere (`bench/RESULTS.md`, `docs/adr/ADR-0020`) still cite the old path — those
+> are provenance at time of writing and are deliberately not rewritten.
+>
+> Its spec pointers (`docs/FRONTIER_2026_*`) were deleted 31/08 — `git log` holds them.
+
 
 Pre-registered measurement ledger for the F-front ablations defined in
 `docs/FRONTIER_2026_TASKSPEC.md`, now also hosting the §S3 scaling-sweep and §K3

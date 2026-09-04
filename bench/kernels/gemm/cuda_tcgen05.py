@@ -1,6 +1,6 @@
 """Blackwell tcgen05 GEMM (sm_100a) roofline vs cuBLAS — the B200 rental-day bench.
 
-Pre-registered target (PERF_PLAN Phase 3, B200 dense BF16 = 2,250 TF/s):
+Pre-registered target (performance/PERF_ENGINEERING_SPEC.md §4 · A3, B200 dense BF16 = 2,250 TF/s):
   ~1,209 TF/s (~54% of dense) for the 1-SM path EARLY; warp-spec climbs to
   ~1,300–1,476 TF/s. This bench measures the fraction the promoted skeleton
   reaches on a B200.
@@ -19,7 +19,7 @@ import torch
 import triton
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
-from scratch_llm.kernels.common.arch import compute_capability, require_cc  # noqa: E402
+from scratch_llm.kernels.common.arch import compute_capability, require_arch  # noqa: E402
 from scratch_llm.kernels.gemm.cuda.tcgen05 import tcgen05_gemm  # noqa: E402
 
 _B200_FP16_PEAK_TF = 2250.0  # B200 SXM dense fp16 (conservative; BF16 number)
@@ -30,7 +30,7 @@ def _bench_ms(fn) -> float:
 
 
 def main() -> None:
-    require_cc(10, 0, fn_name="cuda_tcgen05 bench")
+    require_arch((10, 0), fn_name="cuda_tcgen05 bench")  # loader pins -arch=sm_100a
     ap = argparse.ArgumentParser(description="Blackwell tcgen05 GEMM roofline")
     ap.add_argument("--n", type=int, default=4096, help="square GEMM dim (M mult of 128, N of 256)")
     args = ap.parse_args()
@@ -60,7 +60,7 @@ def main() -> None:
     print(f"# cuBLAS   : {tf_c:6.1f} TF/s  ({ms_c:8.3f} ms)  [proxy]")
     print(f"# %-of-cuBLAS   : {100 * tf / tf_c:5.1f}%")
     print(f"# %-of-B200-peak: {100 * tf / _B200_FP16_PEAK_TF:5.1f}%")
-    print("# PRE-REGISTERED: ~1,209 TF/s 1-SM path (PERF_PLAN Phase 3)")
+    print("# PRE-REGISTERED: ~1,209 TF/s 1-SM path (PERF_ENGINEERING_SPEC.md §4 · A3)")
 
     del a, b, out, ref
     torch.cuda.empty_cache()

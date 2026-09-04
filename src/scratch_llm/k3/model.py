@@ -38,8 +38,14 @@ Invariants (gates wired in ``tests/test_k3_model.py`` once ``core/`` lands):
     earlier positions (causality), bounded by KDA recurrence order, not by an attention mask.
   - **Hybrid-cache equivalence:** prefill (``state=None``) logits ≡ incremental-decode logits,
     within dtype tolerance, on both the KDA and MLA layers.
-  - **Param closure:** ``K3Model(k3_full())`` reproduces 2,779,931,837,184 params (FACTS A18,
-    gate ``test_k3_param_count.py``); ``mini_k3_d12()`` reproduces 370,303,424.
+  - **Param closure:** ``count_params(k3_full()).total_text`` = 2,779,484,478,208 is the ceiling
+    this assembly can reach — it is TEXT-only. The checkpoint ``total`` (2,779,931,837,184,
+    gate ``test_k3_param_count.py``) additionally carries ``total_vision`` = 447,358,976
+    (MoonViT-V2 + PatchMergerV2), which is **parity accounting only**: there is no vision rung
+    in the K0-K9 build order and ``VisionConfig`` is deliberately not assembled here. Reaching
+    ``total_text`` also requires ``BlockAttnRes`` to own the per-layer ``4 * hidden_size`` that
+    ``param_count._attn_res_per_layer`` charges (K4). ``mini_k3_d12()`` reproduces 370,303,424 —
+    there ``total == total_text`` because ``vision is None``.
 
 Interview questions:
   - Why is the *terminal* layer MLA, not KDA? — the final representation must aggregate over

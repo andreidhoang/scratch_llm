@@ -25,7 +25,7 @@
 //               start=addr>>4, LBO=16→1, SBO=1024→64, swizzle=1.
 //     * Colfax Research, "WGMMA on Hopper" — make_smem_desc(), the same
 //       encode(addr) | (encode(16)<<16) | (encode(1024)<<32) | (1ull<<62).
-//     * A3_tensor_cores.md §3 Rung 3.1 / PERF_PLAN Phase 2 A2 §4.2.
+//     * A3_tensor_cores.md §3 Rung 3.1 / PERF_ENGINEERING_SPEC.md §4 · A2 §4.2.
 //
 //   PRE-REGISTERED TARGET (do NOT claim measured — cannot run here):
 //     A2 §4.2 / A3 R3.1 "Basic WGMMA": book §7.3.1 ≈ 318 TFLOPS on H100 @4096³

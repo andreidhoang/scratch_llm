@@ -15,7 +15,7 @@
 > only) · any arm without iso-FLOP matching and a pre-registered kill line.
 >
 > Rules (repo discipline): every arm has a falsifiable prediction + kill line registered in
-> `docs/RESULTS.md §K3` **before** launch · iso-FLOP matching (active params ±2% via
+> `docs/PRE_REGISTRATIONS.md §K3` **before** launch · iso-FLOP matching (active params ±2% via
 > `k3/param_count.py`, tokens equalized on 6·N_active·D, measured FLOPs logged) · fixed seeds ·
 > val_bpb primary, CORE-style MC secondary, retrieval probes (induction + needle @ 2K/8K/32K)
 > for mechanism claims · ledger labels: measured-by-us / reported / not-verified.
@@ -25,7 +25,7 @@
 This is not a second ablation program; it is a second *axis set* in the existing one
 (`docs/FRONTIER_2026_ABLATIONS.md`). **Shared:** the speedrun spine + eval report card +
 iso-FLOP discipline + seeds + the F12-chosen corpus (**ClimbMix** — measurement winner was
-FineWeb-EDU; operator override, decision FINAL 2026-08-02 — one harness); `docs/RESULTS.md` (one
+FineWeb-EDU; operator override, decision FINAL 2026-08-02 — one harness); `docs/PRE_REGISTRATIONS.md` (one
 pre-registration ledger, same format — F-sections and §K3 side by side); the d-series (one
 control family — the all-minus corner of the shared factorial space); S3/P5 (one budget gate).
 

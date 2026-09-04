@@ -10,15 +10,20 @@ laptop (source of truth)         Vast.ai pod (ephemeral)
 ```
 
 The pod reproduces the **project's workspace topology** so a pod agent loads this
-project's plan, context engineering, and roadmap (the repo's own `CLAUDE.md` + `docs/`
-travel with git; the parent `../` docs are vendored so their links resolve):
+project's plan and context engineering. Since 31/08 nothing is vendored — `PLAN.md` (the only
+plan) travels inside the repo with `CLAUDE.md` and `docs/`:
 
 ```
 /root/cs336/
-├── STRATEGY.md  DELTA.md  README.md   (vendored — the ../ refs in CLAUDE.md resolve)
 ├── lectures/                          (CS336 oracle, cloned from stanford-cs336)
-└── scratch_llm/                       (repo; Claude auto-loads CLAUDE.md + docs/)
+└── scratch_llm/                       (repo; Claude auto-loads CLAUDE.md + PLAN.md + docs/)
 ```
+
+> **⚠ Which rental tier.** This directory automates a plain Vast **docker pod**. Docker pods are
+> `ncu`-BLOCKED (`ERR_NVGPUCTRPERM`) — fine for training/serving rentals, **wrong for kernel
+> profiling**. The mastery lane's profiling rungs need a `vms_enabled` KVM; see `PLAN.md`
+> § Hardware law, and use `scripts/bootstrap-pod.sh` + `docs/VASTAI_BOOTSTRAP.md` on the box
+> (that path also re-links the green-CI hook, which `provision.sh` does not).
 
 Scope is **this project only** — provisioning does not touch the machine's global
 `~/.claude` setup (personal config / skills / plugins). Configure that per machine.
@@ -26,7 +31,7 @@ Scope is **this project only** — provisioning does not touch the machine's glo
 | Artifact | Channel | Why |
 |---|---|---|
 | Source code | GitHub (`git`) | versioned, reproducible, survives `destroy` |
-| Project plan/roadmap | repo `CLAUDE.md`+`docs/` (git) + `deploy/context/` (parent docs) | pod agents load the plan |
+| Project plan/roadmap | repo `PLAN.md` + `CLAUDE.md` + `docs/` (git) | pod agents load the plan |
 | Oracle (`lectures/`) | `provision_lectures.sh` (public clone) | 452M, not bundled — cloned on demand |
 | Datasets | rsync / cloud bucket | too big for git |
 | Checkpoints | `sync_checkpoints.sh` / bucket | must survive preemption |
@@ -47,7 +52,7 @@ GitHub token automatically — no separate GitHub setup needed.
 ```bash
 # 2. (if you changed ../STRATEGY.md / DELTA.md / the workspace README)
 #    refresh the vendored roadmap docs so the pod gets current files:
-./deploy/sync_context.sh && git add deploy/context && git commit -m "context: refresh" && git push
+git add -A && git commit -m "context: refresh" && git push   # deploy/context/ was deleted 31/08 (vendored duplicate; both copies now gone)
 
 # 3. Rent a GPU + provision (shows the offer & price before charging you)
 GPU=H100 MAX_DPH=3.0 ./deploy/01_launch.sh
@@ -77,9 +82,7 @@ vastai destroy instance <id>
 | File | Runs on | Does |
 |---|---|---|
 | `00_setup_vast.sh` | laptop | one-time: API key + SSH key upload |
-| `sync_context.sh` | laptop | refresh `context/` bundle from live laptop sources |
 | `01_launch.sh` | laptop | search live offers → rent → wait for SSH → provision |
 | `provision.sh` | pod | rebuild project workspace topology + venv + smoke check |
 | `provision_lectures.sh` | pod | clone the CS336 oracle (official stanford-cs336 repos) |
 | `sync_checkpoints.sh` | laptop | rsync artifacts off the pod |
-| `context/` | — | vendored parent-dir roadmap docs (see `context/README.md`) |

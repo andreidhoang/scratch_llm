@@ -1,7 +1,9 @@
 # Serving Day — 8×H200 NVLink node — EXECUTION RUNBOOK
 
 > **What this is.** The copy-paste script a person runs on rental day. It operationalizes
-> `performance/PERF_PLAN.md` §"Phase 4 — THE SERVING DAY" and `docs/adr/ADR-0012-inference-rental-tiers.md`.
+> `performance/PERF_ENGINEERING_SPEC.md` §2 (Tier 2 — the capacity gate worked) + §4 · A6, and
+> `docs/adr/ADR-0012-inference-rental-tiers.md`. **This day is PARKED** (PLAN.md backlog, ≈$250+,
+> weak post-redirect consumer) — the runbook is kept arrive-prepared, not scheduled.
 > Read those two first for the *why*; this file is the *how* — exact commands, in order, with the
 > gates and kill lines inline. Model: **DeepSeek-R1 671B FP8** on one **8×H200 SXM NVLink** node.
 > Engine: **SGLang** (chosen for R1-FP8 — it publishes a single-node R1 config and the MTP/EP/PD
@@ -557,7 +559,7 @@ vastai destroy instance $CONTAINER_ID --api-key $CONTAINER_API_KEY
 
 > **Copy these rows into `bench/RESULTS.md` BEFORE the session (D5).** The `measured` column stays `—`
 > until the run fills it — pre-registration means the prediction is frozen before the number is seen
-> (FOP-2). Predicted + derivation are verbatim from `PERF_PLAN.md` §"Phase 4"; the `[FACT]/[INFERENCE]`
+> (FOP-2). Predicted + derivation are verbatim from `PERF_ENGINEERING_SPEC.md` §4 · A6; the `[FACT]/[INFERENCE]`
 > labels follow FOP-4 (the derivations are `[FACT: derivation]`; the predicted headline is the
 > `[INFERENCE]` under test).
 
@@ -595,9 +597,9 @@ The node is not released until these are in `bench/RESULTS.md`:
 
 | Trigger | Action | Rationale |
 |---|---|---|
-| **Bring-up > 2 h** (server won't come up, or §3.4 correctness garbage persists) | **Swap to `Qwen/Qwen3-235B-A22B-FP8`** (§0 `$FALLBACK_MODEL`): 235 GB fits with 365 GB headroom, battle-tested; relaunch §3.3 with `--model-path` = the fallback. The day's physics (busbw, B=1 latency, EP/TP, KV, disagg) survives the model swap — only the R1 flag is lost. | ADR-0012 fallback; PERF_PLAN kill criteria. |
+| **Bring-up > 2 h** (server won't come up, or §3.4 correctness garbage persists) | **Swap to `Qwen/Qwen3-235B-A22B-FP8`** (§0 `$FALLBACK_MODEL`): 235 GB fits with 365 GB headroom, battle-tested; relaunch §3.3 with `--model-path` = the fallback. The day's physics (busbw, B=1 latency, EP/TP, KV, disagg) survives the model swap — only the R1 flag is lost. | ADR-0012 fallback; `PERF_ENGINEERING_SPEC.md` §4 · A6 kill criteria. |
 | **Topo shows PIX/PHB** (§2.1) **or weight-pull ETA > 90 min** (§2.3) | **Kill the listing inside hour 1** — destroy the instance (sunk ≤ $30). Re-rent a verified NVLink listing. | Not the node we paid for / pull will eat the day. spec §2 rule 6. |
-| **An engine bug blocks EP (§6) or disagg (§8)** | Do **NOT** debug the engine on node-time. **Measure the TP-8 surface completely** (P1/P2/P3/P5 + P6 co-located baseline), file the gap in the postmortem, move on. | Node-time is for measuring physics, not patching engines. PERF_PLAN kill criteria. |
+| **An engine bug blocks EP (§6) or disagg (§8)** | Do **NOT** debug the engine on node-time. **Measure the TP-8 surface completely** (P1/P2/P3/P5 + P6 co-located baseline), file the gap in the postmortem, move on. | Node-time is for measuring physics, not patching engines. `PERF_ENGINEERING_SPEC.md` §4 · A6 kill criteria. |
 | **12 node-hrs elapsed** (§0 alarm) | Stop and justify continuing or release. | Hard budget alarm. |
 
 **Cost envelope:** 6–10 node-hrs × $20–32/node-hr ≈ **$150–320** [UNCERTAIN: market] (Vast-class 2026;

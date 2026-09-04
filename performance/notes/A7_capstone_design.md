@@ -3,6 +3,9 @@
 > A7 integrates A2–A5 into one principal-grade artifact. Track chosen: **B (kernel suite)** — it needs
 > H100/B200 hours, not a cluster (the cheapest capstone), and it composes the exact primitives this
 > curriculum already built + prepared. Tracks A (vLLM-lite engine) and C (distributed at scale) are the
+> ⚠ 31/08: `../DELTA.md` and `docs/PERFORMANCE_TRACK.md` cited below are DELETED, and the DELTA lane
+> is not in `PLAN.md` — read this note as a dated design record, not as a live target.
+>
 > alternatives; the DELTA GDN-2 kernel (private `../DELTA.md`) is the *separate* portfolio spike on top.
 
 ## 1. What A7 Track B integrates (and its state after this sprint)

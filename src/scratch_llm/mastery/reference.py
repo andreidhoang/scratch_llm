@@ -61,9 +61,18 @@ def recurrent_reference(
       and the arithmetic-intensity answer you wrote down will be wrong.
     - Run in whatever dtype the inputs arrive in. The driver casts, not you.
     """
-    raise NotImplementedError(
-        "reference.recurrent_reference is yours to write.\n"
-        "Five lines. The equation is in the docstring above.\n"
-        "Predict the two answers in LEDGER.md first, then implement, then run:\n"
-        "    python -m experiments.e001_gate_sweep --self-test"
-    )
+    # Written in pairing on 2026-09-03 to end a 22-day stall on five lines. The rep is still
+    # available: delete this body and retype it cold from the equation above (10 minutes).
+    # Rank-1 form, never materialising (I - beta k k^T):
+    #   (I - b k k^T)(a S) = a S - b k (k^T (a S))
+    T, dk = q.shape
+    dv = v.shape[-1]
+    S = torch.zeros(dk, dv, dtype=q.dtype, device=q.device) if S0 is None else S0.clone()
+    O = torch.empty(T, dv, dtype=q.dtype, device=q.device)
+    for t in range(T):
+        k_t = k[t]
+        S = torch.exp(log_alpha[t]) * S  # decay
+        S = S - beta[t] * torch.outer(k_t, k_t @ S)  # erase (rank-1 apply)
+        S = S + beta[t] * torch.outer(k_t, v[t])  # write
+        O[t] = q[t] @ S  # read AFTER absorbing token t
+    return O, S

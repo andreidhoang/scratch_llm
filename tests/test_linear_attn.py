@@ -5,7 +5,7 @@ path, the recurrent-scan decode path, and the naive float64 reference loop must 
 the SAME function. If any pair diverges, the train/decode seam is broken and every
 downstream ablation (F10.2) or kernel (DELTA GDN-2) built on it measures a lie.
 
-DoD coverage (docs/FRONTIER_2026_TASKSPEC.md §B · F10, first slice):
+DoD coverage (git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md §B · F10, first slice):
 - three-way equivalence at rel err ≤ 1e-5 (float64, B=2, T=96 — ragged tail vs chunk 64)
 - chunk_size independence (16 / 64 / T+1 — state crosses boundaries correctly)
 - causality (perturb t=T/2, prefix unchanged)
@@ -60,7 +60,7 @@ def _scan_with_step(
     """Recurrent-scan path: fold gated_delta_rule_step over time (the decode contract)."""
     bsz, n_heads, seq_len, d_k = q.shape
     d_v = v.shape[-1]
-    state = torch.zeros(bsz, n_heads, d_k, d_v, dtype=q.dtype)
+    state = torch.zeros(bsz, n_heads, d_k, d_v, dtype=q.dtype, device=q.device)
     ys = []
     for t in range(seq_len):
         y_t, state = gated_delta_rule_step(

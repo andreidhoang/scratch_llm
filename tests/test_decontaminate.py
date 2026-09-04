@@ -1,4 +1,4 @@
-"""A0 decontamination gate — executable spec (docs/FRONTIER_2026_TASKSPEC.md §A · A0).
+"""A0 decontamination gate — executable spec (git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md §A · A0).
 
 DoD invariants (pre-registered):
 - **Verbatim catch / paraphrase pass:** a train doc embedding a verbatim 13+-word eval sentence

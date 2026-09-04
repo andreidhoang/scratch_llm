@@ -1,6 +1,6 @@
 """A0 decontamination gate — strip train documents that n-gram-collide with the eval sets.
 
-Intent (docs/FRONTIER_2026_TASKSPEC.md §A · A0): every scored run's ablation numbers are only
+Intent (git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md §A · A0): every scored run's ablation numbers are only
 meaningful if the pretraining shards do not contain the eval text. This module builds a guard
 set of word n-grams from the eval corpora and drops any train document whose n-grams collide
 with it — BEFORE the document reaches BPE training or shard tokenization

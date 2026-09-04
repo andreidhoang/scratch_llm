@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 from scratch_llm.kernels.attention.prefill.fa3 import (  # noqa: E402
     flash_attention_fa3_forward,
 )
-from scratch_llm.kernels.common.arch import compute_capability, require_cc  # noqa: E402
+from scratch_llm.kernels.common.arch import compute_capability, require_arch  # noqa: E402
 
 
 def _bench_ms(fn) -> float:
@@ -30,7 +30,7 @@ def _bench_ms(fn) -> float:
 
 
 def main() -> None:
-    require_cc(9, 0, fn_name="fa3_hopper bench")
+    require_arch((9, 0), fn_name="fa3_hopper bench")
     ap = argparse.ArgumentParser(description="Hopper FlashAttention-3 roofline")
     ap.add_argument("--seq", type=int, default=4096, help="sequence length (mult of 64)")
     ap.add_argument("--d", type=int, default=64, help="head dim (FA3 atom width)")

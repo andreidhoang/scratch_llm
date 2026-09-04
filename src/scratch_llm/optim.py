@@ -130,7 +130,19 @@ def gradient_clipping(
     grads = [p.grad for p in parameters if p.grad is not None]
     if not grads:
         return torch.tensor(0.0)
-    total_norm = torch.sqrt(sum((g.detach() ** 2).sum() for g in grads))  # type: ignore[arg-type]
+    # Square in at least fp32 — PROMOTE, never downcast. In the grad dtype an fp16 grad of
+    # 1e3 squares to 1e6 > fp16 max (65504) -> inf, and 1e-3 squares to 1e-6 < fp16 min
+    # normal (6.1e-5) -> a subnormal that underflows the sum; either way the norm is wrong
+    # and the step is silently destroyed. But a bare `.float()` merely moves the bug: an
+    # fp64 grad of 1e30 then squares to inf and 1e-25 to 0 (measured). `promote_types`
+    # raises fp16/bf16 to fp32 and leaves fp32/fp64 alone. This is STRICTLY STRONGER than
+    # torch.nn.utils.clip_grad_norm_, which returns in the grad dtype and so still rounds
+    # (fp16 [3e4, 4e4] -> 49984.0, not 5e4) and overflows above fp16 max.
+    total_norm = torch.sqrt(
+        sum(  # type: ignore[arg-type]
+            (g.detach().to(torch.promote_types(g.dtype, torch.float32)) ** 2).sum() for g in grads
+        )
+    )
     if total_norm > max_l2_norm:
         scale = max_l2_norm / (total_norm + eps)
         for g in grads:
@@ -159,7 +171,7 @@ def cosine_lr(
 
 
 # ---------------------------------------------------------------------------------------------
-# Muon (F1 — close-the-loop frontier ablation, ADR-0018 / docs/FRONTIER_2026_ABLATIONS.md)
+# Muon (F1 — close-the-loop frontier ablation, ADR-0018 / git show 07f3de4:docs/archive/FRONTIER_2026_ABLATIONS.md)
 # ---------------------------------------------------------------------------------------------
 
 

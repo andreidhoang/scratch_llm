@@ -1,4 +1,4 @@
-"""Tests for the chat template + specials (F-front A3, docs/FRONTIER_2026_TASKSPEC.md §A).
+"""Tests for the chat template + specials (F-front A3, git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md §A).
 
 DoD coverage, one test per bullet:
 - each special encodes to exactly 1 id (the KILL test: >1 means specials weren't threaded

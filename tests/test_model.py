@@ -8,6 +8,7 @@ in a way that would silently corrupt every downstream measurement.
 import math
 from typing import cast
 
+import pytest
 import torch
 
 from scratch_llm.model import (
@@ -189,19 +190,18 @@ def test_sdpa_loss_at_init_is_log_vocab() -> None:
     assert abs(loss - expected) < 0.3, f"loss {loss:.3f} vs log V {expected:.3f}"
 
 
+@pytest.mark.gpu
 def test_triton_attention_forward_backward() -> None:
-    # Verify that model runs forward/backward with custom Triton FlashAttention on CUDA
+    # Verify that model runs forward/backward with custom Triton FlashAttention on CUDA.
+    # Marked `gpu` so it is COLLECTED by the rental suite (`pytest -m gpu`) it exists for —
+    # unmarked it was deselected there and merely skipped in CI, i.e. it ran nowhere.
     if not torch.cuda.is_available():
-        import pytest
-
         pytest.skip("CUDA required for the Triton attention model test")
 
     # Check if triton is present
     try:
         import triton  # noqa: F401
     except ImportError:
-        import pytest
-
         pytest.skip("Triton required for the Triton attention model test")
 
     torch.manual_seed(0)

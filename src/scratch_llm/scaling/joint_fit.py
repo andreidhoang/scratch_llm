@@ -3,7 +3,7 @@
 The S3 fit failed honestly: per-budget min-picking (Approach 2) on a grid never built for it
 produced the D-zigzag, the bare R² gate fired, and the lab bought 12 GPU-h of measurements and
 zero law. This module is the S3.5 replacement estimator, specified in
-``docs/FRONTIER_2026_SCALING_PROGRAM.md`` §1.1:
+``git show 07f3de4:docs/archive/FRONTIER_2026_SCALING_PROGRAM.md`` §1.1:
 
 * **Joint parametric fit on ALL points** — ``L(N, D) = E + A·N^(−α) + B·D^(−β)`` (Hoffmann
   et al. 2022, Approach 3), no per-budget selection step that can zigzag. The fit axis is
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 # stack, and this module stays numpy-only so the fitter runs anywhere.
 D20_COMPUTE_FLOPS = 2.77e19
 
-# The estimator's knobs, pinned by FRONTIER_2026_SCALING_PROGRAM.md §1.1.
+# The estimator's knobs, pinned by git show 07f3de4:docs/archive/FRONTIER_2026_SCALING_PROGRAM.md §1.1.
 HUBER_DELTA = 1e-3  # Huber transition on log-L residuals — outlier-robust, nearly LSQ inlier
 MULTISTART_ALPHAS = (0.2, 0.4, 0.6, 0.8)  # exponent init grid (Besiroglu et al.)
 MULTISTART_LOG_E = (-2.0, -1.0, 0.0)  # irreducible-loss init grid, e = ln E

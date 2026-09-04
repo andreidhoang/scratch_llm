@@ -89,8 +89,10 @@ cat <<EOF
 ✅ READY.
    Instance  : ${INSTANCE_ID}   ${GPU_SKU}  \$${PRICE}/hr
    SSH       : ssh -p ${PORT} ${HOST}
-   Workspace : /root/cs336  (STRATEGY/DELTA/README + lectures oracle + scratch_llm)
+   Workspace : /root/cs336  (lectures oracle + scratch_llm; the plan travels IN the repo: PLAN.md)
    Code      : /root/cs336/scratch_llm  (pip-installed [gpu,dev]; same plan/context as laptop)
+   ⚠ ncu    : this is a plain Vast DOCKER pod — profiling counters are BLOCKED (ERR_NVGPUCTRPERM).
+              For ncu work rent a vms_enabled KVM instead (PLAN.md § Hardware law).
    Agents    : launch Claude Code from /root/cs336/scratch_llm — auto-loads CLAUDE.md + the plan
 
    Pull checkpoints back to your laptop any time:

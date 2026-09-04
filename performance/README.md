@@ -122,7 +122,7 @@ Work the ladder rung by rung. Validate against the oracle at every rung. Profile
 
 ```
 README.md                      ← you are here: competency model, the arc, the discipline
-00_foundations.md              ← hardware/rental detail, toolchain, the universal engineering discipline & rubric
+00_foundations.md              ← the ISA gate tables (all archs), toolchain, the universal discipline & rubric
 A1_transformer_inference.md    ← Ch5: inference as a system
 A2_kernel_optimization.md      ← Ch6: CUDA-core craft + profiling
 A3_tensor_cores.md             ← Ch7: WMMA → WGMMA → tcgen05
@@ -130,8 +130,25 @@ A4_flash_attention.md          ← Ch8: the marquee fused kernel
 A5_quantization.md             ← Ch9: FP8/FP4 numerics
 A6_distributed.md              ← Ch10: scaling across the interconnect
 A7_capstone.md                 ← integrative, principal-grade
-references.md                   ← consolidated, primary-sourced bibliography (arXiv IDs + links)
+references.md                  ← consolidated, primary-sourced bibliography (arXiv IDs + links)
+
+PERF_ENGINEERING_SPEC.md       ← the PRE-REGISTRATION record: D1–D7 (the discipline IDs bench/RESULTS.md
+                                 cites by name), per-assignment predictions/DoD/kill criteria, incl. the
+                                 H100 and B200 targets registered BEFORE those rental days are booked
+notes/                         ← per-rung design records (D7) — the written verdict for each measured rung;
+                                 bench/RESULTS.md and docs/learning/derivations/ anchor into these
+rental/                        ← arrive-prepared runbooks: H100 day · B200 day · 8×H200 serving day (PARKED)
+rental/kernels/                ← compile-verified ISA kernels (WGMMA sm_90a · FA3 sm_90a · tcgen05 sm_100a)
+artifacts/                     ← wgmma_descriptor_manual.md — the hand-decoded 64-bit SMEM descriptor
+viz/                           ← single-file interactive kernel steppers (`/kviz` writes here)
 ```
+
+> **Ordering does NOT live in this folder.** `PLAN.md` (repo root) owns it and wins every
+> contradiction; the session-by-session sequence is `docs/KERNEL_MASTERY_SPEC.md` §12.5, which is
+> where "what runs next" is answered. This curriculum is **PLAN.md item 8 — the mastery lane**: its
+> outputs are a public NCU profile, a CuTe-DSL re-expression, an NVFP4 divergence rung, and the
+> Blackwell wgmma→tcgen05 numbers, each with a named external consumer. There is **no standing GPU**
+> — see `PERF_ENGINEERING_SPEC.md`'s correction header and `PLAN.md` § Hardware law.
 
 ---
 

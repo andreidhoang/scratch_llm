@@ -1,79 +1,80 @@
 # Performance Curriculum Engineering Spec — 2026
 
-> **Pre-implementation registration.** FOP-2 (spec-with-falsifiers) + FOP-3 (predict-before-run)
-> require predictions to be written *before* experiments. This doc is that registration. It encodes
-> hardware gates, per-assignment scope, falsifiable predictions, definitions of done (DoD), and
-> kill criteria for A1–A7. Do not start an assignment without reading its section here; do not
-> log a result to `bench/RESULTS.md` without a corresponding prediction row here first.
+> **⚠ CORRECTION HEADER (2026-08-31 cleanup — read before any line below).** Three things in the
+> 2026-07 generation of this file were *false or superseded*, and are fixed here once rather than
+> line-by-line:
 >
-> **Ordering mandate.** Complete A1 → A7 in order before resuming the CS336 A5 RL / DELTA thread.
-> Rationale: A2–A5 kernel skills are direct prerequisites for DELTA (GDN-2 decode kernel); A7
-> capstone is the natural bridge. Building DELTA before owning the tools is premature.
+> 1. **There is no standing GPU.** Every "sm_120 standing GPU / standing box" line in §4 was true
+>    when written and is false now: this host has no GPU and no CUDA toolchain (`nvidia-smi`/`nvcc`/
+>    `ncu`/`nsys` absent, `triton` unimportable, arm64 — measured 29–30/08). **Every rung here is
+>    rental-gated.** Measured rows already in `bench/RESULTS.md` stay valid as *records* of the
+>    RTX PRO 4000 Blackwell that is gone. Law: `CLAUDE.md` § Hardware reality · `PLAN.md` § Hardware law.
+> 2. **Route by the kernel's TARGET ARCH, never by the biggest card.** `-arch=sm_120` does not load
+>    or JIT on sm_90; a Triton kernel on another arch recompiles to a different kernel instance whose
+>    counters discharge nothing. This is why 4 of 5 registered `ncu`-debt metrics sat 57 days misfiled
+>    to "the H100 day" when they are sm_120 and cost ~$0.33/hr on a `vms_enabled` KVM 5090.
+>    Law: `PLAN.md` § Arch-routing rule.
+> 3. **Ordering is `PLAN.md`'s, not this file's.** The old "complete A1→A7 before resuming CS336 A5
+>    RL / DELTA" mandate is dead — the DELTA lane is not in `PLAN.md`, and rule 7 (production-first)
+>    owns sequencing. This lane is **PLAN.md item 8, the mastery lane**, sequenced session-by-session
+>    in `docs/KERNEL_MASTERY_SPEC.md` §12.5. Execution mode is `learn` (2026-08-12), not `delegate`.
 >
-> **Mode-3 boundary — mode-switched ([ADR-0013](../docs/adr/ADR-0013-execution-mode-full-delegation.md)).**
-> In `learn` mode (`.claude/execution-mode`), the kernel implementations (the GEMM inner loop, the
-> online softmax tile, the WGMMA mainloop) are Mode-3 territory: human implements from first
-> principles; Claude agents write the failing correctness tests (bench-writer), explain the
-> mechanism (kernel-tutor), run profiler diagnosis (roofline-analyst), and gate before commit
-> (kernel-ship-reviewer). In **`delegate` mode (current, 2026-07-03)** Claude implements the kernel
-> bodies too, end-to-end; the separation that SURVIVES is bench-writer independence (the test/bench
-> author never writes the kernel under test — separation of duties, so tests can't be tuned to the
-> implementation) and the adversarial kernel-ship-reviewer gate before every commit. Every other
-> rule in this spec (pre-registration, oracle-first, D1–D7, DoD-is-a-profile) is mode-independent.
+> **What this file still IS, and why it survived the cut:** the **pre-registration record** for the
+> perf track. §3 defines **D1–D7** — the discipline IDs every `bench/RESULTS.md` pre-registration row
+> cites by name ("predict-before-run, D5"). §4 holds the falsifiable prediction tables, DoD and kill
+> criteria per assignment, including the **H100 and B200 targets pre-registered before those rental
+> days are booked** (PLAN.md backlog keeps both live). Deleting it would orphan the ledger's own
+> vocabulary and force re-deriving predictions after seeing the answers — which rule 2 forbids.
+>
+> **Ordering mandate (superseded 2026-08-31), phase sequencing, "current node" and rental batching**
+> used to live in `performance/PERF_PLAN.md`. That file was a second plan (PLAN.md rule 6) frozen at
+> 2026-07-04 and asserting the absent card; it was **deleted** in the same cleanup. Its live successors:
+> `PLAN.md` (ordering + Hardware law) · `docs/KERNEL_MASTERY_SPEC.md` §12.5 (the session ladder) ·
+> `bench/RESULTS.md` (measured state). `git log --diff-filter=D` is the archive.
 
 ---
 
-## 1. Standing Hardware — RTX PRO 4000 Blackwell (sm_120)
+## 1. The sm_120 ledger anchor — a record, not a machine
 
-**Ground truth** (`bench/RESULTS.md` 2026-06-29, `[FACT]`):
+**The card these numbers came from (RTX PRO 4000 Blackwell, sm_120, 70 SMs, 25 GB) is GONE.** The
+rows below stay because every `%`-of-peak call in `bench/RESULTS.md` and in `notes/A2_design_note.md`
+is computed against them; they are the **historical denominator**, not an available machine.
 
-| Metric | Measured | Used for |
+| Metric | Measured (`bench/RESULTS.md` 2026-06-29, `[FACT]`) | What it denominates |
 |---|---|---|
-| BF16 GEMM 8192³ | **~73 TF/s** | compute ceiling on standing GPU |
-| HBM bandwidth | **~0.55 TB/s** | memory-bound ceilings |
-| BF16 ridge point | **~130 FLOP/byte** | 73 TF / 0.55 TB; divides memory-bound from compute-bound |
-| Memory capacity | **25 GB** | KV-cache sizing, model size limits |
+| BF16 GEMM 8192³ | **~73 TF/s** | the compute ceiling every A2/A3 %-of-peak row divides by |
+| HBM bandwidth | **~0.55 TB/s** | the memory-bound ceilings (GEMV/softmax/norms hit 96–100% of it) |
+| BF16 ridge point | **~130 FLOP/byte** | D2's memory-vs-compute divider on this arch |
+| Memory capacity | **25 GB** | the KV-cache sizing behind A1's `RUNG1_CONFIG` |
 
-**What sm_120 CAN run [documented]:**
+> **Same compute capability ≠ same card.** A 5090 is also sm_120 but ~170 SMs / ~1.8 TB/s. The
+> counter claims and the %-of-peak *method* transfer; **the absolute rows do not** — re-run A2 R0 to
+> re-anchor peaks on any new card before comparing, and never write "same card".
 
-| Instruction / feature | Arch gate | A#s benefiting |
-|---|---|---|
-| CUDA C++ kernels | all | A1–A7 |
-| `nvcuda::wmma` / `mma.sync` fragment API | sm_70+ (Volta) | A3 rungs 0–2, A4 rungs 0–3 |
-| `cp.async` LDGSTS (async SMEM copies) | sm_80+ (Ampere) | A2 SMEM pipelining |
-| FP8 E4M3 / E5M2 math (compute ops) | sm_89+ (Ada+) | A5 FP8 numerics |
-| FP4 E2M1 math (compute ops) | sm_120 (Blackwell consumer) | A5 FP4 numerics |
-| Triton kernels compiled for sm_120 | sm_80+ | A2–A5 |
+**The ISA gate tables** (what each `sm_XX` can and cannot run, all archs, with the three hard gates)
+live in **[`00_foundations.md`](00_foundations.md) §1** — the single source. The one implication to
+carry into §4: the ~10× jump from the CUDA-core ceiling to the tensor-core ceiling (32 → 317 TF/s on
+H100) is **not reachable on sm_120** — `wgmma`/TMA are sm_90a-only, `tcgen05`/TMEM sm_100a-only.
 
-**What sm_120 CANNOT run [hard gates — will not compile or silently produce garbage]:**
+## 2. Rental capability tiers — what a rental BUYS
 
-| Instruction | Reason | Required for |
-|---|---|---|
-| `wgmma.mma_async` | Hopper (sm_90a) ONLY | A2 §4.1–4.5; A3 rungs 3–4 + §4.1; A4 rung 4 |
-| `cp.async.bulk.tensor` (TMA) | sm_90+ | same |
-| `tcgen05.mma` + TMEM | datacenter Blackwell (sm_100a) ONLY | A3 §4.2–4.3; A4 §7 |
-| `cta_group::2` 2-SM MMA | sm_100 | A3 §4.2 |
-| Real NVLink multi-GPU | SXM datacenter parts only | A6 |
-
-**The single most important implication:** the ~10× jump from CUDA-core ceiling to tensor-core
-ceiling (A2/A3 Colfax ladder: 32 → 317 TFLOP/s on H100) is **not reachable on sm_120**. Every
-rung that requires WGMMA/TMA needs a rented H100. Plan accordingly.
-
----
-
-## 2. Rental Plan — capability tiers, not GPU counts (ADR-0012, 2026-07-03)
+> **Prices and ncu-capability are NOT here.** They move weekly and are re-verified live in
+> **`PLAN.md` § Hardware law** (27/08: 5090 KVM $0.33 · H100 $2.50 · H200 $3.99 · B200 $4.6–6.1;
+> **RunPod pods, Modal and Vast default docker are ncu-BLOCKED — `ERR_NVGPUCTRPERM`**). The cost
+> column below is 2026-07 orientation only. What survives here is the *reasoning*: which gate a
+> tier opens, and the capacity arithmetic behind it.
 
 > **First principle: a rental buys architecture-gated behaviors, not FLOPs.** Three hard gates
 > decide what a tier can teach, and no GPU count below a gate substitutes for it:
 > **(1) ISA generation** — `wgmma`/TMA/FP8-WGMMA are sm_90a-only; `tcgen05`/TMEM/native-NVFP4 are
-> sm_100a-only; the standing sm_120 has neither (§1). **(2) HBM bandwidth & capacity** — decode is
+> sm_100a-only; sm_120 has neither (§1). **(2) HBM bandwidth & capacity** — decode is
 > memory-bound (A1, measured), so the wall itself is the spec; B=1 ceiling = `BW / weight-bytes`.
 > **(3) Interconnect domain** — TP/EP/collectives/disaggregation are only real inside one NVLink
 > domain (900 GB/s/GPU); crossing nodes is the ~18× IB cliff, plumbing not primitives.
 
 | Tier | Hardware | Gate it opens | B=1 ceiling, 70 GB-FP8 dense | Enables | Sessions × hrs · est. cost |
 |---|---|---|---|---|---|
-| 0 own | RTX PRO 4000 Blackwell (sm_120, 24 GB, 0.55 TB/s) | — (~80% of all work) | n/a (24 GB; 0.84B bf16 → 327 tok/s) | every non-ISA-gated rung of A1–A5; all serving algorithms + oracles + traces | standing · $0 |
+| 0 rent | any sm_120 (5090 KVM, `vms_enabled`) | **counters** — the 4 registered `ncu`-debt metrics are sm_120, NOT Hopper | n/a | every non-ISA-gated rung of A1–A5; the whole ncu-debt queue in one hour | 1 × ~1 h · **~$0.33** |
 | 1 rent | 1× H100 SXM (80 GB, 3.35 TB/s, sm_90a) | ISA: WGMMA/TMA/FP8 | 47.9 tok/s | A2 §4.1–4.5; A3 R3–4 + §4.1; A4 R4 (FA3); A5 FP8-WGMMA; **+ single-GPU frontier serving block** (Phase 2) | 1 × 12–15 h · ~$25–45 |
 | 2 rent | **8× H200 SXM NVLink node** (1,128 GB, 4.8 TB/s/GPU) — *the crown* | interconnect: one NVLink domain **+ capacity: R1-FP8 fits** | 68.6 tok/s | A6 R0–R1 + **the frontier-MoE serving day**: DeepSeek-R1 FP8 TP×EP, MLA KV at scale, PD-disagg (Phase 4) | 1 × 6–10 h · ~$150–320 |
 | 3 rent | 1× B200 (~192 GB, ~8 TB/s, sm_100a) **or B300** (288 GB, sm_103a — same tcgen05/TMEM contract, +50% dense FP4; prefer if price ≈) | ISA: tcgen05/TMEM/NVFP4 | ~114 tok/s | A3 §4.2–4.3; A5 §7; DELTA NVFP4-state probe | 1 × 4–6 h · ~$25–45 |
@@ -92,6 +93,9 @@ the node itself is irreducible (frontier serving is a multi-GPU problem, definit
 
 1. Do NOT rent H100 until EVERY sm_120-runnable rung for that assignment is oracle-correct AND
    has a logged measurement in `bench/RESULTS.md`.
+0. **Route by the kernel's target arch, never by the biggest card** (PLAN.md § Arch-routing rule),
+   and **every rental names its measurement and its consumer before it is started** (PLAN.md
+   § Hardware law). A rented GPU with no pre-registered question is money spent on nothing.
 2. When you rent, arrive with a compiled, tested binary ready to run. Batch all H100 work into as
    few sessions as possible. Rental hours spent debugging compilation are wasted.
 3. Checkpoint every rung's results to `bench/RESULTS.md` before the instance terminates.
@@ -447,7 +451,8 @@ NVFP4 native MMA throughput on B200 — batch with A3 rental.
 ### A6 — Distributed Training & Inference as One Communication Problem
 
 > **Inference re-aim (ADR-0012, 2026-07-03).** A6's *primitives* stand, but their execution vehicle
-> is the **Phase-4 serving day on 8×H200** (`PERF_PLAN.md` Phase 4): Rung 0 (topology + busbw) and
+> is the **8×H200 serving day** (`rental/serving_day_8xH200_runbook.md` — **PARKED** per PLAN.md
+> backlog: ≈$250+, weak post-redirect consumer): Rung 0 (topology + busbw) and
 > Rung 1 (TP MLP micro) run inside it; the serving-native distributed surface — TP×EP on a real
 > frontier MoE, NVLink collectives at decode message sizes, PD-disaggregation — replaces the
 > training-leaning depth. Rung 2 (1F1B pipeline: PP is a cross-node *serving* tool but a
@@ -531,7 +536,7 @@ fused *decode* kernel for GDN-2**, married to F10 — the one slice no library s
 - [ ] Design doc: hypothesis → architecture → number → gap attribution → next experiments (3–5 pages)
 - [ ] (Strongly encouraged): a PR to FlashInfer / CUTLASS / vLLM or a public writeup
 
-#### A7 addendum — 2026-07-09 re-verification (buildable re-scope; `docs/PERFORMANCE_TRACK.md` §2.1/§6)
+#### A7 addendum — 2026-07-09 re-verification (buildable re-scope; the cited `docs/PERFORMANCE_TRACK.md` was DELETED 31/08 — `git log --diff-filter=D` is the archive; `docs/PERFORMANCE_TRACK.md` §2.1/§6)
 
 Two updates from the perf/kernel deep-research pass (`wf_f3af3987-949`, primary-source). The three-kernel
 suite above is now largely **vendor-served** (CUTLASS 4.x ships CuTe-DSL FA2/FMHA/**MLA**/NVFP4-GEMM), so
@@ -604,44 +609,33 @@ qualifiers is inadmissible.
 
 ---
 
-## 6. Context Engineering Integration
+## 6. Where to look, and what to update on completing a rung
 
-**Where to look to orient:**
-- This file (`performance/PERF_ENGINEERING_SPEC.md`): what exactly to build and the pre-registered predictions
-- `performance/PERF_PLAN.md`: phased sequencing, which rung to start next, rental batching
-- `docs/STATUS.md` §"Performance Curriculum": current pass/fail status per rung
-- `bench/RESULTS.md`: the actual measured numbers (append-only, dated)
-- `performance/A#_*.md`: the full curriculum spec for each assignment
+**Orient (in this order):**
+- **[`PLAN.md`](../PLAN.md)** — ordering, the Hardware law, the arch-routing rule. Wins every contradiction.
+- **[`docs/KERNEL_MASTERY_SPEC.md`](../docs/KERNEL_MASTERY_SPEC.md) §12.5** — the session ladder: which
+  L-session runs next, its DoD, its consumer, its owner.
+- **This file** — what exactly to build per assignment, and the pre-registered prediction to beat.
+- **[`bench/RESULTS.md`](../bench/RESULTS.md)** — the measured numbers (append-only, dated). The
+  per-rung pass/fail state lives *here*, not in a status doc.
+- **`performance/A#_*.md`** — the full curriculum spec for each assignment; `notes/A#_design_note.md`
+  is its written verdict (D7).
 
-**What to update on completing a rung:**
-1. Log the measurement to `bench/RESULTS.md` (with the prediction from this doc for comparison)
-2. Update `docs/STATUS.md` §"Performance Curriculum" to mark the rung complete
-3. Update `performance/PERF_PLAN.md` "Current phase" to the next rung
-4. If a prediction was wrong: add a `[FACT]` note here explaining the discrepancy
+**On completing a rung:**
+1. Log the measurement to `bench/RESULTS.md` with the prediction from §4 beside it, and the D-row
+   qualifiers §5 requires (date · rung · GPU + sm_XX · shape + dtype · bound · root cause · next).
+2. If a prediction was wrong: add a `[FACT]` note in §4 explaining the discrepancy. **A falsified
+   prediction is a result** — it is the only thing that shrinks prediction error, the lane's one
+   mastery metric.
+3. Advance the session pointer in `docs/KERNEL_MASTERY_SPEC.md` §12.5, and commit **and push** —
+   PLAN.md rule 4 scores the pushed commit, not the local one.
 
-**Agent types for each phase of work:**
-- Writing the failing test + bench scaffold before kernel work: `bench-writer`
-- Understanding a mechanism before implementing: `kernel-tutor`
-- Post-implementation profiler diagnosis: `roofline-analyst`
-- Pre-commit gate: `kernel-ship-reviewer`
+**Agents for each phase** — `bench-writer` (the failing test + bench scaffold, written *before* the
+kernel and by a different context than implements it: separation of duties) · `kernel-tutor` (the
+mechanism, before implementing) · `roofline-analyst` (post-run profiler diagnosis) ·
+`kernel-ship-reviewer` (adversarial pre-commit gate).
 
-**The implementation boundary in every rung (mode-switched, ADR-0013):**
-- Claude WRITES: the failing correctness test (oracle comparison), the benchmark harness, the roofline prediction
-- The kernel body (GEMV, softmax, GEMM loop, WGMMA mainloop, online softmax tile) is implemented by:
-  the **human** in `learn` mode · **Claude** in `delegate` mode (current) — always by a different
-  context than the one that authored the tests (separation of duties)
-- Claude REVIEWS adversarially: after implementation, before commit (kernel-ship-reviewer), in both modes
-
----
-
-## 7. Integration with CS336 A5 RL / DELTA
-
-Complete A1 → A7 before resuming:
-- **A5 RL (GRPO/Dr.GRPO)**: unblocked immediately after A7
-- **DELTA (GDN-2 *low-precision* decode kernel — re-scoped 2026-07-09)**: requires A1 (serving primitives), A2 (kernel optimization), A3 (tensor cores), A4 (attention fusion), A5 (quantization) — completing this curriculum IS the prerequisite. **Scope correction (§4/A7.2):** FLA already ships a *standard-precision* GDN-2 `fused_recurrent` decode kernel, so DELTA's defensible scarcity is the **fp8/nvfp4 recurrent-state decode path only**, benchmarked against FLA's `fused_recurrent` baseline, built **married to F10** (the model-side GDN-2 in `linear_attn.py`, `docs/FRONTIER_2026_TASKSPEC.md` §B).
-- **A2 distributed (DDP/ZeRO-1/FSDP)**: can be done in parallel with A6, both are distributed work
-
-**Bridge point:** A7 Capstone Track B kernel suite → DELTA is a direct continuation. The GDN-2
-decode kernel is a specialized fused low-precision recurrent-state kernel — exactly what A2+A3+A4+A5
-build toward — and the **authoring surface is a Python DSL (TileLang / CuTe DSL)**, not hand-PTX (which
-stays the understanding layer). See §4/A7.1 (CuTe-DSL rung) + A7.2 (re-scoped DELTA).
+**The implementation boundary.** Execution mode is **`learn`** (`.claude/execution-mode`, 2026-08-12):
+agents write the tests, the harness, the roofline prediction and the review — **the human writes the
+kernel body** (GEMV, softmax, the GEMM loop, the WGMMA mainloop, the online-softmax tile). The sealed
+four in `CLAUDE.md` are the hard boundary; everything else is delegable and should be delegated.

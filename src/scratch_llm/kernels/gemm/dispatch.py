@@ -25,9 +25,9 @@ hot path; output dtype always matches input dtype):
                                 training precision, owned by Triton's ``allow_tf32``)
 
 The frontier paths (fp8 / wgmma / tcgen05) are **arch-gated**: they fire only on
-Hopper (sm_90a) or Blackwell-DC (sm_100a). On the sm_120 dev box they are
+Hopper (sm_90a) or Blackwell-DC (sm_100a). On an sm_120 client card they are
 unreachable from ``matmul`` (the dtype branch falls through to WMMA / Triton), so
-the dev box keeps the exact pre-frontier behavior. The frontier rungs are reached
+sm_120 keeps the exact pre-frontier behavior. The frontier rungs are reached
 directly by their benches/tests (the exempt path) and, on the rental box,
 automatically by this routing. ``stream_k=True`` opts into the stream-K backend
 (wave-quantization fixer; Hopper only).
@@ -120,9 +120,9 @@ def matmul(a: Tensor, b: Tensor, *, stream_k: bool = False) -> Tensor:
 
     The frontier paths (fp8/wgmma/tcgen05) are arch-gated: they fire only on the
     Hopper (sm_90a) or Blackwell-DC (sm_100a) rental box, where the ISA exists.
-    On the sm_120 dev box they are unreachable from ``matmul`` — the dtype branch
+    On an sm_120 client card they are unreachable from ``matmul`` — the dtype branch
     falls through to the shipping rungs (wmma / triton), so the dispatch layer
-    still works on the dev box exactly as before. The frontier rungs are reached
+    still works on sm_120 exactly as before. The frontier rungs are reached
     directly by their benches/tests (the exempt path) and, on the rental box,
     automatically by this routing.
 

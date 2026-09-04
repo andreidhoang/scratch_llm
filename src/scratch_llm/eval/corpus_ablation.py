@@ -1,6 +1,6 @@
 """F12 corpus ablation — FineWeb-EDU vs ClimbMix at iso-FLOP, each with its OWN retrained BPE.
 
-The d20 data decision (`docs/FRONTIER_2026_TASKSPEC.md` §F12): nanochat's switch
+The d20 data decision (`git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md` §F12): nanochat's switch
 FineWeb-EDU-100B → ClimbMix-400B was its single biggest speedrun win (−27% wall-clock,
 val_bpb 0.7465 → 0.7185) — but confounded with a d26→d24 depth change. This harness is the
 novel **iso-FLOP** measurement at ~35.8M params: two arms, identical model

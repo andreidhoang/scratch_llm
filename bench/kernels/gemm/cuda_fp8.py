@@ -15,12 +15,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
-from scratch_llm.kernels.common.arch import compute_capability, require_cc  # noqa: E402
+from scratch_llm.kernels.common.arch import compute_capability, require_arch  # noqa: E402
 from scratch_llm.kernels.gemm.cuda.fp8 import fp8_gemm  # noqa: E402
 
 
 def main() -> None:
-    require_cc(9, 0, fn_name="cuda_fp8 bench")
+    require_arch((9, 0), fn_name="cuda_fp8 bench")
     print(f"# FP8 GEMM bench · cc={compute_capability()}")
     print("# STATUS: STUB — kernel not implemented (csrc/gemm/fp8_gemm_sm90.cu)")
     print("# PRE-REGISTERED TARGET: ~1200-1400 TF/s on H100 @4096^3 fp8 (60-70% of 1979 dense)")

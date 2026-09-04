@@ -75,3 +75,9 @@ artifacts/k3_anatomy/census.json
 artifacts/k3_anatomy/tensors/
 artifacts/k3_anatomy/fetch.log
 _to_delete/
+
+# Third-party book text — verbatim chapters from the paid Vizuara "Build Kimi K3 from
+# Scratch" capsules, used once as cross-read source material for docs/k3/FACTS.md's C1-C3
+# verdicts. Untracked 2026-08-31: this repo is public, and the derived verdicts (not the
+# source prose) are the work product. Keep a local copy if you want to re-verify.
+artifacts/k3_book_crossread/

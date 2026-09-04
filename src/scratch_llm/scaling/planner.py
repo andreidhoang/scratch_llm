@@ -8,7 +8,8 @@ duplicate config is rejected (HTTP 409); a submission whose reservation exceeds 
 budget is refused (HTTP 400). This module is that accounting as pure logic — the HTTP client
 lives in the network-locked official scaffold (``cs336_scaling/client.py``); what this repo
 owns is the *method*: predeclare the grid, reserve pessimistically, refund optimistically,
-never race the cap. Wiring: ``deploy/runbooks/A3_stanford_api_leaderboard.md``.
+never race the cap. (The A3 leaderboard runbook was deleted 31/08 — the API is Stanford-VPN-only,
+so the rung was permanently BLOCKED-EXTERNAL; `git log` holds it.)
 
 Invariants:
 - ``spent + reserved + remaining == total_budget_seconds`` after every operation; money only

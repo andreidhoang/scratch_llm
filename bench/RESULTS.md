@@ -1,11 +1,12 @@
 # Measurement ledger — predicted vs measured (the "DoD is a profile" record)
 
-> The durable record of every **measured** performance number. Git + [`../docs/STATUS.md`](../docs/STATUS.md)
+> The durable record of every **measured** performance number. Git + [`../PLAN.md`](../PLAN.md)
 > track *what is built*; this file tracks *what is measured* — because a rented GPU is released and the
 > number must persist. The discipline (FOP-3 / FOP-4, and every rung's *Profile (DoD)* in
 > [`../docs/GPU_FROM_ZERO.md`](../docs/GPU_FROM_ZERO.md)): **predict the number and the bound first, then
 > measure, then log the gap and the root cause.** The spine that says *which* numbers matter is
-> [`../docs/PERFORMANCE_TRACK.md`](../docs/PERFORMANCE_TRACK.md).
+> [`../PLAN.md`](../PLAN.md) (the spine doc this line used to name was deleted 31/08; rows below
+> keep their original spec citations as provenance — those live in `git log`).
 >
 > A row is a result only if it is `[FACT]` — measured under `cuda.synchronize`, fixed seed, warm-ups.
 > An unmeasured expectation is `[INFERENCE]` and does not belong here until measured.

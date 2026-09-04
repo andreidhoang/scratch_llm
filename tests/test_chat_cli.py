@@ -1,4 +1,4 @@
-"""Tests for A6 chat REPL (docs/FRONTIER_2026_TASKSPEC.md §A · A6).
+"""Tests for A6 chat REPL (git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md §A · A6).
 
 DoD coverage:
 - ``reply('hi')`` returns a str and grows history 0 → 2 (the user + assistant turns);

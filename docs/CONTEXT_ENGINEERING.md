@@ -145,7 +145,7 @@ This is the heart of the manual: for each file we authored, *why it exists*, *wh
   contract is live ([ADR-0013](adr/ADR-0013-execution-mode-full-delegation.md)), and the PreToolUse
   Edit|Write hook that enforces the `learn` half (blocks agent writes to kernel-rep files, exit 2).
   In `delegate` mode (current since 2026-07-03) the hook allows kernel writes; the teach-back gate
-  becomes the pull-based study queue in `docs/learning/INDEX.md`.
+  becomes the pull-based study queue in `MASTERY_LEDGER.md`.
 - **Why a file, not a prose rule:** the boundary was enforced at four layers (prose, hook, agent
   refusal text, commands) — flipping strategy by prose alone would leave the hook fighting the
   agents. A single structural switch keeps the flip atomic, durable, and reversible in one line —
@@ -224,10 +224,10 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
   the *source of truth for what to build and in what sequence*; the root `CLAUDE.md` (Lever 1) is only its
   lean, always-on summary — the A1→A5↔layer↔file map there is the plan's spine compressed to fit always-on
   residence.
-- **Capstone — DELTA** (`../../DELTA.md`, in the
+- **Capstone — DELTA** (retired 31/08; summary in `KERNEL_MASTERY_SPEC.md` §6 — formerly in the
   workspace root) — the barbell *spike* (a GDN-2 decode kernel) that sits on the A2/A5 base. Lever 2,
-  on-demand depth like the rest of `docs/`; tracked from [`STATUS.md`](STATUS.md) and
-  [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7 so it is **not an orphan** (the discipline below).
+  on-demand depth like the rest of `docs/`; the tracker that kept it from being an orphan is now
+  [`../PLAN.md`](../PLAN.md) (the STATUS/IMPLEMENTATION_PLAN pair it named was collapsed into it).
 - **[`assignment_guides/`](assignment_guides/INDEX.md)** — five senior reviews of the CS336 PDFs, each
   mapping the load-bearing 20% of an assignment onto `src/scratch_llm/`, tagged
   LOAD-BEARING / COURSE-ROTE / SKIP, with the linear A1→A5 build order. Enter at
@@ -281,7 +281,7 @@ auto-loaded — so all of its depth costs ~zero on a normal turn.
   aha + a code trace to `file·func·line` + the teach-back gate), ordered in a first-principles progression.
   It's the map for the deep dive; the full prose lessons in `learning/<series>/` are still written one-per-
   teach-back. This is the delegate-mode answer to "ship first, master after seeing the code" (ADR-0013).
-- **[`mastery/`](../mastery/README.md)** — the hands-on re-implementation track: a gitignored workspace that **exactly mirrors the real repository structure** (`mastery/src/mastery_llm/` and `mastery/tests/`). All Python source files are processed via an AST parser to convert function/method bodies into blank stubs raising `NotImplementedError`, while maintaining identical signatures, docstrings, and decorators. Test suites are adapted to import directly from `mastery_llm`. This enables the user to practice coding the entire codebase from scratch, mapping strictly onto the curriculum in [`learning/CURRICULUM.md`](learning/CURRICULUM.md) and executing the PRR (Predict-Run-Reconcile) loop locally.
+- **`mastery/`** — the hands-on re-implementation track: a **gitignored, per-machine** workspace (so it may or may not be present on any given clone; no generator for it is tracked here) that mirrors the real repository structure (`mastery/src/mastery_llm/` and `mastery/tests/`). All Python source files are processed via an AST parser to convert function/method bodies into blank stubs raising `NotImplementedError`, while maintaining identical signatures, docstrings, and decorators. Test suites are adapted to import directly from `mastery_llm`. This enables the user to practice coding the entire codebase from scratch, executing the PRR (Predict-Run-Reconcile) loop locally. (The 89-Bài curriculum doc it used to map onto was deleted 31/08; the sequence is now spec §12.5.)
 - **Why Lever 2, not Lever 1:** plan + guides are thousands of lines. Inlining them into `CLAUDE.md`
   would pay for *all* of it on *every* turn (§0.1) and trigger context rot (§0.2) — to surface a single
   per-assignment brief the model needs only while working that layer. Progressive disclosure (§1) is exactly
@@ -303,10 +303,10 @@ Code day to day so context stays high-signal.
 The load-bearing rule that governs the rest of this section — codified in CLAUDE.md ("Orient before you
 build"), and applied by every agent as a lead-frontier-lab RE would. Before any engineering work:
 **analyze → reconstruct → reason → build.** Read `git log --oneline -15` + the current-node pointer
-(`performance/PERF_PLAN.md`; for the frontier front, [`docs/FRONTIER_STATUS.md`](FRONTIER_STATUS.md);
+([`docs/KERNEL_MASTERY_SPEC.md`](KERNEL_MASTERY_SPEC.md) §12.5 — the session ladder;
 for the K3 track, [`docs/k3/ROADMAP.md`](k3/ROADMAP.md) §6 START-HERE) +
 the ledger (`bench/RESULTS.md`) + the one spec governing the active node (frontier entry point:
-[`docs/FRONTIER_2026_MASTER_PLAN.md`](FRONTIER_2026_MASTER_PLAN.md)); state what the last commits
+[`PLAN.md`](../PLAN.md)); state what the last commits
 established and what is *measured vs merely implemented*; then reason the next task from that state
 (the highest-EV node, predict-before-run) rather than pattern-matching a default. The SessionStart hook (Lever 4) injects the *starting* slice — latest
 commits + node — so this begins for free; the agent then reads deeper. Skipping orientation is the
@@ -321,7 +321,7 @@ resolve to the repo root.)
 
 ### 3.2 Context hygiene: `/clear` vs compaction
 - **`/clear`** wipes the conversation. Use it **between tasks/days** — the moment the current thread's
-  content stops paying rent. Your external memory (`MEMORY.md`, `docs/STATUS.md`, the repo itself)
+  content stops paying rent. Your external memory (`MEMORY.md`, `PLAN.md`, the repo itself)
   carries state, so clearing is cheap and *good*: it resets you to a clean, high-signal window. The
   governing rule: external memory > chat memory, so `/clear` between build sessions is fine.
 - **Compaction** is the harness auto-summarizing when the window fills. It is lossy. Prefer to
@@ -552,3 +552,118 @@ as *"the historical contract"*, while `.claude/execution-mode` has said `learn` 
 2026-08-13 reconciliation patched the "four active fronts" block but missed the FOP block **above** it —
 so the first mode statement a fresh agent read was the wrong one. Generalise the lesson: *when a
 contract changes, grep for **every** statement of it, not the one you remember writing.*
+
+---
+
+## 8. Addendum — 2026-08-31: wiring the **mastery lane** into the harness
+
+The 31/08 operator amendment (PLAN.md header) returned K3 + perf/kernel from the backlog as a
+production lane, delivered as the L0–L5 sessions in spec **§12.5**. The harness question is
+narrow: *what, if anything, must change in `.claude/` for a session-shaped day to run?*
+
+**Answer: almost nothing — and that is the finding.** The five doors already exist (§10.6:
+`/op` · `/master` · `/kviz` · `/feynman` · `/tutor`), plus `/rebuild` and `/kernel-day`. A new
+`/session` command would be a **sixth name for the T-loop**, which is exactly the ceremony
+Lever 2 is supposed to prevent. The lane routes through the doors it already has.
+
+### What did change, and the lever behind each
+
+| Change | Lever | Why |
+|---|---|---|
+| PLAN.md gains **THE DAY — one ladder** (superseded the same evening: the two-track split lasted one day) | 1 (auto-loaded law) | Rule 4 was ambiguous once two lanes compete. First fix: *Track 1 alone scores*. Operator then inverted the tracks — so the fix moved rather than relaxed: **rule 4 is scored on the session's PUSHED commit.** A local commit is still zero. Written down so it cannot be re-litigated at 20:55. |
+| Spec §12.5 gains an **OWNER column** | 2 (on-demand) | The seal is a *per-file* rule (`oracle-guard.sh`), but a *session* spans files. Marking each session H/P/A moves the boundary from "which file" to "which work", which is how it is actually encountered. |
+| §12.5 gains a **rental queue** row (L3.3) | 2 | The 57-day ncu-debt was not a discipline failure, it was a **missing data structure**: no place existed to park "needs silicon". L3.3 is that place, and it has an owner. |
+| Sequencing law: *no session starts until the previous DoD is in a commit* | 1 | The Jul–Aug failure mode (~87 planning files, 0 kernels) is a **breadth-first traversal of a ladder**. The law forces depth-first. It is enforceable by reading `git log`, which is why it is a law and not an intention. |
+
+### The leak rule (new, and the sharpest thing here)
+
+A mentoring harness has a failure mode ordinary harnesses do not: **the agent knows the answer
+and the curriculum depends on it not saying so.** Two live instances, both now written down:
+
+1. `pytest -m "not gpu"` collects `tests/test_wy_identity.py`, which asserts `rel < 1e-10` — a
+   bound overlapping `PREDICTED[(0.0,"float64","auto")]`. Running the full suite in a session
+   that is about to elicit that prediction **leaks it**. Mitigation: the SessionStart hook
+   already prints this seal while predictions are unwritten; the agent must not run the full
+   suite in the eliciting turn. Run `ruff` + `pyright` instead — both are prediction-blind.
+2. The worked-neighbor rule (§10.7 line 7) is not only pedagogy, it is **seal enforcement by
+   composition**: `mock_linear_attention` (`paths.py:163`) already publishes the loop skeleton
+   for a *different* recurrence. A "neighbor" example that also shows the eraser in
+   update-rule form would, composed with it, hand over the sealed target by copy-paste. The
+   bright line: teach the eraser as **projection algebra on one token**, never as a line
+   inside a loop over T.
+
+> Generalised: **in a harness that teaches, "what the agent must not emit" is as much a design
+> artifact as "what it must".** Levers 1 and 2 carry capability; this is the first place we
+> have written an *incapability* down and given it a mechanism.
+
+---
+
+## 9. Addendum — 2026-08-31: the ladder tracker, and why it is not a tracker file
+
+The 31/08 evening amendment made the session the unit of the day. That immediately raises the
+question the operator asked directly: *how do we know, effortlessly, what is done, what is
+mastered, and what is next?* The obvious answer — a status file with 22 checkboxes — is the one
+answer this repo may not give. **PLAN.md rule 6 bans new trackers and boards**, and the reason is
+empirical, not stylistic: every hand-maintained fact in this repo has rotted. The ncu-debt sat
+misrouted for 57 days. `CLAUDE.md` asserted a standing GPU for weeks after the machine lost it.
+"13%" circulated for months as a misread of `0.130267`. A checkbox board would have joined them
+inside a fortnight, and it would have rotted *silently* — which is worse than not existing,
+because it would still be read.
+
+**`.claude/ladder.py` is the answer that survives rule 6: it stores nothing.** Every row is
+derived, on every invocation, from two sources that cannot drift from reality:
+
+| Source | What it witnesses | Why it cannot rot |
+|---|---|---|
+| **git** — a commit whose subject scopes the session, `mastery(L0.1): <imperative>` | the session happened, and (via `origin/main`) whether rule 4 can score it | `git log` is already the archive (PLAN.md header); the receipt is a by-product of the work, not a second act of bookkeeping |
+| **artifact probes** — file exists · symbol no longer raises · result file present | the DoD really landed | a probe reads the tree as it *is*; there is no version of it that can be "out of date" |
+
+Neither alone is sufficient, and that is deliberate. A tag with no artifact is a claim
+(the board flags it: *tagged, but the probe found nothing at `<path>`*). An artifact with no tag
+is unattributed work (the board still counts it — the artifact is ground truth — but rule 4
+cannot score it). Where a session's output is a *reading* rep with no file of its own — R1, R2,
+L4.1, L1.3, L2.1, L3.1 — `probe` is `None` and the tag is the entire receipt, **stated in the row
+rather than hidden**, because a probe that greps a doc for the session id matches the §12.5 table
+that defines the session. That bug shipped in the first draft and marked L4.1 done; it is the
+reason the rule is now written down.
+
+### The two axes, and why they are never averaged
+
+| Axis | Computed how | What it means |
+|---|---|---|
+| **SHIPPED** | probe ∨ tag | the artifact exists |
+| **DEFENDED** | one appended line in `results/mastery_receipts.jsonl` at the Feynman gate | it can be rebuilt from blank, its number predicted, its choices defended, its 10× failure named |
+
+`TRACED ≠ DEFENDED` (§10.5) is the repo's oldest honesty rule, and collapsing these into one
+percentage would delete exactly the information worth having. **The gap between the columns is
+the mastery debt**, and the board is built to make it uncomfortable to look at. DEFENDED is the
+only field a human writes — one line, at `/eod`, and only when the gate actually passed.
+
+### Where it plugs in (no new ceremony — the §8 lesson, applied)
+
+| Surface | Change | Lever |
+|---|---|---|
+| `.claude/hooks/session-start.sh` | one `--brief` call: shipped/DEFENDED counts, the NOW session with its DoD, the exact tag to commit, blocked count, rental queue | 4 feeding 1 |
+| the same hook's `NEXT ▶` lines | renamed **`E1-PATH ▶`** | 1 — after the inversion the ladder owns the day and the E1 chain is its *output*; two lines that look like competing orders are a context bug, and labelling costs nothing |
+| `/op` | read the board at open; the day's outcome is normally the NOW session, committed under its scope | 2 |
+| `/eod` | score both axes; append the DEFENDED receipt **or** let the gap stand | 2 |
+
+No `/track`, no `/board`, no sixth door. The board is a command anyone can run
+(`python3 .claude/ladder.py --board`) and the hook already carries the five lines that matter.
+
+### Two mechanisms worth stealing elsewhere
+
+1. **The rental queue counts `NCU_DEBT = ...` constants only.** Debt written as prose in
+   `bench/RESULTS.md` is invisible to it *on purpose*: promoting it to a constant is what enrols
+   it. Today that reads **3 machine-readable against 5 registered in prose** — the tracker's first
+   act was to surface its own under-registration, which is precisely the failure that cost 57
+   days. A queue you cannot forget to read is a data structure, not a discipline.
+2. **Fail-soft by construction.** The hook calls it as `... --brief 2>/dev/null || true`, every
+   probe is wrapped, and `--brief` swallows its own exceptions. A tracker that can break a session
+   is worse than no tracker; this one can only ever go quiet.
+
+> Generalised, and it is the same shape as §8's leak rule: **the harness should make the true
+> state cheaper to obtain than the remembered state.** Every rotted fact in this repo's history
+> was remembered when it could have been derived. Anything a human must remember to update will
+> eventually be wrong, and being wrong in a file that is auto-loaded every session is the most
+> expensive failure mode this harness has.

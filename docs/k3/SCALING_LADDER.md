@@ -1,16 +1,9 @@
 # THE SCALING LADDER — how frontier labs sequence ablations vs scaling laws, and our order
 
-> ⚠️ **ERRATA-G binding (2026-08-26).** Pre-audit planning generation — NOT current law. The sealed
-> measure-first corpus governs (Desktop `plan/` + memory tracker; precedence G > F > E > D > C > B >
-> body). K3-from-scratch = post-gate season W9–W16. Full binding: ERRATA-G blocks in
-> `docs/k3/ROADMAP.md` and `docs/k3/MERGED_KERNELS_K3_ROADMAP.md`.
-
-> Compiled 2026-07-31 from a 3-angle primary-source pass (DeepSeek + NVIDIA · Moonshot ·
-> Meta/Qwen/MiniMax/open-labs). Question answered: **architecture ablations first, or scaling
-> laws first?** Answer the evidence gives, with near-zero dissent: **calibration fit on a proven
-> baseline → architecture ablations → family scaling-law fit (the decision) → freeze →
-> hyperparameter re-fit for the frozen family → flagship.** Scaling laws appear TWICE —
-> bracketing the architecture work — never once, and never on an unfrozen architecture.
+> **Methodology, not law (banner replaced 31/08).** The ERRATA-G block that stood here bound this
+> to a governance corpus that no longer exists. What survives is what the file is for: the
+> ablate → fit → freeze → re-fit ordering, from a 3-angle primary-source pass. `ABLATIONS.md`
+> opens by naming this as its methodology. Ordering across lanes: `PLAN.md`.
 
 ## 1. What the labs actually do (primary sources, exact scales)
 

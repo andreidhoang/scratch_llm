@@ -1,4 +1,4 @@
-"""The report card — the loop's acceptance oracle (docs/FRONTIER_2026_ABLATIONS.md §7).
+"""The report card — the loop's acceptance oracle (git show 07f3de4:docs/archive/FRONTIER_2026_ABLATIONS.md §7).
 
 Bundles the intrinsic metric (``val_bpb``) with the task families (multiple-choice, generative) into
 one comparable artifact, plus a **CORE-style** aggregate. Honest naming: ``core_style_score`` is the

@@ -19,7 +19,7 @@
 //     (the 64-bit SMEM descriptor — LBO/SBO >>4, swizzle in bits[62:64) — is
 //      shared by wgmma.mma_async and tcgen05.mma A/B operands).
 //
-// PRE-REGISTERED TARGET (PERF_PLAN.md Phase 3, B200 dense BF16 = 2,250 TF/s):
+// PRE-REGISTERED TARGET (PERF_ENGINEERING_SPEC.md §4 · A3, B200 dense BF16 = 2,250 TF/s):
 //   ~1,209 TF/s (~54% of dense) for the 1-SM path EARLY; warp-spec climbs to
 //   ~1,300–1,476 TF/s; the 2-SM cta_group::2 win is an HONEST ~8% (1209->1302,
 //   SMEM-bandwidth relief, not raw math). This file is the 1-SM rung only.

@@ -1,4 +1,4 @@
-"""A1 real-corpus shards — executable spec (docs/FRONTIER_2026_TASKSPEC.md §A·A1).
+"""A1 real-corpus shards — executable spec (git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md §A·A1).
 
 DoD invariants (pre-registered in bench/RESULTS.md §Frontier ablations):
 - **Round-trip:** the shard is exactly ``encode(d0)+[eot]+encode(d1)+[eot]``.

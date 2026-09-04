@@ -40,7 +40,8 @@ record the number in `bench/RESULTS.md` (this VALIDATES the sm120 %-of-peak boun
 
 ## 2. A2 §4.1–4.5 — WGMMA / TMA / warp-spec / FP8 GEMM (the ~10× jump)
 
-Prereq: A2 R0–R6 ✅ (the CUDA-core ceiling). Pre-registered targets (PERF_PLAN Phase 2, copy to
+Prereq: A2 R0–R6 ✅ (the CUDA-core ceiling). Pre-registered targets (`../PERF_ENGINEERING_SPEC.md`
+§4 · A2 — the H100 (sm_90a) prediction table; copy to
 RESULTS.md BEFORE running — H100 SXM dense FP16 = 989 TF/s, FP8 = 1,979; state the SKU):
 
 | # | build | target `[INFERENCE, pre-reg]` | ncu gate |
@@ -70,7 +71,11 @@ Start from CUTLASS/CuTe. Warp-spec + TMA + ping-pong + FP8. Target: **~75% util 
 published FA3 number); benchmark vs FlashAttention-3 + cuDNN on the same shape. Oracle: matches SDPA
 <1e-2 bf16; FP8 within its error band. Reuses the A2 §4.1 TMA + §4.5 FP8 primitives.
 
-## 5. Serving blocks S1–S3 (single-GPU frontier serving) — pre-registered (PERF_PLAN)
+## 5. Serving blocks S1–S3 (single-GPU frontier serving) — pre-registered **here**
+
+> These three rows ARE the pre-registration (rule 2 / D5) — they are not a copy of a table elsewhere.
+> Their derivations were duplicated in the deleted `PERF_PLAN.md` §"Phase 2"; this file is now the
+> single source. Do not re-derive them after seeing a number. Assignment context: `../A1_transformer_inference.md`.
 
 Copy these rows to RESULTS.md before running:
 

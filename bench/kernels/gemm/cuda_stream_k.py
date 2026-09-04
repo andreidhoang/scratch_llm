@@ -11,12 +11,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
-from scratch_llm.kernels.common.arch import compute_capability, require_cc  # noqa: E402
+from scratch_llm.kernels.common.arch import compute_capability, require_arch  # noqa: E402
 from scratch_llm.kernels.gemm.cuda.stream_k import stream_k_gemm  # noqa: E402
 
 
 def main() -> None:
-    require_cc(9, 0, fn_name="cuda_stream_k bench")
+    require_arch((9, 0), fn_name="cuda_stream_k bench")
     print(f"# stream-K GEMM bench · cc={compute_capability()}")
     print("# STATUS: STUB — kernel not implemented (csrc/gemm/stream_k_sm90.cu)")
     print("# PRE-REGISTERED: closes the tail-wave gap on wgmma (90% → 97% of cuBLAS @4096^3)")

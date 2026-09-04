@@ -692,7 +692,7 @@ Ví dụ số: `MMA_M=128, MMA_N=256, MMA_K=16, NCOL=256`; single-warp drain ph�
 [measured · compile · RESULTS.md §ISA-gated]  nvcc -arch=sm_100a -ptx AND -cubin exit 0;
       PTX có 21× tcgen05 incl. tcgen05.mma.cta_group::1.kind::f16 + TMA;
       SASS (nvdisasm) = UTCHMMA + LDTM.x4
-[PREDICTED · book/PERF_PLAN]  ~1209 TF/s = 54% dense B200 (2250 TF/s); 2-SM cta_group::2 win
+[PREDICTED · book/PERF_ENGINEERING_SPEC §4·A3]  ~1209 TF/s = 54% dense B200 (2250 TF/s); 2-SM cta_group::2 win
       HONEST ~8% (1209→1302, SMEM-bandwidth relief, KHÔNG raw math) — runtime DEFERRED
 ```
 
@@ -727,7 +727,7 @@ phồng). **Scarce-2026:** kernels = top differentiator.
 | 6.6 | FA3 util / TF/s | ~75% / ~740 TF/s FP16; FP8 ~1.2 PFLOP/s | FA3 paper | **[PREDICTED]** |
 | 6.7 | single-warp drain coverage | `32/128 = 1/4` (3/4 stale) | verify_s6.py | measured |
 | 6.7 | PTX tcgen05 count | `21× tcgen05 + TMA`; SASS UTCHMMA+LDTM.x4 (-cubin exit 0) | RESULTS.md §ISA | measured (compile) |
-| 6.7 | B200 1-SM / 2-SM | ~1209 TF/s (54% dense) / +8% | PERF_PLAN | **[PREDICTED]** |
+| 6.7 | B200 1-SM / 2-SM | ~1209 TF/s (54% dense) / +8% | SPEC §4·A3 | **[PREDICTED]** |
 
 **Tổng: 17 số MEASURED (14 CPU/gloo/arithmetic correctness + 3 compile-verified) · 3 [PREDICTED] (TF/s,
 runtime DEFERRED tới H100/B200).**

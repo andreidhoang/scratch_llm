@@ -1,5 +1,10 @@
 # ADR-0013 — Execution-mode switch: full delegation (deliver first, master later)
 
+> **SUPERSEDED for the mode value (2026-08-31).** `.claude/execution-mode` is **`learn`**, not
+> `delegate`. The mechanism this ADR introduced (a file that switches agent authority) is still in
+> force and is why the seal works; only the setting flipped. Live authority: `CLAUDE.md` FOP-6.
+
+
 - **Status:** Accepted (2026-07-03, Navigator mandate — verbatim: "bypass all rules of me building
   by hand, I change strategy to save time and focus on delivering value first while mastering
   after seeing the code")

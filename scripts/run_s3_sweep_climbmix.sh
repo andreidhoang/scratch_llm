@@ -19,11 +19,9 @@ while pgrep -f "stage_s3_corpus.py --corpus climbmix" >/dev/null; do
 done
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] staging process exited." | tee -a "$LOG"
 
-# Confirm staged data exists
-if [ ! -f artifacts/s3_scaling_sweep/data/tokenizer.json ]; then
-    echo "ERROR: staged tokenizer not found at artifacts/s3_scaling_sweep/data/tokenizer.json" | tee -a "$LOG"
-    exit 1
-fi
+# Confirm staged data exists AND report it against the pin (2026-08-31).
+. scripts/_tokenizer_guard.sh
+report_staged_tokenizer artifacts/s3_scaling_sweep/data/tokenizer.json 2>&1 | tee -a "$LOG" || exit 1
 
 # Per-point batch map. s1-s3 are small (d=4, 20M); s4-s6 are d=8, 59M; s7 is d=12, 135M.
 # F12 (d=6, 35.8M, batch=8) used ~17 GB on RTX 5090 32 GB.

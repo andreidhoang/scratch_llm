@@ -366,7 +366,8 @@ descriptor and the wgmma descriptor.
 
 ## 4. Phase-2 pairing note — the `nvcc` invocation and what to diff
 
-When we rent the H100 (Phase 2, `performance/PERF_PLAN.md` §"Phase 2", 7th–8th items), compile the
+When we rent the H100 (`performance/rental/H100_day_runbook.md` §2; targets pre-registered in
+`performance/PERF_ENGINEERING_SPEC.md` §4 · A2), compile the
 same probe *for real* and diff against this hand-decode.
 
 **Compile to PTX** (host-side; already runs on any box, incl. the sm_120 standing card — see §5):

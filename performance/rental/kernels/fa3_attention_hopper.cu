@@ -11,7 +11,7 @@
 //   follows the repo's PTX artifact  performance/artifacts/wgmma_descriptor_manual.md  (the
 //   64-bit SMEM descriptor bit-field map §2.1 and the wgmma.fence/commit/wait protocol §1.10).
 //
-// Pre-registered target (performance/PERF_PLAN.md Phase 2, A4 R4 / A4_flash_attention.md §4.1):
+// Pre-registered target (performance/PERF_ENGINEERING_SPEC.md §4 · A4, R4 / A4_flash_attention.md §4.1):
 //   ~75% of H100 FP16 peak  ≈  740 TFLOP/s  (FA3 paper number).  FP8 (E4M3) path ~1.2 PFLOP/s.
 //   These are the *paper* numbers — cited as such, NOT measured here.
 //

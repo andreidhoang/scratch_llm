@@ -60,3 +60,23 @@
 ---
 *16 pillar · 89 Bài · 9,782 dòng derivation. Con đường + vì sao thứ tự: [`../CURRICULUM.md`](../CURRICULUM.md).
 Sổ cái teach-back (cold defense): [`../PROGRESS.md`](../PROGRESS.md).*
+
+---
+
+## Trạng thái sau đợt dọn 2026-08-31 (đọc trước khi lần theo cross-ref)
+
+Thư mục này **được giữ lại có chủ đích** — nó là 9,828 dòng dẫn-xuất first-principles, neo code
+`file·func·line`, có số đo thật kèm nhãn trung thực, chạy theo vòng PRR. Đo được: **89 neo còn
+sống / 11 chết (11%)**, và 9 trong 11 nằm gọn ở `S3_cuda_core_kernels.md`.
+
+**Ba lớp bạn đồng hành đã bị XOÁ** vì trùng lặp hoặc vì tranh chấp vai trò với luật hiện hành:
+
+| Đã xoá | Vì sao | Thay bằng |
+|---|---|---|
+| `roadmap/` + `roadmap_model/` (18 file, 4,780 dòng) | lớp "reference chung" mà chính các doc ở đây tuyên bố là đã bao trùm và đào sâu hơn | thư mục này |
+| `PROGRESS.md` · `INDEX.md` · `MASTERY_DEBT.md` | **tracker cạnh tranh** — dòng `Learning-node:` của PROGRESS mâu thuẫn với PLAN.md § TODAY; rule 6 cấm sổ thứ hai | `PLAN.md` § TODAY (node hiện tại) · spec §12.5 (thang session) · `MASTERY_LEDGER.md` (sổ đo + mechanism) |
+| `CURRICULUM.md` · `BOOK_CHAPTER_MAP.md` · `FRONTIER_*` | thế hệ tiền-audit | `docs/KERNEL_MASTERY_SPEC.md` §5/§11/§12 |
+
+**Cross-ref tới các file đó trong doc dưới đây là PROVENANCE, không phải liên kết sống** — cùng
+quy tắc đang áp cho `bench/RESULTS.md`: một bản ghi giữ nguyên trích dẫn tại thời điểm viết, và
+đích của nó sống trong `git log` (`git show <sha>:<path>`). Không viết lại bản ghi.

@@ -57,9 +57,21 @@ def _(
     *lead, n, d = q.shape  # noqa: F841
     o_shape = q.shape
     lse_shape = tuple(lead) + (n,)
+    # lse dtype is DEVICE-DEPENDENT, because the two registered impls disagree and the fake
+    # must match whichever one will run:
+    #   CPU -- the composite oracle's accumulator rule (kernels/attention/reference.py
+    #          `acc_dtype`): fp32/fp64 keep their precision, everything else accumulates fp32.
+    #   CUDA -- prefill/fa2.py:138 allocates `lse` fp32 UNCONDITIONALLY, so fp32 always.
+    # Declaring a single fp32 rule broke opcheck on CPU fp64; declaring a single dtype-only
+    # rule would break it on CUDA fp64. Hence both branches.
+    lse_dtype = (
+        torch.float32
+        if q.device.type == "cuda" or q.dtype not in (torch.float32, torch.float64)
+        else q.dtype
+    )
     return (
         torch.empty(o_shape, device=q.device, dtype=q.dtype),
-        torch.empty(lse_shape, device=q.device, dtype=torch.float32),
+        torch.empty(lse_shape, device=q.device, dtype=lse_dtype),
     )
 
 

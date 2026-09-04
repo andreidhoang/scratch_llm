@@ -2,12 +2,20 @@
 
 ## What this repo is
 
-`scratch_llm` — a from-scratch, production-grade CS336 stack + 2026 frontier-practice layer,
-built by hand for mastery. Spec of record for process: `README.md`, `docs/STATUS.md`,
-`docs/IMPLEMENTATION_PLAN.md`. The K3 track (build & host Kimi K3 from scratch):
-`docs/k3/ROADMAP.md` + `docs/k3/FACTS.md` (claim ledger — where a secondary source and the
-K3 tech report arXiv:2607.24653 disagree, the tech report wins, and the disagreement is
-logged in FACTS.md).
+`scratch_llm` — the production vehicle for linear-attention numerics & determinism
+(`src/scratch_llm/mastery/`, a live vLLM review), sitting on a from-scratch CS336 stack that
+stays green. **Spec of record: `PLAN.md` (the ONLY plan — it wins every contradiction), then
+`CLAUDE.md` (constitution) and `docs/KERNEL_MASTERY_SPEC.md` (§12.5 = the session ladder).**
+K3 (build & host Kimi K3 from scratch): `docs/k3/ROADMAP.md` + `docs/k3/FACTS.md` — the claim
+ledger; where a secondary source and the K3 tech report arXiv:2607.24653 disagree, the tech
+report wins and the disagreement is logged in FACTS.md.
+
+## THE SEAL — four things agents never write
+
+`src/scratch_llm/mastery/reference.py` · the measurement harness · RL loss math (advantage,
+KL estimators, IS ratio, clipping) · verifier logic and tolerances. Hook-enforced by
+`.claude/hooks/oracle-guard.sh`. Execution mode is `learn` (`.claude/execution-mode`):
+offer failing tests, a critique, or a post-hoc review instead. Everything else is delegable.
 
 ## Build / verify
 

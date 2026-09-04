@@ -27,7 +27,7 @@ nvcc -arch=sm_100a -ptx trivial_tcgen05.cu -o /dev/null     # trivial tcgen05 co
 
 ## 1. A3 §4.2 — tcgen05 / UMMA GEMM, accumulator in TMEM
 
-Pre-registered (PERF_PLAN Phase 3; B200 dense BF16 = 2,250 TF/s — quote DENSE, keynote figures are 2×
+Pre-registered (`../PERF_ENGINEERING_SPEC.md` §4 · A3/A5 — the B200 (sm_100a) prediction tables; B200 dense BF16 = 2,250 TF/s — quote DENSE, keynote figures are 2×
 sparse):
 
 | step | build | target `[INFERENCE, pre-reg]` |

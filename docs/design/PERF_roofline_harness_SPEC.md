@@ -1,5 +1,11 @@
 # Design spec — Roofline + predict-the-number harness
 
+> **⚠ HARDWARE CORRECTION (2026-08-31).** Lines below that say "the standing sm120 GPU / no rental
+> needed" were TRUE when written and are FALSE now: this host has **no GPU and no CUDA toolchain**
+> (`nvidia-smi`/`nvcc`/`ncu`/`nsys` absent, `triton` not importable, arm64 — measured 29–30/08).
+> Every rung here is **rental-gated**; measured numbers already in the ledger stay valid as records.
+> Law: `CLAUDE.md` § Hardware reality · `PLAN.md` § Hardware law.
+
 > **Status:** ✅ built same day (2026-06-29) and in daily use — landed as `src/scratch_llm/bench/`
 > (`gpu_specs` · `roofline` · `harness` · `ledger`); every perf rung measures through it
 > (`bench/RESULTS.md`). Kept as the design record.

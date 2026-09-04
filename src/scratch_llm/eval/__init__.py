@@ -2,7 +2,7 @@
 
 `val_bpb` (intrinsic) + multiple-choice (ARC/MMLU) + generative (GSM8K/HumanEval) folded into one
 :class:`ReportCard`, with a documented CORE-*style* aggregate. See
-`docs/FRONTIER_2026_ABLATIONS.md` §7. `optimizer_race` is the F1-run iso-FLOP A/B harness
+`git show 07f3de4:docs/archive/FRONTIER_2026_ABLATIONS.md` §7. `optimizer_race` is the F1-run iso-FLOP A/B harness
 (Muon vs LR-tuned AdamW at fixed C=6ND). `spec_acceptance` is the F3 harness — n-gram
 speculative-decode acceptance measured BY PROMPT DOMAIN on a trained checkpoint, with the
 committed-equals-greedy losslessness oracle riding along.

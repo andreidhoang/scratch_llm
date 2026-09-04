@@ -81,8 +81,8 @@ fail() {
 # while CI deselects `slow`. A gate that is not identical to CI can pass locally and fail on the
 # remote, which is the same class of gap that let matplotlib through. Keep these two in lockstep.
 if command -v ruff >/dev/null 2>&1; then
-  ruff check src tests bench/kernels       >/dev/null 2>&1 || fail "ruff check failed"
-  ruff format --check src tests bench/kernels >/dev/null 2>&1 || fail "ruff format would change files (run: ruff format)"
+  ruff check src tests bench/kernels experiments/plot_e001.py >/dev/null 2>&1 || fail "ruff check failed"
+  ruff format --check src tests bench/kernels experiments/plot_e001.py >/dev/null 2>&1 || fail "ruff format would change files (run: ruff format)"
 fi
 
 command -v pyright >/dev/null 2>&1 && { pyright >/dev/null 2>&1 || fail "pyright reported type errors"; }

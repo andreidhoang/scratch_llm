@@ -86,8 +86,8 @@ GRID_SPEC: tuple[tuple[str, int, int], ...] = (
     ("s8", 12, 20),
 )
 
-# The v3 recipe/scale-extension grid (FRONTIER_2026_D20_CERTAINTY_PLAN §6 P5 protocol +
-# FRONTIER_2026_SCALING_PROGRAM stage 2): ratio-4 points for the P5 LR sweep (d12 core sweep,
+# The v3 recipe/scale-extension grid (git show 07f3de4:docs/archive/FRONTIER_2026_D20_CERTAINTY_PLAN.md §6 P5
+# protocol + git show 07f3de4:docs/archive/FRONTIER_2026_SCALING_PROGRAM.md stage 2): ratio-4 points for the P5 LR sweep (d12 core sweep,
 # d8 width probe) and the d14 rungs that extend the ladder's leverage toward the d20. The P5
 # confirmation point (d12 @ ratio-8) and S3.5's d12-r20 are the v1 grid's s7/s8 — reused, not
 # duplicated. LR is NOT a grid axis: one point per invocation, ``--lr`` carries the multiplier.

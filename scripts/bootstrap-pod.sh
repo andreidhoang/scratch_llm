@@ -35,15 +35,17 @@ if [ -z "$mem_dir" ]; then
   mem_dir="$HOME/.claude/projects/-workspace/memory"
 fi
 mkdir -p "$mem_dir"
-cp .claude/memory-snapshot/*.md "$mem_dir"/ 2>/dev/null && echo "restored memory → $mem_dir" \
-  || echo "no snapshot files (or none yet) — skipped"
+# NOTE (31/08): the in-repo .claude/memory-snapshot/ mirror was deleted (stale duplicate of
+# ~/.claude/projects/*/memory/). Nothing to restore — a fresh session self-orients from
+# PLAN.md § TODAY -> bench/RESULTS.md -> MASTERY_LEDGER.md, which is the design intent anyway.
+echo "memory: no in-repo snapshot (removed 31/08) — orient from PLAN.md § TODAY"
 
 say "4/4 · Verify (torch+CUDA · green gate · current node)"
 .venv/bin/python -c "import torch; print('torch', torch.__version__, '| cuda', torch.cuda.is_available(), '|', (torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU-only'))"
 .venv/bin/ruff check src tests >/dev/null 2>&1 && echo "ruff: clean" || echo "ruff: ISSUES (run: .venv/bin/ruff check src tests)"
 .venv/bin/pytest -m "not gpu" -q >/dev/null 2>&1 && echo "pytest -m 'not gpu': GREEN" || echo "pytest: FAILURES (run: .venv/bin/pytest -m 'not gpu')"
 say "Current curriculum node (orient before building):"
-grep -m1 '^Phase:' performance/PERF_PLAN.md 2>/dev/null || echo "(see performance/PERF_PLAN.md)"
+grep -m1 '▶ NOW' docs/KERNEL_MASTERY_SPEC.md 2>/dev/null || echo "(see PLAN.md + docs/KERNEL_MASTERY_SPEC.md §12.5)"
 
 cat <<'EOF'
 

@@ -1,6 +1,6 @@
 """Hopper WGMMA GEMM (sm_90a) roofline vs cuBLAS — the rental-day headliner bench.
 
-Pre-registered target (PERF_PLAN A2 §4.2 / A3 R3.1, book §7.3.1):
+Pre-registered target (performance/PERF_ENGINEERING_SPEC.md §4 · A2 §4.2 / A3 R3.1, book §7.3.1):
   ≈318 TFLOPS on H100 at 4096³ FP16 (~4.5× over WMMA's 71 TF/s). This bench
   measures the *fraction of that* the promoted skeleton reaches.
 
@@ -22,7 +22,7 @@ import torch
 import triton
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
-from scratch_llm.kernels.common.arch import compute_capability, require_cc  # noqa: E402
+from scratch_llm.kernels.common.arch import compute_capability, require_arch  # noqa: E402
 from scratch_llm.kernels.gemm.cuda.wgmma import wgmma_gemm  # noqa: E402
 
 # H100 fp16 dense peak (the datasheet roof). The bench reports % of this.
@@ -34,7 +34,7 @@ def _bench_ms(fn) -> float:
 
 
 def main() -> None:
-    require_cc(9, 0, fn_name="cuda_wgmma bench")
+    require_arch((9, 0), fn_name="cuda_wgmma bench")
     ap = argparse.ArgumentParser(description="Hopper WGMMA GEMM roofline")
     ap.add_argument("--n", type=int, default=4096, help="square GEMM dim (multiples of 64)")
     args = ap.parse_args()

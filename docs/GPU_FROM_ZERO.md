@@ -1,5 +1,11 @@
 # GPU & Kernel Engineering — from zero → frontier decode kernels
 
+> **⚠ HARDWARE CORRECTION (2026-08-31).** Lines below that say "the standing sm120 GPU / no rental
+> needed" were TRUE when written and are FALSE now: this host has **no GPU and no CUDA toolchain**
+> (`nvidia-smi`/`nvcc`/`ncu`/`nsys` absent, `triton` not importable, arm64 — measured 29–30/08).
+> Every rung here is **rental-gated**; measured numbers already in the ledger stay valid as records.
+> Law: `CLAUDE.md` § Hardware reality · `PLAN.md` § Hardware law.
+
 > **What this is.** A laddered curriculum for someone with **no GPU-programming or kernel-optimization
 > background** who is leveling to senior/principal frontier-lab performance engineering. It is the
 > *on-ramp* the rest of the repo assumes you already have. Rungs 0 → 9 take you from "what is a warp"
@@ -8,15 +14,15 @@
 >
 > **The organizing law you will internalize:** *decode is memory-bandwidth-bound; every 2026 inference
 > technique is one lever to raise decode arithmetic intensity back toward the bandwidth ceiling.* The
-> operating build these rungs feed is the **perf curriculum** — `../performance/PERF_PLAN.md`
-> (phases, current node) + `PERF_ENGINEERING_SPEC.md`; the *why* behind the ladder's aim is
-> [`PERFORMANCE_TRACK.md`](PERFORMANCE_TRACK.md) (the reference layer: thesis · findings · honesty constants).
+> operating build these rungs feed is the **perf curriculum** — `../performance/` (README + A1–A7,
+> pre-registrations in `PERF_ENGINEERING_SPEC.md`); the **current node** is the session ladder,
+> [`KERNEL_MASTERY_SPEC.md`](KERNEL_MASTERY_SPEC.md) §12.5, ordered by [`PLAN.md`](../PLAN.md) item 8.
 >
 > **Execution-mode note ([ADR-0013](adr/ADR-0013-execution-mode-full-delegation.md), 2026-07-03).**
 > The "AI-explains / human-implements" contract and per-rung teach-back gates in this curriculum are
 > the `learn`-mode protocol. While `.claude/execution-mode` is **`delegate`**, the rungs are
 > agent-built and measured; this document then serves as the **study syllabus** for the post-hoc
-> mastery pass (`docs/learning/INDEX.md` study queue).
+> mastery pass (`MASTERY_LEDGER.md`; the old `docs/learning/INDEX.md` queue was folded into it 31/08).
 
 ---
 
@@ -86,7 +92,7 @@ Climb **in order** — each rung's mental model is load-bearing for the next. Yo
 > **Execution status (2026-07-03) — where each rung's build target already landed.** Rung 1
 > (roofline harness) ✅ `scratch_llm.bench`; rung 6's decode-attention target ✅ shipped as perf-track
 > **A1 R4.1** (`kernels/paged_decode_triton.py` — fused paged decode, 5.90 ms/step measured); rungs
-> 2–5 and 7 land as perf-track **Phases 1b–1e** (`../performance/PERF_PLAN.md` — GEMV/softmax/GEMM
+> 2–5 and 7 land as the perf track's A2 ladder (`../performance/A2_kernel_optimization.md` — GEMV/softmax/GEMM
 > ladders, FA, quant numerics); rung 8: DDP ✅ (`utils/ddp.py`), ZeRO-1/FSDP queued behind the
 > ordering mandate; rung 9 follows the A5 track after the mandate. The *mental-model* climb below
 > is unchanged — this note only maps each rung to its executing vehicle.

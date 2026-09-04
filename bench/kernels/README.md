@@ -36,6 +36,12 @@ launches each bench as a subprocess so a Triton/nvcc failure in one bench cannot
 | `norm/normalize` | A2 R3 | `norm/normalize.py` | `kernels.norm.normalize` (`rmsnorm_triton`, `layernorm_triton`) vs unfused + vendor | bf16 |
 | `reduce/softmax` | A2 R2 | `reduce/softmax.py` | `kernels.reduce.softmax` (`twopass` → `online` → `fused`) | bf16 |
 | `reduce/topk` | A2 R4 | `reduce/topk.py` | `kernels.reduce.topk` (`topk_last_dim` + `fused_softmax_topk`) | bf16 |
+| `gemm/cuda_wgmma` | A3 R3.1 | `gemm/cuda_wgmma.py` | `kernels.gemm.cuda.wgmma` (Hopper WGMMA, **sm_90a**) — compile-verified, never run | fp16 |
+| `gemm/cuda_tcgen05` | A3 R4.1 | `gemm/cuda_tcgen05.py` | `kernels.gemm.cuda.tcgen05` (Blackwell tcgen05, **sm_100a**) — compile-verified, never run | fp16 |
+| `attention/fa3_hopper` | A3 R3.5 | `attention/fa3_hopper.py` | `kernels.attention.prefill.fa3` (Hopper FA3, **sm_90a**) — compile-verified, never run | bf16 |
+| `gemm/cuda_fp8` | A3 R3.2 | `gemm/cuda_fp8.py` | `kernels.gemm.cuda.fp8` — **STUB, raises**; learning rep, no ledger row by design | fp8 |
+| `gemm/cuda_stream_k` | A3 R3.3 | `gemm/cuda_stream_k.py` | `kernels.gemm.cuda.stream_k` — **STUB, raises** | fp16 |
+| `gemm/cuda_persistent` | A3 R3.4 | `gemm/cuda_persistent.py` | `kernels.gemm.cuda.persistent` — **STUB, raises** | fp16 |
 
 Each row's measured numbers live in [`../RESULTS.md`](../RESULTS.md) (the durable ledger — predict-
 before-run, then the measured gap + root cause).
@@ -82,11 +88,15 @@ The tree mirrors `src/scratch_llm/kernels/<family>/<backend>/` so a kernel and i
 
 ## What is NOT here (and why)
 
-- **Hopper WGMMA / Blackwell tcgen05 / TMA / FP8 / FP4 / persistent / stream-K** — none implemented
-  yet. The CUDA JIT loaders (`kernels/gemm/cuda/*`, `kernels/gemm/wmma/*`) now read the target ISA
-  from `kernels/common/arch.arch_name()` at runtime, so adding a WGMMA rung is a new
-  `gemm/hopper_wgmma/` branch + a `require_cc(9,0)` guard — no loader rewrite. See the "frontier-2026
-  stack" gap table in the kernels survey (and `docs/GPU_FROM_ZERO.md` for the roadmap).
+- **TMA / FP4** — not implemented. (Corrected 31/08: WGMMA, tcgen05, FA3, FP8, persistent and
+  stream-K *are* present — six rows added to the table above — and this bullet claiming otherwise was
+  falsified by files landed in its own commit. Three are compile-verified with ledger rows
+  `../RESULTS.md:966-968`; three are stubs that raise and deliberately carry **no** ledger row, because
+  "implemented ≠ measured" — FOP-4.) The CUDA JIT loaders read the target ISA from
+  `kernels/common/arch.arch_name()` at runtime, so a new arch rung is a branch + a `require_cc(...)`
+  guard, not a loader rewrite. Roadmap: `docs/GPU_FROM_ZERO.md`.
+- **Nothing here has run on datacenter silicon.** Compile-verified ≠ measured; every sm_90a/sm_100a
+  row is rental-gated (`PLAN.md` § Hardware law).
 - **System / serving benches** (continuous batching, chunked prefill, cudagraph decode, speculative,
   disagg, KV-memory, decode-roofline) live at `bench/` top level — they exercise `scratch_llm.serving`
   and `scratch_llm.model`, not a kernel backend, so they don't belong under `bench/kernels/`.

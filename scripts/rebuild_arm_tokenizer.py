@@ -1,5 +1,12 @@
 """Rebuild an F12 arm's BPE tokenizer (recovery tool).
 
+DO NOT USE THIS FOR ``climbmix``. That arm's tokenizer is pinned and checked into git at
+``assets/tokenizers/climbmix/tokenizer.json`` (md5 ``4fc61379fc4bbaee73842a4aa8752a02``); the
+pipeline installs it via ``require_pinned_tokenizer`` in ``scripts/_tokenizer_guard.sh``, which
+copies and verifies rather than rebuilding. Rebuilding it is how the s1-s7 sweep was invalidated
+(bytes/token 4.08 -> 1.93; ``docs/S35_DATA_PROVENANCE.md``). This tool remains correct for a NEW
+arm that has no pinned copy, and as a last-resort recovery path — see the determinism caveat below.
+
 The per-arm tokenizers live under ``artifacts/f12_corpus_ablation/<arm>/`` — gitignored,
 so they die with the pod that produced them. This script reproduces the deterministic BPE
 phase of ``data.shards.build_dataset_streaming`` for one arm: stream the arm's parquet docs

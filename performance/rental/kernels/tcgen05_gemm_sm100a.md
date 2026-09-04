@@ -47,7 +47,8 @@ ptxas lowered the inline PTX to genuine Blackwell tensor-core SASS:
 - The `tcgen05.ld` fragment → (row,col) epilogue mapping is reference-annotated; exact layout
   validated on the B200 (element-exact vs `torch.matmul`, per-lane-quadrant per the pitfall test).
 - This is the **1-SM, correctness-first** rung only (no multi-stage pipeline / warp-specialization /
-  persistent tiles / 2-SM `cta_group::2`) — those are the later PERF_PLAN Phase 3 steps.
+  persistent tiles / 2-SM `cta_group::2`) — those are the later B200-day steps
+  (`../B200_day_runbook.md` §1; targets in `../../PERF_ENGINEERING_SPEC.md` §4 · A3).
 - **No** claim of numerical correctness or TF/s from this box: gate is *compiles for sm_100a +
   PTX/SASS contains tcgen05/UTCHMMA + structural match*. Pre-registered target ~1,209 TF/s (1-SM
   early, ~54% of B200 dense BF16) is measured on the rental day.

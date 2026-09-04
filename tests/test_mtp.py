@@ -1,6 +1,6 @@
 """F2a — MTP (multi-token prediction) training head, depth D=1 (DeepSeek-V3 style).
 
-DoD oracles (docs/FRONTIER_2026_TASKSPEC.md §F2a):
+DoD oracles (git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md §F2a):
 - MTP-head loss at init ≈ log(vocab_size) (uniform-prediction invariant on the aux head).
 - ``forward_train``'s main logits are identical to ``forward()``.
 - ``mtp_depth`` ∈ {0, 1} under a shared seed gives bit-identical base weights and forward.

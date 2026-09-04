@@ -16,8 +16,12 @@ difficulty per byte differs by ~2.4x.
 
 ## CONSEQUENCE
 **Old s1-s6 are scientifically unusable in any joint fit with new data.**
-`scripts/joint_fit.py::load_clean()` excludes them by construction (never
-reads that path). Forcing them in would corrupt the exponents alpha/beta.
+`scripts/analyze_s35.py::assemble_fit_set()` (line 388) excludes them by construction — it reads
+only `artifacts/s35/ladder_s1..s6`, never the old sweep. (This line named
+`scripts/joint_fit.py::load_clean()` until 31/08; no such function exists — the guarantee held,
+the pointer had rotted. The old sweep IS still read, deliberately, as
+`analyze_s35.py:82 HISTORICAL_RESULTS`, labelled "reference only, never comparable head-to-head".)
+Forcing them into the fit would corrupt the exponents alpha/beta.
 
 ## CLEAN dataset (usable for the law fit)
 All points use the rebuilt ClimbMix tokenizer (md5 4fc61379...) at eta*=0.0021:

@@ -1,4 +1,4 @@
-"""Tests for A5 chat-SFT (docs/FRONTIER_2026_TASKSPEC.md §A · A5).
+"""Tests for A5 chat-SFT (git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md §A · A5).
 
 DoD coverage, one test per bullet:
 - ``response_mask`` is True EXACTLY at assistant content + the assistant turn's closing eot,

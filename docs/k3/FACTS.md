@@ -83,7 +83,7 @@
 
 ### Cross-read 2026-08-10 — build book capsules 01–12 + 15
 
-Full texts fetched via the user's browser (`artifacts/k3_book_crossread/cap_*.txt`; files 01–12 = book capsules 01–12, file `cap_13` = book capsule 15). Each capsule checked line-by-line against this ledger, `KDA_ALOG_MAPPING.md`, and config.json. One row per real disagreement (report wins); confirmations grouped.
+Full texts were fetched via the user's browser and checked line-by-line against this ledger, `KDA_ALOG_MAPPING.md`, and config.json (files 01–12 = book capsules 01–12, file 13 = capsule 15). One row per real disagreement (report wins); confirmations grouped. **The source prose is no longer in the repo** — it was verbatim third-party text from a paid book and this repo is public, so `artifacts/k3_book_crossread/` was untracked and gitignored on 2026-08-31. The verdicts below are the work product and stand on their own: each cites the primary source that decides it (report §, HF code, or FLA source), never the book.
 
 | # | Book claim (capsule) | Ledger position | Verdict |
 |---|---|---|---|

@@ -10,6 +10,8 @@ backend layer).
 Public:
   * :mod:`arch` -- GPU compute-capability detection + ISA gating (CPU-safe:
     importing it never initializes CUDA; detectors query lazily and cache).
+    ``require_cc`` is a forward-compatible FLOOR; ``require_arch`` is the EXACT match
+    an arch-exclusive ISA (sm_90a WGMMA, sm_100a tcgen05) actually needs.
   * :mod:`online_softmax` -- the streaming (m, d) recurrence FlashAttention fuses,
     isolated as a 1-D pure-torch oracle (CPU-safe).
 """
@@ -20,6 +22,7 @@ from scratch_llm.kernels.common.arch import (  # CPU-safe: lazy CUDA detection
     is_blackwell,
     is_hopper,
     is_sm120,
+    require_arch,
     require_cc,
 )
 from scratch_llm.kernels.common.online_softmax import (
@@ -34,6 +37,7 @@ __all__ = [
     "is_blackwell",
     "is_hopper",
     "is_sm120",
+    "require_arch",
     "require_cc",
     "online_softmax",
     "online_softmax_normalizer",

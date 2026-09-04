@@ -43,10 +43,10 @@ jobs:
           uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Ruff (lint + import order)
-        run: ruff check src tests bench/kernels
+        run: ruff check src tests bench/kernels experiments/plot_e001.py
 
       - name: Ruff (format check)
-        run: ruff format --check src tests bench/kernels
+        run: ruff format --check src tests bench/kernels experiments/plot_e001.py
 
       - name: Pyright (types)
         run: pyright

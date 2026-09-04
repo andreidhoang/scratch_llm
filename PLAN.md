@@ -1,8 +1,9 @@
 # PLAN — the only plan (2026-08-26 · production-first)
 
 One page. If any document contradicts this file, this file wins. If this file goes stale,
-fix THIS file — never write a second one. Everything superseded lives in `docs/archive/`
-(repo) and `~/Desktop/plan/_archive_2026-08/` (history, not law).
+fix THIS file — never write a second one. **Superseded material is DELETED, not archived**
+(cleanup 31/08): `git log --diff-filter=D --name-only` is the archive, and `git show <sha>:<path>`
+restores any line. A repo-side archive folder is just stale files with a nicer name.
 
 > **REDIRECT 2026-08-26 evening (operator, verbatim): "actually engineering and building in
 > real project for real production from now on … follow the right building and contribution
@@ -18,6 +19,32 @@ fix THIS file — never write a second one. Everything superseded lives in `docs
 > in-flight on real work (T-loop/PRR/seal unchanged); it is the byproduct measured by
 > shrinking prediction error, never the goal. **Every task names its external consumer; a
 > task that cannot is cut or backlogged.**
+
+> **AMENDMENT 2026-08-31 (operator, verbatim): "k3 and performance + kernel engineering
+> plan is real production plan not just learning plan if we master these we master
+> everything."** Recorded, not argued — this is the veto the 26/08 header invited.
+> **(1) K3–K10 and the M0→M6 kernel ladder LEAVE the backlog** and return as **the mastery
+> lane**: production depth, not study. **(2) The lane is delivered as SESSIONS on the L0–L5
+> altitudes** — spec **§12.5** owns the table (altitude · deliverable · consumer · OWNER);
+> a session's output is code or a measured number, never notes. **(3) The 29/08 binding rule
+> is satisfied, not waived** — every session names its consumer; the loop itself is one
+> (§11 gap 7: the recorded reject reason was *"optimized by trial and error rather than by
+> rigorous measurement"*). **(4) Ordering is UNCHANGED where a clock exists.** #45819's
+> review window is still the only dated external event in this file; the mastery lane runs
+> the rest of the day. **The cost, stated once:** depth spends hours the dated node would
+> otherwise take — **rule 4 (one public change, pushed, before 21:00) is the circuit breaker**
+> that stops this becoming Jul–Aug again (~87 planning files, 0 kernels).
+
+> **AMENDMENT 2026-08-31 evening (operator, verbatim): "start with learning mastery first with
+> kernels engineering curriculum we built on and then build kimik3 and while doing those
+> execution we would implement main plan … I don't want to do directly without mastering from
+> first principles scratch and fundamentals."** **This supersedes consequence (4) above.** The
+> tracks INVERT: the **ladder session owns the day**, and the dated node (`oracle → E1 →
+> review → E3`) is what rungs L0.1 → L1.3 → L2.1 → L2.3 → L2.4 → L2.5 *produce* — byproduct by
+> the operator's explicit choice, not by drift. **Rule 4 keeps its teeth by MOVING, not by
+> relaxing:** it is now scored on the session's **pushed** commit — a DoD unpushed at 21:00
+> scores zero, three zeros still trip the breaker. Cost, stated once and accepted: the review
+> lands ~9–12 sessions in rather than ~3.
 
 ## WHAT we are building — production artifacts, each with a named external consumer
 
@@ -54,13 +81,21 @@ fix THIS file — never write a second one. Everything superseded lives in `docs
    `k3/HANDCRAFTED.md` — kept because it **adjudicates production kernels** (three-path
    equivalence ≡ fp64 with Diag(α) · `fla.ops.kda` parity fwd+bwd = evidence with a
    consumer: the FLA/vLLM threads). Same five lines as E1's oracle, α → Diag(α) — one
-   dependency chain, not two lanes. **K3–K10 (gated-MLA, AttnRes, SiTU/LatentMoE, mini-K3
-   training, 1M-ctx, self-hosting) → backlog**; they return when a lane funds them or the
-   operator says so. That demotion is the redirect's recorded cost.
+   dependency chain, not two lanes. **K3–K10 RETURNED from backlog 31/08** (gated-MLA,
+   AttnRes, SiTU/LatentMoE, mini-K3, 1M-ctx, self-hosting) — they now run as mastery-lane
+   sessions (item 8), each carrying its own consumer; the 26/08 demotion is reverted, and
+   the reversion's cost is the one named in the 31/08 header.
 7. **FLA contributions (new lane, 26/08 evening).** The gate-at-0 soft spot (#104/#389 —
    closed unrooted; true magnitude 0.13 abs / 0.63% rel) characterized + regression test
    upstreamed to fla; KDA parity tests vs `fla/ops/kda/{naive,fused_recurrent,chunk}`.
    *Consumer: the kernel library Qwen/Kimi-class production models ship on.*
+8. **The mastery lane — K3 + perf/kernel engineering (promoted to a named artifact
+   31/08).** Previously scattered across the NVIDIA overlay N1–N6 and the rental table with
+   no lane of its own, which is why it read as "learning". It is not: its outputs are a
+   public NCU profile (gap 2), a CuTe-DSL re-expression (gaps 3+6), an NVFP4 divergence rung
+   (gap 4), Blackwell wgmma→tcgen05 numbers (gap 5), and the K3 reference implementations
+   that adjudicate the kernels above. *Consumers: NVIDIA JR2018988/JR2021962 · the FLA/vLLM
+   threads · the interview loop (§11 gap 7).* **Delivered as L0–L5 sessions — spec §12.5.**
 
 ## WHY
 
@@ -159,19 +194,35 @@ adjudicating review live on #45819 (URL) · ④ ≥24 applications, ≥1 intervi
    understanding is tested into existence; the only falsifiable mastery metric is
    prediction error shrinking.
 
-## TODAY (Sat 29/08)
+## THE DAY — one ladder (set 31/08 evening; inverts the two-track split of the same morning)
 
-**Oracle STUB · predictions unwritten · 0 result files · nothing pushed.** Only CI red is
-pyright on the stub; the five lines clear it. Working tree carries the 26–29/08 doc work.
+**The session owns the day.** One L-session from spec §12.5, run through an existing door
+(`/master` deep-dive · `/rebuild` blank-slate · `/kernel-day` on a rental · `/feynman` as the
+exit gate · `/op` wrapping) — never a new ceremony. **DoD is code or a measured number,
+committed AND pushed before 21:00.**
 
-**Hardware truth, measured 29/08 — the repo was asserting a GPU it does not have.** This
-machine is a Mac (arm64): `nvidia-smi` absent, `torch.cuda.is_available() == False`, `vastai
-show instances` empty, both `~/.ssh/config` pod hosts refuse connection. CLAUDE.md's "standing
-GPU RTX PRO 4000 Blackwell sm120" was **stale and is now corrected there**. Consequence: every
-🔒 and every "$0 on the standing card" rung in this file is **rental-gated, not local**. The
-`vastai` CLI works and 5090 KVM (`vms_enabled`, ncu-capable, $0.326/hr) is in stock.
+**Rule 4 is scored on that push.** A pushed session commit IS a public change; a session that
+ends in notes, or in a commit still sitting local, scores zero. Three zeros still trips the
+circuit breaker. This one line is what keeps mastery-first from becoming Jul–Aug again.
 
-**DONE today, $0, no GPU — the L4 dispatch read** (spec §12.2 named it as its own test;
+**The dated node is the ladder's OUTPUT, not a parallel track.** #45819's window stays the only
+dated external event in this file; if it closes before the ladder reaches L2.4, the map
+retargets to #49827 or the successor thread — **the measurement does not expire, only the
+venue does.**
+
+**The rental queue is the lane's savings account.** CPU sessions *accumulate* measurements
+that need silicon; a rented KVM hour discharges the whole queue from a pre-written script
+(L3.3). The 57-day ncu-debt (4 of 5 metrics misrouted) is what happens without this discipline.
+
+## TODAY (Mon 31/08)
+
+**Oracle STUB · 3 PREDICTED unwritten · 0 result files · 4 commits AHEAD of `origin/main`,
+unpushed → 3 days scoring zero under rule 4.** CI red is **exactly one error, measured 31/08**:
+`pyright` → `test_e001_regression.py:71 — "NoReturn" is not iterable`. That is the stub, and
+the five lines clear it. Hardware truth of 29/08 stands (no GPU, no CUDA toolchain, arm64;
+`vastai` works, 5090 KVM `vms_enabled` ncu-capable $0.326/hr in stock) — CLAUDE.md carries it.
+
+**Done 29/08, $0, no GPU — the L4 dispatch read** (spec §12.2 named it as its own test;
 `~/Desktop/oss/{fla,vllm}` cloned per the §9.6 zone, fla @ `c3db408` HEAD):
 
 - **F1 — our own claim refuted as stated and replaced by a sharper one.** No autotune key on
@@ -294,9 +345,8 @@ the bottleneck is the résumé surface, not the artifact: spend ONE day on the p
 
 ## BACKLOG (one-liners; undated; no ceremony)
 
-- **K3–K10 rebuild rungs** (gated-MLA · AttnRes · SiTU/LatentMoE · mini-K3 · MXFP4 QAT ·
-  1M-ctx · serve · frontier ext) — demoted 26/08 evening by the production redirect; return
-  by operator word or when a lane funds them. M0→M6 kernel ladder rides with them.
+- ~~K3–K10 rebuild rungs~~ — **left the backlog 31/08** (operator amendment); they are the
+  mastery lane now, item 8, sequenced in spec §12.5. M0→M6 rides with them.
 - E002 cross-arch · rebuild `chunked_wy` from blank (my hand, when its lane needs it)
 - **Blackwell evidence day (B200 1×, Verda VM $6.11 ncu-capable, ≈$40–60/day):** FA4 +
   DeepGEMM-SM100 + fla-KDA + tcgen05/TMEM numbers — all four verified runnable on one
@@ -363,6 +413,9 @@ the bottleneck is the résumé surface, not the artifact: spend ONE day on the p
   lanes above, and every unit either (a) fires on a live production node, (b) is already
   receipted, or (c) is fenced by hardware. It adds **no rung and no date** to this file. The
   binding rule: *a curriculum unit with no production node attached does not run.*
+  **Amended 31/08:** the rule stands, and K3 + perf/kernel now *satisfy* it as item 8 —
+  §12.5 attaches a consumer and an owner to every session, so the ladder runs rather than
+  waits. Vizuara still supplies no ordering and no dates.
 - Kernel-path map + production operating system: `docs/KERNEL_MASTERY_SPEC.md` **v2+§9/§10/§11**
   (26/08 evening — Vizuara ×5, skip verdict ×5, live N=21 market scan, 2026 stack ledger,
   corrections §4, curriculum spine §6, lesson ladder §7, **§9 = daily loop as practiced ·

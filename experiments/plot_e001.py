@@ -37,7 +37,7 @@ def _pearson(x, y):
     if n < 3:
         return float("nan")
     mx, my = sum(x) / n, sum(y) / n
-    num = sum((a - mx) * (b - my) for a, b in zip(x, y))
+    num = sum((a - mx) * (b - my) for a, b in zip(x, y, strict=True))
     dx = math.sqrt(sum((a - mx) ** 2 for a in x))
     dy = math.sqrt(sum((b - my) ** 2 for b in y))
     return num / (dx * dy) if dx > 0 and dy > 0 else float("nan")
@@ -52,8 +52,10 @@ def markdown_table(pts):
     transcription errors get into a public result."""
     gates = sorted({p["log_gate"] for p in pts}, reverse=True)
     dts = [d for d in ("float64", "float32", "bfloat16") if any(p["dtype"] == d for p in pts)]
-    out = ["| log_gate | " + " | ".join(dts) + " | cond(T) max | max 1/a |",
-           "|---" * (len(dts) + 3) + "|"]
+    out = [
+        "| log_gate | " + " | ".join(dts) + " | cond(T) max | max 1/a |",
+        "|---" * (len(dts) + 3) + "|",
+    ]
     for g in gates:
         row = [f"`{g:g}`"]
         for d in dts:
@@ -79,12 +81,15 @@ def main():
     tbl = a.out + "_table.md"
     os.makedirs(os.path.dirname(tbl) or ".", exist_ok=True)
     with open(tbl, "w") as f:
-        f.write(f"<!-- oracle: {meta.get('oracle')}  solve_dtype: {meta.get('solve_dtype')} -->\n\n")
+        f.write(
+            f"<!-- oracle: {meta.get('oracle')}  solve_dtype: {meta.get('solve_dtype')} -->\n\n"
+        )
         f.write(markdown_table(pts) + "\n")
     print(f"  ledger table -> {tbl}")
 
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
@@ -112,7 +117,9 @@ def main():
     ax.set_xticklabels([f"{g:g}" for g in gates], rotation=45, ha="right", fontsize=8)
     ax.set_xlabel("log_gate      (left: α→1 'remember'   →   right: α<1 'forget')")
     ax.set_ylabel("‖O_chunked − O_ref‖ / ‖O_ref‖   (vs fp64 oracle)")
-    ax.set_title("Chunked vs recurrent divergence\n(dotted = machine eps for that dtype)", fontsize=10)
+    ax.set_title(
+        "Chunked vs recurrent divergence\n(dotted = machine eps for that dtype)", fontsize=10
+    )
     ax.grid(alpha=0.25, which="both")
     ax.legend(fontsize=8)
 
@@ -123,18 +130,29 @@ def main():
     ):
         allx, ally = [], []
         for d, st in DTYPE_STYLE.items():
-            sel = [p for p in pts if p["dtype"] == d and math.isfinite(p[key]) and p["rel_err_o"] > 0]
+            sel = [
+                p for p in pts if p["dtype"] == d and math.isfinite(p[key]) and p["rel_err_o"] > 0
+            ]
             if not sel:
                 continue
             x = [p[key] for p in sel]
             y = [p["rel_err_o"] for p in sel]
-            ax.scatter(x, y, s=34, alpha=0.8, edgecolors="none",
-                       color=st["color"], marker=st["marker"], label=st["label"])
+            ax.scatter(
+                x,
+                y,
+                s=34,
+                alpha=0.8,
+                edgecolors="none",
+                color=st["color"],
+                marker=st["marker"],
+                label=st["label"],
+            )
             if d == "bfloat16":
                 allx += [_lg(t) for t in x]
                 ally += [_lg(t) for t in y]
         r = _pearson(allx, ally)
-        ax.set_xscale("log"); ax.set_yscale("log")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
         ax.set_xlabel(name)
         ax.set_ylabel("rel_err_o")
         ax.set_title(f"{hyp} discriminator — bf16 log-log r = {r:.3f}", fontsize=10)
@@ -144,7 +162,8 @@ def main():
     fig.suptitle(
         f"E001 — gated delta rule, chunked (WY) vs recurrent    "
         f"oracle: fp64 sequential    solve_dtype: {meta.get('solve_dtype')}",
-        fontsize=11)
+        fontsize=11,
+    )
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     for ext in ("png", "svg"):

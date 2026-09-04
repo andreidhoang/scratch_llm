@@ -9,7 +9,8 @@
 > https://claude.ai/code/artifact/e3fc28db-aacd-4c84-99eb-39f6c131c756
 > Sources: v1 (commit 64c11e8, live syllabus fetch 26/08 16:26) · 5-agent research pass
 > 26/08 evening (site ×5 fetches, N=21 live JDs, stack primary sources, GitHub landing-zone
-> status, in-repo receipts audit) · `performance/KERNEL_ROADMAP_2026.md` (07-14) ·
+> status, in-repo receipts audit) · `performance/KERNEL_ROADMAP_2026.md` (07-14 — **deleted 31/08**,
+> superseded by §1/§2/§3/§12 of this file; `git log --diff-filter=D` is the archive) ·
 > 51-posting scan (08-14). Confidence labels per FOP-4: [FACT]/[INFERENCE]/[UNCERTAIN].
 
 ## §1 · The buy/skip verdict — 5th test (fresh instructor/logistics data)
@@ -203,7 +204,7 @@ current tracing constraints before that lesson]. Every kernel rung ends with thi
    paged-KV 3,528 tok/s (`:146`), continuous batching 2.30× (`:89`), spec-decode
    1.21–1.39× (`:384-385`), cudagraph −74.3% 15.38→3.96 ms (`:420`) + ~955 kernel
    launches/token eager (`:27`) — two configs, don't merge them in one breath.
-4. **Same-day doc tension, named:** `MERGED_KERNELS_K3_ROADMAP.md`'s ERRATA-G (26/08)
+4. **Same-day doc tension, named:** the K3 merge-overlay's ERRATA-G (26/08; overlay deleted 31/08 — §12.5 owns sequencing)
    declares the fused KDA decode kernel **not novel** (five shipped implementations:
    Moonshot FlashKDA, Qwen FlashQLA, FlashInfer `fused_kda_decode`, vLLM fused kernel,
    SGLang `cutedsl_kda`) and M0–M6 inert-until-W9, while PLAN.md (same day, and by its
@@ -358,7 +359,7 @@ Vietnamese Feynman blocks; visualization built from real numbers; L2 menus with 
 ranking; prediction precedes every measurement): **frame → build-from-zero (code-anchored
 `file · func · line`) → worked NEIGHBOR example (never the target) → technique + trap →
 hand back the target → predict → run → reconcile.** Depth lives in the chat lessons and
-`docs/k3/MENTORING_LOG.md`, not in this spec. Sealed remains sealed: oracle, kernel bodies
+`MASTERY_LEDGER.md`, not in this spec (the separate `docs/k3/MENTORING_LOG.md` was a competing tracker, deleted 31/08). Sealed remains sealed: oracle, kernel bodies
 under study, harness, RL loss math, verifier tolerances — Huy's hand.
 
 Lesson ladder = PLAN.md's own order (each lesson closes on that phase's gate):
@@ -610,7 +611,7 @@ operationalization, fired whenever a red-flag phrase appears ("it just works", "
 to look it up", a hand-wave under probing):
 
 1. **Plain words, in Vietnamese** — restate to a smart 12-year-old; the VN layer is the
-   intuition layer and the test (MENTORING_LOG method note: if the VN can't carry it, the
+   intuition layer and the test (method note, §10.4: if the VN can't carry it, the
    concept isn't owned yet — that gap IS the lesson).
 2. **Why THIS structure and not the alternatives** — the constraint, not the description.
 3. **Gap-hunt** — find the step in your own explanation that hand-waves; that step is the
@@ -698,6 +699,55 @@ examples… launches training runs, babysits them by tailing logs"). Randomized 
 studies agree the harm is conditional: guardrailed, cognitively-engaged AI use preserves
 learning (Shen & Tamkin 2026; Bastani PNAS 2025). **That is exactly the sealed-four + L2 +
 learn-mode architecture this repo runs. Keep it.**
+
+### 10.9 The Bilingual Depth Pass (BDP) — the executable form of §10.7 (calibrated 31/08 against two exemplar turns)
+
+§10.7 says *what* binds a turn. This says *how* to produce one. Reverse-engineered from the two
+L0.1 turns of 31/08 (English foundations pass, then the Vietnamese deep pass) at the operator's
+request: **"explain like these two, any time I ask."** It is the **default for every explanation in
+this repo** — `/master` runs it explicitly; no invocation is required for it to apply.
+
+**The unit is ONE CONCEPT SECTION, and every section has this exact skeleton:**
+
+```
+## §n · <title>                                    <- English LEADS
+   frame      one sentence: what breaks without this
+   derive     from zero; never assert what can be derived in four lines
+   numbers    a RUN block — real stdout, pasted, not paraphrased
+   anchor     file · symbol · line, at HEAD
+
+> **VN — Feynman:** <noi bang loi thuong, zero jargon>   <- Vietnamese, INTERLEAVED
+   co che sau hon        one abstraction level BELOW the English block
+   vi sao cau truc nay   the alternative that was rejected, and its cost
+   san lo hong           what this section does NOT explain / where it breaks
+```
+
+**Seven rules. Each one was load-bearing in the exemplars — drop one and the pass degrades:**
+
+1. **Run every number.** Script to the scratchpad → execute → paste real stdout. An asserted
+   number is a defect, not a shortcut (FOP-4). A claim that cannot be run is labelled
+   `[INFERENCE]` in the same sentence.
+2. **EN leads, VN deepens — never translates.** If the VN block restates the English, the section
+   failed. VN descends one rung of the ladder AND carries the two Feynman moves (alternatives,
+   gap-hunt) that the English block does not.
+3. **The depth ladder — descend until the next rung is physics:** `intent → math → algebra →
+   float semantics → bit layout → memory layout/strides → dependency graph → hardware`. The 31/08
+   pass ran math → bits → stride → dependency-graph and stopped at cache-line geometry. Stopping
+   early is the usual failure: *"it's floating-point error"* halts three rungs too high.
+4. **Worked NEIGHBOUR, never the target** (§10.7 item 7). A sealed target is handed back as a
+   numbered list of DECISIONS with anchors — never as code, never as a fill-in-the-blank skeleton.
+5. **Name the SILENT failure in every section, not the loud one.** `dk==dv` broadcasting instead of
+   raising · subnormals instead of NaN · a 32.5x FLOP gap that is 1.9x on the clock. Loud failures
+   teach nothing; they announce themselves.
+6. **Close with the Feynman gate** — numbered questions that ARE the `DEFENDED` bar written to
+   `results/mastery_receipts.jsonl` (§10.4 / §10.5). Not a quiz; the receipt's threshold.
+7. **Self-score M1–M4 honestly, partials included.** The 31/08 pass scored M3 *partial* and said
+   why. A turn that always scores 4/4 is not being scored.
+
+**Length is set by the ladder, not by a budget.** *"Deep until nothing can break down anymore"* is
+the operator's phrasing and it is literal: stop when the next rung is physics, or when a rung adds
+no decision. Brevity remains the exception the operator asks for, per turn (§10.7 preamble).
+
 
 ## §11 · The NVIDIA lane — the reverse-engineered bar (researched 2026-08-27; 10-agent pass, every load-bearing claim adversarially re-verified: 37 CONFIRMED / 5 CORRECTED / 0 REFUTED)
 
@@ -980,3 +1030,86 @@ their capstone is retired at demo day; ours stays in production and keeps paying
 | *"Explained simply — the idea in plain words before the jargon"* | A0 frame opens every turn; the **VN Feynman block** is the plain-words test (§10.4) | if the VN can't carry it, the concept is not owned — a *gate*, not a nicety |
 | *"Built by hand, live — you write the kernels yourself"* | the **sealed four** (rule 3) is this rule with teeth: agents are locked out of the oracle, the harness, RL loss math, verifier tolerances | they hand-build *in* a session; we hand-build what a maintainer will interrogate |
 | *"Job-ready — maps 1:1 to what Wafer / NVIDIA / top labs hire for"* | §11 (10 NVIDIA JDs full-text) · §2 (N=21) · §9.4 (the hired-from-OSS pattern) | **their own named example is now a lane**: Wafer is YC S25, ~6 people, and maintains a 2.2k★ public resources repo with a fillable determinism gap — see PLAN.md backlog |
+
+### 12.5 The session ladder — the mastery lane, sequenced (31/08, operator amendment)
+
+> **What this adds.** §12.2 gave the *altitudes*; §12.3 gave the *unit → node* map. Neither
+> gave a **session** — an altitude plus a deliverable plus an owner. PLAN.md item 8 promoted
+> K3 + perf/kernel to a named production lane; this is its sequence. **PLAN.md still owns
+> ordering across lanes**; this table orders only within the lane.
+>
+> **OWNER** — **H** = Huy's hand (sealed four, or `k3/core/` Class 1: agents locked out) ·
+> **P** = paired (he derives + decides, agent types the non-sealed parts) · **A** = delegated.
+> **DoD is code or a measured number.** A session that produced notes did not happen.
+
+**The finding that makes this affordable — recount 31/08 evening, the first figure was wrong:**
+of the 22 sessions below, **18 run at $0 on this CPU-only Mac** and 4 are rental-gated (L3.3
+~$1 · L3.4 · L5.2 · K3+ mixed). The morning's "13 of 20" was an uncounted claim in a repo whose
+whole culture is counted numbers; it is corrected here rather than quietly. The three
+highest-value sessions for the open review (L2.3, L2.4, L1.3) are all in the $0 set. Silicon is
+needed to *confirm* the lane, not to *run* it.
+
+| # | Altitude · session | Deliverable (DoD) | Consumer | Owner | Cost |
+|---|---|---|---|---|---|
+| **L0.1** | **The recurrence, by hand** | `recurrent_reference` (5 lines) + 3 `PREDICTED`, ONE commit → `--self-test` PASS → the single pyright error clears → CI green | E1 · K2 · CI | **H** | $0 **▶ NOW** |
+| L0.2 | The eraser as a **projection** | test: `(I−βkkᵀ)` idempotent iff `‖k‖=1, β=1`; measured residual when it is not | K2 — *why* KDA L2-norms q/k | P | $0 |
+| L0.3 | Scalar `α` → `Diag(α)` | `k3/core/kda.py` naive recurrent path; `a_t` and `β_t/a_t` become **per-channel** | `fla.ops.kda` parity | **H** | $0 |
+| L0.4 | **`A_log [128]` semantics** — gate, runs BEFORE any K2 allocation | FACTS entry + a shape assertion; per-dim vs per-head resolved against the real checkpoint | K2 correctness | P | $0 |
+| **L1.1** | **Blank-slate `chunked_wy`** (`/rebuild`) | re-derived from the recurrence, ≡ oracle to ~1e-15 | the review (own what you measure) | **H** | $0 |
+| L1.2 | Chunked KDA with `Diag(α)` | chunkwise ≡ recurrent ≡ fp64-ref, ragged chunks included | FLA/vLLM threads | **H** | $0 |
+| **L1.3** | **Arithmetic intensity + roofline PREDICTION** | FLOPs/byte for both paths at decode and train (the two `reference.py` docstring questions), ridge position predicted → **queued to the rental** | rental queue · gap 2 | P | $0 |
+| **L2.1** | **The error recursion** `E_t = A_tE_{t−1} + δ_t` | `‖A_t‖` computed for the real operator → the regime (saturating vs `√T` walk) for each of the 3 cells → the predictions become *derived*, not guessed | E1 defensibility in review | **H** | $0 |
+| L2.2 | Floats from first principles | boundary test on the measured subnormal zone (flush at 1.19× the 88 budget; silent mantissa loss 88→~104) | E1 envelope | P | $0 |
+| **L2.3** | **Price F2 for $0** — tf32 emulated by truncating the fp32 mantissa to 10 bits through `paths.py::solve_dtype` | the tf32-vs-ieee divergence number on the triangular solve | **#45819 review — highest-value $0 item on this ladder** | **H** | $0 |
+| **L2.4** | **Price F1's mechanism for $0** | vary log-gate cumsum summation order (sequential · pairwise · shuffle-tree emulation) → `Δa_t` → `Δo` | the review | P | $0 |
+| L2.5 | Tolerances | `tolerances.yaml` derived only from measured envelopes | our CI · upstream suites | **H** | $0 |
+| L3.1 | State/tile budget per arch | `(128,128)` fp32 state = 64 KB vs smem on sm_80/86/90/100/120 → occupancy table, **predicted before any run** | L3.3 · gap 2 | P | $0 |
+| L3.2 | Triton chunked-KDA kernel | written here, **unrunnable here** — review-only until L3.3 | E3 · JR2021962 | **H** | $0 |
+| **L3.3** | **THE RENTAL PAYLOAD** — one script, one KVM hour | discharges the queue: 4 sm_120 `NCU_DEBT` metrics (57 days old) + F2/F4 on silicon + L1.3 ridge + L3.1 occupancy | **gap 2 — first public profile** | A writes · **H** pre-registers | ~$1 |
+| L3.4 | M0→M6 rungs | each rides an already-funded rental; never its own rental | gap 3 · gap 6 | P | rental |
+| L4.1 | Dispatch, **vLLM side** (fla side ✅ = F1–F4) | `GDN_ATTN` backend interface · metadata · cudagraph capture path, read first-party | E3 | P | $0 |
+| L5.1 | Bits | FMA contraction (`-fmad=false`), `mma.sync` hardware-fixed accumulation order, `atomicAdd` order-nondeterminism — read + a CPU demonstration of non-associativity | the review's "not in the silicon" claim | P | $0 |
+| L5.2 | PTX/SASS fluency (gap 6) | one owned kernel read at PTX and SASS, annotated | JR2018988 | P | rental |
+| **R1** | **Reverse-engineering rep** (§10.3 loop; their DD7) | FlashMLA + DeepGEMM read first-party → for each: the ONE move, the counter it targets, the line it lives on | taste rep · JR2018988 | P | $0 |
+| **R2** | FA4 in CuTe-DSL (their DD6) | source read only — the Python-DSL vocabulary the JDs name; **no numbers** (FA4 does not run on sm_120) | JR2018988 · gap 6 | P | $0 |
+| **K3+** | Outer rungs at their own altitudes | gated-MLA · AttnRes · SiTU/LatentMoE · mini-K3 · 1M-ctx · serve — each re-enters at L0 and walks the same ladder | per rung; assigned when it starts | H/P | mixed |
+
+**Sequencing law for this lane** (so it cannot become Jul–Aug again): **a session may not
+start until the previous session's DoD is in a commit.** L0.1 gates every row below it —
+not by convention but mechanically: `recurrent_reference` is the oracle L0.2–L2.5 measure
+against, and it is the single red mark in CI.
+
+**Where the doors fire** (§10.6, unchanged — no new ceremony): `/master <concept>` for an
+L-session deep-dive · `/rebuild` for L1.1 · `/kernel-day` for L3.3 · `/feynman` as the exit
+gate on any session marked ✅ · `/op` wraps all of them.
+
+#### 12.5a The Vizuara kernel curriculum, folded in (31/08 evening — mastery-first ordering)
+
+The operator's evening directive makes the kernel-engineering curriculum the *primary*
+sequence, so §12.3's unit→node map is no longer enough: every unit needs a session row or a
+named queue entry. **The honest split, counted:**
+
+| Their unit (§12.3) | Where it now lives | Runs |
+|---|---|---|
+| L1 roofline predict-then-measure | **L1.3** | $0 |
+| L2 CUDA model · GPU Puzzles | **unscheduled — verify first**: srush/GPU-Puzzles runs under `NUMBA_ENABLE_CUDASIM`; not yet confirmed on arm64/torch 2.12. No law claims it is $0 until it imports | ? |
+| L2 PTX/SASS | **L5.2** — needs `nvcc`/`cuobjdump`, absent here | rental |
+| L3 memory hierarchy · transpose · first ncu · Proton lab | **rides L3.3** (same KVM hour) | rental |
+| L4–L5 GEMM re-own ≥90% (hold 81.9%) | **own rental block** — not foldable into L3.3, different kernel | rental |
+| L6 tensor cores · CuTe-DSL | writing $0 (**L3.2** pattern: written here, unrunnable here); numbers ride L3.4 | split |
+| L7 profiling · 3 sabotaged kernels | **design of the sabotages is $0** (a session output: 3 named defects + the counter each should show); execution rides a funded rental | split |
+| L8 attention · FA1 | receipted (FA2 owned) — **not re-run** (binding rule §12.1) | ✅ |
+| DD1 FA3 · DD2 H100 wgmma | H100 block; fires after the review lands | rental |
+| DD3 Triton→Gluon | rides **L3.4** | rental |
+| DD5 Blackwell/NVFP4 · tcgen05 | sm_120 FP4 receipted; tcgen05 = B200 trigger | split |
+| DD6 FA4 | **R2** (read only) | $0 |
+| DD7 FlashMLA · DeepGEMM | **R1** | $0 |
+| DD8 LLM-written kernels · verifier | **L2.5** (`tolerances.yaml`) is the verifier half | $0 |
+| Capstone | **L2.3 → L2.4 → L2.5 → the review** | $0 |
+
+**The constraint this makes visible, and it is not negotiable:** the metal half of the kernel
+curriculum cannot run on this host at all (`nvcc` · `ncu` · `nsys` · `triton` all absent,
+measured 29–30/08). Mastery-first therefore executes as **numerics ladder + source-reading
+reps now**, with every metal rung *pre-written* and parked in the rental queue so one KVM hour
+discharges many. That is not a compromise of the directive — it is the only form of it that
+produces measured numbers instead of notes.

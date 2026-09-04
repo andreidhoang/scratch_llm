@@ -6,6 +6,8 @@ Layout (each module's docstring states its intent + invariant):
   attention/reference.py              FlashAttention-2 oracle — CPU-testable ground truth
   attention/prefill/fa2.py            FlashAttention-2 fwd + causal (autotuned) — GPU (private)
   attention/decode/paged.py           Fused paged decode attention — GPU (private)
+  linear_attn/dispatch.py             STABLE public surface — the gated delta rule (no backend yet)
+  linear_attn/reference.py            fp64 oracle — RE-EXPORTS mastery/ (one recurrence, not four)
   gemm/dispatch.py                    STABLE public surface — routes by (device, dtype, shape)
   gemm/triton/                        Triton GEMM/GEMV ladder (private)
   gemm/cuda/                          CUDA-core + mma.sync GEMM, JIT nvcc (private)

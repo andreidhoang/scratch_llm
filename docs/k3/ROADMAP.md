@@ -6,8 +6,9 @@
 > claim is ledgered in [`FACTS.md`](FACTS.md) — where a book and the tech report disagree, **the
 > tech report wins** and the book capsule is flagged.
 >
-> Merge overlay (2026-08-09): kernel-ladder × K3 interleaving + reasoning method lives in
-> [`MERGED_KERNELS_K3_ROADMAP.md`](MERGED_KERNELS_K3_ROADMAP.md) — it sequences, never re-scopes.
+> **Sequencing (31/08): `PLAN.md` item 8 + `docs/KERNEL_MASTERY_SPEC.md` §12.5 own it.** The
+> 2026-08-09 merge overlay that used to sequence kernel × K3 was deleted — it was built over
+> `JOB_SPRINT/*` and `FAST_TRACK_2026.md`, neither of which exists here. This file is SCOPE, not order.
 >
 > Role frame: this is run as if we were the Moonshot team rebuilding our own model — which is
 > literally how K3 was built: Kimi Linear 48B-A3B was the intermediate open artifact, K3 is the
@@ -16,18 +17,12 @@
 
 ---
 
-> **⚠ ERRATA-G (2026-08-26) — sequencing binding to the sealed 60-day corpus.** This track is the
-> **POST-GATE season (W9–W16)**, not an in-window lane. In-window (→ 2026-10-16) exactly four of its
-> assets are live, each inside an existing slot of the measure-first spine: **KDA_ALOG_MAPPING /
-> A18** → W4 gate-distribution measurement on a real checkpoint · **F10.1/F10.2's
-> chunkwise==recurrent==float64 contract** → E001/E002, the trunk itself (that contract, made public
-> and swept, IS experiment E1) · **serving Kimi-Linear-48B-A3B** → E2b measurement (W6, 1×H200 bf16,
-> budget rev 2026-08-25) · **HANDCRAFTED.md + `k3/core`** → quarry-K rebuild reps on the mastery
-> board. Everything else — mini pretrain ladder, SiTU, LatentMoE, Per-Head Muon, MXFP4 QAT, d20,
-> the 8×B300 runbook — waits for W9. This is the Moonshot pattern this document itself cites: **the
-> open intermediate artifact ships before the flagship rebuild** (their Kimi Linear = our E1 + E2 +
-> the vLLM PR). Rationale + audit trail: Desktop corpus ERRATA-B/C (2026-08-13) and the
-> progress-tracker memory.
+> **⚠ SEQUENCING BINDING — REPLACED 2026-08-31.** The ERRATA-G block that stood here bound this
+> track to a 60-day "sealed corpus" governance system (precedence G>F>E>D>C>B, Desktop `plan/`)
+> that no longer exists, and parked K3–K10 as a post-gate season. **The operator reverted that on
+> 31/08:** K3 + perf/kernel left the backlog as `PLAN.md` item 8, **the mastery lane**, sequenced in
+> `docs/KERNEL_MASTERY_SPEC.md` §12.5 (session · DoD · consumer · owner · cost). Read this file for
+> SCOPE and primary-source content; read §12.5 for what runs when. Where they disagree, PLAN.md wins.
 
 ## 0. Decision — build in THIS repo (monorepo), no new repo
 
@@ -209,7 +204,7 @@ The deepest rung. Incremental from `linear_attn.py`:
   inter/latent is 192/512 = 0.375 vs 3072/3584 = 0.857 — sparsity-axis conclusions transfer
   only qualitatively.
 - **Gates:** overfit-one-batch < 1e-2; loss-at-init ≈ log V; val_bpb parity-vs-baseline at
-  iso-FLOP pre-registered in `docs/RESULTS.md §K3` **before** the run; report card generated.
+  iso-FLOP pre-registered in `docs/PRE_REGISTRATIONS.md §K3` **before** the run; report card generated.
 - ~2 weeks + 1–2 rental days ($10–100 tier, reuses P5/d20 runbooks).
 
 **Mini-K3 reference config (d12, 370,303,424 total / 142,107,072 active — exact, gate-pinned by
@@ -313,4 +308,4 @@ The real cost is K2's calendar time.
 5. Ablation program (R0 anatomy census COMPLETE 2026-07-31 — 417 small tensors, all 96 shards,
    `scripts/k3_fetch_tensors.py`, FACTS A19; R1 interaction factorial
    + R2 decay sweep launch after KDA is PROVEN): [`ABLATIONS.md`](ABLATIONS.md), pre-registered
-   in `docs/RESULTS.md §K3`.
+   in `docs/PRE_REGISTRATIONS.md §K3`.

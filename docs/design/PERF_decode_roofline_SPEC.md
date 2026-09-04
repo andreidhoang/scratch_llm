@@ -1,5 +1,11 @@
 # Design spec — Decode-step roofline (time the KV-cache)
 
+> **⚠ HARDWARE CORRECTION (2026-08-31).** Lines below that say "the standing sm120 GPU / no rental
+> needed" were TRUE when written and are FALSE now: this host has **no GPU and no CUDA toolchain**
+> (`nvidia-smi`/`nvcc`/`ncu`/`nsys` absent, `triton` not importable, arm64 — measured 29–30/08).
+> Every rung here is **rental-gated**; measured numbers already in the ledger stay valid as records.
+> Law: `CLAUDE.md` § Hardware reality · `PLAN.md` § Hardware law.
+
 > **Status:** ✅ built & measured 2026-07-01 as perf-curriculum **A1 R1** — on the standing sm120
 > GPU, no rental needed (`bench/decode_roofline.py` + `bench/decode_overhead_strip.py`; 51 → 173
 > tok/s eager→compiled, 15%→53% HBM; `bench/RESULTS.md` §A1 R1). Kept as the design record.

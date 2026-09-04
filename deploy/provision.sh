@@ -46,10 +46,9 @@ else
   git -C "$DEST" remote set-url origin "https://github.com/${REPO}.git"  # strip token from config
 fi
 
-echo "==> Lay out the vendored project docs into the workspace topology"
-# Parent-dir roadmap/context docs the repo's CLAUDE.md points to via ../STRATEGY.md etc.
-cp -f "$DEST"/deploy/context/workspace/*.md "$WORKSPACE"/
-echo "    workspace docs -> ${WORKSPACE}/"
+# NOTE (31/08): deploy/context/workspace/ was deleted — it vendored duplicates of a June-era
+# research bundle that was itself retired the same day. The plan a pod needs now travels in the
+# repo itself: PLAN.md (the only plan) + CLAUDE.md + docs/. Nothing to lay out.
 
 echo "==> CS336 oracle (official Stanford repos — the test adapters)"
 if [[ "${SKIP_LECTURES:-0}" == "1" ]]; then
@@ -72,7 +71,7 @@ PY
 
 cat <<EOF
 ==> Done. Project context in place.
-    Workspace : ${WORKSPACE}  (STRATEGY/DELTA/README + lectures + scratch_llm)
+    Workspace : ${WORKSPACE}  (lectures + scratch_llm; the plan travels IN the repo: PLAN.md)
     Repo      : ${DEST}
     Start work:  cd ${DEST} && source .venv/bin/activate
     Launch Claude Code from ${DEST} so it auto-loads CLAUDE.md + docs/ (the plan).

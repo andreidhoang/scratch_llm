@@ -11,6 +11,15 @@
 > **cái gap**. Cuối doc có **checklist recall cold** + bảng số đo. Cách này đúng vòng PRR (Predict → Run →
 > Reconcile): bạn commit một con số TRƯỚC, rồi để nó va vào số đo thật; *gap* chính là bài học.
 >
+> **⚠️ NEO ĐÃ DI DỜI (sửa 31/08).** Commit `8030db6` (29/07) tái cấu trúc kernels từ dạng phẳng
+> sang cây theo họ phép toán. Bảng dịch — dùng nó khi doc dưới nhắc đường dẫn cũ:
+> `kernels/gemv_triton.py` → `kernels/gemm/triton/gemv.py` · `gemm_triton.py` →
+> `kernels/gemm/triton/tiled.py` · `softmax_triton.py` → `kernels/reduce/softmax.py` ·
+> `topk_triton.py` → `kernels/reduce/topk.py` · `norm_triton.py` → `kernels/norm/normalize.py` ·
+> `paged_decode_triton.py` → `kernels/attention/decode/paged.py`. Các bench `bench/{gemv,gemm,norm,softmax}.py`
+> gộp vào `bench/kernels/` (`run.py` + thư mục con cùng tên họ). Số đo trong doc KHÔNG đổi — cùng kernel,
+> cùng card.
+>
 > **Cảnh báo neo.** Line number **trôi** theo commit. Cite ở đây pin theo HEAD `1e7dbc6` (2026-07-14).
 > Nếu lệch, `grep` tên hàm — đừng tin số dòng cứng (luật repo: verify, don't trust). Files:
 > `bench/_harness.py`, `bench/kernel_roofline.py`, `src/scratch_llm/kernels/{gemv,softmax,norm,topk,gemm}_triton.py`,

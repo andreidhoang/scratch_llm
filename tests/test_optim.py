@@ -3,6 +3,7 @@ discipline (the single highest-leverage check that the training wiring is correc
 
 import math
 
+import pytest
 import torch
 
 from scratch_llm.model import ModelConfig, TransformerLM, cross_entropy
@@ -50,6 +51,41 @@ def test_gradient_clipping_scales_when_over_and_noop_when_under() -> None:
     p_small.grad = torch.tensor([0.3, 0.4])  # norm = 0.5 < 1.0 → unchanged
     gradient_clipping([p_small], max_l2_norm=1.0)
     torch.testing.assert_close(p_small.grad, torch.tensor([0.3, 0.4]))
+
+
+@pytest.mark.parametrize(
+    ("dtype", "grad", "expected"),
+    [
+        # fp16: squaring in the grad dtype overflows (3e3^2 = 9e6 > fp16 max 65504) -> the
+        # global norm becomes inf, the scale becomes 0, and the step is silently ZEROED.
+        (torch.float16, [3e3, 4e3], 5e3),
+        # fp16 the other way: 1e-3^2 = 1e-6 < fp16 min normal (6.1e-5) -> underflows to a
+        # subnormal and the norm collapses.
+        (torch.float16, [3e-3, 4e-3], 5e-3),
+        # fp64 is the guard against "fix it by casting to fp32": .float() would send this to
+        # inf. The norm must be computed in AT LEAST fp32, never in LESS than the grad dtype.
+        (torch.float64, [3e30, 4e30], 5e30),
+        (torch.float64, [3e-25, 4e-25], 5e-25),
+        (torch.bfloat16, [3.0, 4.0], 5.0),
+    ],
+)
+def test_gradient_clipping_norm_is_computed_in_at_least_fp32(
+    dtype: torch.dtype, grad: list[float], expected: float
+) -> None:
+    """The global norm must survive dtypes whose square overflows or underflows.
+
+    A wrong norm here is the worst class of bug this repo screens for: nothing raises, the
+    loss curve merely stops improving because every step was scaled by 0 (norm=inf) or left
+    unclipped (norm=0). bf16 is included as the control -- it has fp32's exponent range, so
+    it never triggered the bug and must not regress.
+    """
+    p = torch.nn.Parameter(torch.zeros(2, dtype=dtype))
+    p.grad = torch.tensor(grad, dtype=dtype)
+    norm = gradient_clipping([p], max_l2_norm=float("inf"))
+    assert torch.isfinite(norm), f"{dtype} norm is {norm.item()}"
+    assert math.isclose(norm.item(), expected, rel_tol=1e-2), (
+        f"{dtype}: {norm.item()} != {expected}"
+    )
 
 
 def test_cosine_schedule_phases() -> None:

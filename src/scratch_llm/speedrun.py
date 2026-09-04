@@ -16,7 +16,7 @@ loop + ``algos/`` (F2/F7). The **nano pre-flight**'s only job is to prove the wh
 composes end-to-end in seconds on CPU **before** a $100 d20 rental (ADR-0018 §5, Phase 0).
 Run it: ``python -m scratch_llm.speedrun --nano`` (or ``scripts/speedrun.sh``).
 
-Model sizes (docs/FRONTIER_2026_ABLATIONS.md §2): ``--depth 20`` ⇒ d_model 1280 / 10 heads /
+Model sizes (git show 07f3de4:docs/archive/FRONTIER_2026_ABLATIONS.md §2): ``--depth 20`` ⇒ d_model 1280 / 10 heads /
 480.4M params measured at vocab 32768 (the oft-quoted 561M holds only at nanochat's old 2^16
 vocab) — the d20 headline; ``--nano`` ⇒ depth 4 in seconds.
 """
@@ -251,7 +251,7 @@ def stage_midtrain(cfg: SpeedrunConfig, model: TransformerLM) -> TransformerLM:
     if cfg.midtrain_steps == 0:
         return model
     raise NotImplementedError(
-        "midtrain is the A4 rung (docs/FRONTIER_2026_TASKSPEC.md §A4) — set midtrain_steps=0"
+        "midtrain is the A4 rung (git show 07f3de4:docs/archive/FRONTIER_2026_TASKSPEC.md §A4) — set midtrain_steps=0"
     )
 
 

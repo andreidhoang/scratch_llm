@@ -96,6 +96,14 @@ def _imports_in(py_file: Path) -> Iterator[tuple[str, int]]:
             resolved = _resolve_import(node.module, node.level, importer_pkg)
             if resolved:
                 yield resolved, node.lineno
+                # `from scratch_llm.kernels.attention import prefill` binds a SUBMODULE, not a
+                # symbol — the dotted form never appears, so scanning `node.module` alone would
+                # miss it and the boundary could be crossed by that spelling. Yield each alias
+                # as a candidate submodule too; a plain symbol import just resolves to a path
+                # that is not a family submodule and is ignored downstream.
+                for alias in node.names:
+                    if alias.name != "*":
+                        yield f"{resolved}.{alias.name}", node.lineno
 
 
 def _is_forbidden_backend_import(module_path: str) -> bool:
@@ -172,6 +180,7 @@ def test_kernels_package_import_is_cpu_safe() -> None:
         "import scratch_llm.kernels.gemm.dispatch; "
         "import scratch_llm.kernels.norm.dispatch; "
         "import scratch_llm.kernels.reduce.dispatch; "
+        "import scratch_llm.kernels.linear_attn.dispatch; "
         "import scratch_llm.kernels.common; "
         "forbidden = {'triton', 'triton.language', 'torch.utils.cpp_extension'}; "
         "leaked = forbidden & set(sys.modules); "

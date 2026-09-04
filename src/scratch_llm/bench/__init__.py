@@ -3,7 +3,8 @@
 The unit of work is a measured artifact, gated by the Artifact DoD: correct vs an oracle, profiled to
 land near a roofline you predicted first (FOP-3), the predicted-vs-measured number on record
 (:mod:`scratch_llm.bench.ledger`), a one-line root cause, and a regression guard. See
-``docs/PERFORMANCE_TRACK.md`` and ``docs/design/PERF_roofline_harness_SPEC.md``.
+``git show 07f3de4:docs/archive/PERFORMANCE_TRACK.md`` (deleted 31/08) and
+``docs/design/PERF_roofline_harness_SPEC.md``.
 """
 
 from scratch_llm.bench.gpu_specs import GPUS, GpuSpec, measure_hbm_bandwidth

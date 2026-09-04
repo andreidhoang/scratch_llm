@@ -11,12 +11,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
-from scratch_llm.kernels.common.arch import compute_capability, require_cc  # noqa: E402
+from scratch_llm.kernels.common.arch import compute_capability, require_arch  # noqa: E402
 from scratch_llm.kernels.gemm.cuda.persistent import persistent_gemv  # noqa: E402
 
 
 def main() -> None:
-    require_cc(9, 0, fn_name="cuda_persistent bench")
+    require_arch((9, 0), fn_name="cuda_persistent bench")
     print(f"# persistent GEMV bench · cc={compute_capability()}")
     print("# STATUS: STUB — kernel not implemented (csrc/persistent/persistent_gemv_sm90.cu)")
     print("# PRE-REGISTERED: ~95% of H100 HBM bandwidth (3.35 TB/s) on M=1, K=N=4096 decode")

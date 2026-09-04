@@ -11,7 +11,7 @@
 |---|---|---|
 | Source, tests, `bench/RESULTS.md`, all `docs/` | ✅ in git | `git clone` |
 | `.claude/` harness (hooks, agents, commands, settings) | ✅ in git (21 files) | auto-loads when you open Claude Code here |
-| **Claude Code auto-memory** (user prefs/feedback) | ⚠️ lives in `~/.claude/`, **NOT in git** | mirrored to `.claude/memory-snapshot/` → restored by the script |
+| **Claude Code auto-memory** (user prefs/feedback) | ⚠️ lives in `~/.claude/`, **NOT in git** | **no longer mirrored** — the snapshot dir was a stale duplicate, deleted 31/08; re-create it only if a pod actually needs it |
 | `.venv` (torch/triton/deps) | ❌ container FS | `uv` from `uv.lock` (step 2) |
 | git pre-commit hook (`.git/hooks/`) | ❌ never cloned | re-symlink (step 4) |
 | GitHub auth, git identity | ❌ secrets, per-machine | `gh auth login` (step 3) |
@@ -65,7 +65,7 @@ uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
 uv pip install --python .venv/bin/python torch --index-url https://download.pytorch.org/whl/cu130
 ln -sf ../../.claude/hooks/green-ci-gate.sh .git/hooks/pre-commit         # green-CI on every commit
 mkdir -p ~/.claude/projects/-workspace/memory
-cp .claude/memory-snapshot/*.md ~/.claude/projects/-workspace/memory/     # restore Claude's memory
+# (memory-snapshot mirror removed 31/08 — nothing to restore)
 ```
 
 ### 5. Open Claude Code and orient
@@ -73,20 +73,17 @@ cp .claude/memory-snapshot/*.md ~/.claude/projects/-workspace/memory/     # rest
 cd /workspace/scratch_llm && claude
 #  · CLAUDE.md + the SessionStart hook auto-load → you'll see the current node injected.
 #  · re-set session prefs if you want: /model  → Fable 5 ,  /effort → max
-#  · then run  /standup  (or /next) — it reads PERF_PLAN.md + bench/RESULTS.md and states the next task.
+#  · then run  /standup  (or /next) — it reads PLAN.md + KERNEL_MASTERY_SPEC §12.5 + bench/RESULTS.md.
 ```
 
 ## Where "the next task" lives (so a fresh Claude self-orients)
 
 Nothing depends on memory — the state is on disk and pushed:
-`performance/PERF_PLAN.md` ("Current Node") → `bench/RESULTS.md` (measured ledger) →
-`docs/STATUS.md` (big picture). Full mechanism: **`docs/learning/00-how-claude-code-works.md`**.
+`PLAN.md` (§ TODAY = the current node) → `bench/RESULTS.md` (measured ledger) →
+`MASTERY_LEDGER.md` (the review draft). Full mechanism: **`docs/CONTEXT_ENGINEERING.md`**.
 
-## Keeping the snapshot fresh (do this when memory changes)
+## Memory on a pod (snapshot mirror removed 31/08)
 
-The in-repo `.claude/memory-snapshot/` is the durable copy. After Claude saves/updates a memory
-during a session, mirror it back and commit — otherwise the change dies with the pod:
-```bash
-cp ~/.claude/projects/*/memory/*.md .claude/memory-snapshot/ && \
-  git add .claude/memory-snapshot && git commit -m "chore: sync Claude memory snapshot" && git push
-```
+`~/.claude/projects/*/memory/` is per-machine and is **not** carried by this repo — the in-repo
+mirror was a stale duplicate and was deleted. Nothing in the workflow depends on it: the state a
+fresh session needs is on disk and pushed (`PLAN.md` → `bench/RESULTS.md` → `MASTERY_LEDGER.md`).

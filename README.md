@@ -42,7 +42,8 @@ Stated up front rather than buried:
   are **compile-verified only** — runtime correctness is deferred to a rental that has not happened —
   and 3 (`fp8_gemm_sm90`, `stream_k_sm90`, `persistent_gemv_sm90`) are **stubs** that raise. The
   working kernel ladder is Triton + the CUDA GEMM ladder.
-- **The d20 speedrun has never been run** (see [`deploy/runbooks/d20_speedrun_8xH100.md`](deploy/runbooks/d20_speedrun_8xH100.md), which documents its own blockers).
+- **The d20 speedrun has never been run.** Its runbook was retired 31/08 with the rest of the
+  frontier-front scope; it documented its own blockers and lives in `git log`.
 - **The S3 scaling sweep failed its own gate** — R² 0.77/0.83 against a pre-registered ≥0.98 — so the
   fit was **rejected** and no extrapolation is quoted. A failed pre-registered gate is logged, not hidden.
 
@@ -62,25 +63,23 @@ your implementation is correct.
 | **A4** Data | filter → quality-classify → exact + MinHash/LSH dedup | `data/` | ✅ |
 | **A5** Alignment | SFT · Expert Iteration · GRPO/Dr.GRPO · DPO | `algos/`, `rewards/`, `envs/` | ✅ (graded GPU runs rental-gated) |
 
-See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the A1→A5 build spine and
-[`docs/assignment_guides/`](docs/assignment_guides/) for the per-assignment guides — every
-deliverable tagged **LOAD-BEARING / COURSE-ROTE / SKIP** and mapped to a source file. Live status:
-[`docs/STATUS.md`](docs/STATUS.md). The 2026 **frontier-practice layer** — per-pillar modern-default
-upgrades, opt-in build labs, and interview-awareness items (fact-checked) — is in
-[`docs/FRONTIER_PRACTICE_2026.md`](docs/FRONTIER_PRACTICE_2026.md). The pipeline-level **end-to-end
-training plan** (2026-07-30, 9-angle 2026 research pass — S0→S8, data → tokenizer → pretrain → d20 →
-RL → serve/eval) is [`docs/FRONTIER_2026_END_TO_END_PLAN.md`](docs/FRONTIER_2026_END_TO_END_PLAN.md) —
-read it first; rung-level specs stay in `docs/FRONTIER_2026_TASKSPEC.md` / `docs/FRONTIER_2026_ABLATIONS.md`.
-The newest track (chartered 2026-07-31): **K3** — build & host **Kimi K3** from scratch, reusing this
+See [`docs/assignment_guides/`](docs/assignment_guides/) for the per-assignment guides — every
+deliverable tagged **LOAD-BEARING / COURSE-ROTE / SKIP** and mapped to a source file. **The plan and
+the live state are [`PLAN.md`](PLAN.md); measured numbers are [`bench/RESULTS.md`](bench/RESULTS.md).**
+The 2026 planning generations that used to be linked here (`FRONTIER_2026_*`, `IMPLEMENTATION_PLAN`,
+`STATUS`) were collapsed into PLAN.md and deleted on 2026-08-31 — `git log` holds them.
+The K3 track (chartered 2026-07-31): **K3** — build & host **Kimi K3** from scratch, reusing this
 repo's substrate (GDN→KDA, MLA→Gated MLA-NoPE, MoE→Stable LatentMoE). Roadmap + verified-facts ledger:
 [`docs/k3/ROADMAP.md`](docs/k3/ROADMAP.md) + [`docs/k3/FACTS.md`](docs/k3/FACTS.md) (K3 tech report
 arXiv:2607.24653 is the spec of record).
 
 **Capstone — DELTA** (the barbell *spike*, sitting on the A2/A5 base): a fused **GatedDeltaNet-2
 decode-step** kernel (target ≥85% of the H100 memory roofline; the "erase/write decoupling is free at
-decode" thesis). Design + dated 4-week plan live in the workspace root —
-[`../DELTA.md`](../DELTA.md) (merged design RFC + 4-week plan) — and are tracked in
-[`docs/STATUS.md`](docs/STATUS.md) and [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) §7.
+decode" thesis). The design RFC was retired 31/08 — the field closed the original gap (FlashInfer
+shipped production GDN decode) and its own banner said Part II must be re-derived. What survives is
+the load-bearing summary, kept inline as *extension material* in `docs/KERNEL_MASTERY_SPEC.md` §6:
+hypothesis ≥1.5× at decode B≤32 vs a composed baseline, four named baselines, evals locked first,
+kill at <1.15×.
 (K3 roadmap **K10.2** re-aims the co-designed kernel at **KDA** — per-channel decay — building on
 DELTA's GDN-2 base; see `docs/k3/ROADMAP.md`.)
 

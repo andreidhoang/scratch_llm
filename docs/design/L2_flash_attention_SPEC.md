@@ -1,5 +1,11 @@
 # Design spec — L2 FlashAttention-2 (forward kernel + roofline)
 
+> **⚠ HARDWARE CORRECTION (2026-08-31).** Lines below that say "the standing sm120 GPU / no rental
+> needed" were TRUE when written and are FALSE now: this host has **no GPU and no CUDA toolchain**
+> (`nvidia-smi`/`nvcc`/`ncu`/`nsys` absent, `triton` not importable, arm64 — measured 29–30/08).
+> Every rung here is **rental-gated**; measured numbers already in the ledger stay valid as records.
+> Law: `CLAUDE.md` § Hardware reality · `PLAN.md` § Hardware law.
+
 > **Status:** ✅ built & measured — oracle + Triton forward + the honest roofline (**53% of SDPA @
 > seq 4k**, logged in `bench/RESULTS.md`) + the recomputation backward (D-vector, grads == SDPA
 > autograd). The 4090 era ended — the standing GPU is sm120 Blackwell; re-measuring % of SDPA on
