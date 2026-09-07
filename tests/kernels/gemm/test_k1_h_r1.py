@@ -17,7 +17,6 @@ import os
 import re
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 import torch
@@ -28,7 +27,12 @@ from scratch_llm.kernels.common.hopper_contracts import (
     tile_covers,
     wave_quantization,
 )
-from scratch_llm.kernels.gemm.cuda._k1_loader import HoleOpenError, hole_is_open, source_for
+from scratch_llm.kernels.gemm.cuda._k1_loader import (
+    HoleOpenError,
+    hole_is_open,
+    source_for,
+    workspace_root,
+)
 from scratch_llm.kernels.gemm.cuda.h_r1 import (
     RUNG,
     SOURCE,
@@ -39,7 +43,7 @@ from scratch_llm.kernels.gemm.cuda.h_r1 import (
     reference_gemm,
 )
 
-_WORKSPACE = Path(__file__).resolve().parents[3].parent  # scratch_llm/tests/kernels/gemm -> ladders
+_WORKSPACE = workspace_root()
 _DRYDOCK = _WORKSPACE / "experiments" / "K1" / "H-R1" / "drydock"
 
 # ---------------------------------------------------------------------------------------------
