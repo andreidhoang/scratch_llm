@@ -172,7 +172,18 @@ def test_the_hole_sentinel_survives_the_formatter() -> None:
     guard test above goes green while the partition is still unwritten. That is the one failure the
     whole hole convention exists to prevent, so it gets its own assertion.
     """
-    from tests.conftest import hole_is_open  # noqa: PLC0415
+    import importlib.util  # noqa: PLC0415
+
+    # Loaded by path rather than `from tests.conftest import ...`. The bare `pytest` console
+    # script — what CI and the pre-push hook run — does not put the rootdir on sys.path, so the
+    # dotted import resolves only under `python -m pytest`. A test that passes one way and errors
+    # the other is worse than no test, and this one is guarding the hole convention itself.
+    _cf = _WORKSPACE / "scratch_llm" / "tests" / "conftest.py"
+    _spec = importlib.util.spec_from_file_location("_hole_contract", _cf)
+    assert _spec is not None and _spec.loader is not None, f"cannot load {_cf}"
+    _mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    hole_is_open = _mod.hole_is_open
 
     hole_source = "src/scratch_llm/kernels/attention/decode/paged_split_kv.py"
     assert hole_is_open(hole_source) or "raise NotImplementedError" not in (
