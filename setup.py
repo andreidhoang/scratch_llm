@@ -44,7 +44,12 @@ _CSRC = _REPO_ROOT / "csrc"
 # `None` = every requested arch: host code, or a device body guarded by `#if __CUDA_ARCH__`.
 _CUDA_SOURCES: list[tuple[str, set[str] | None]] = [
     (str(_CSRC / "pybind.cpp"), None),
-    (str(_CSRC / "gemm" / "h_r1_wgmma_bf16_sm90.cu"), None),  # arch-guarded: inert off sm_90a
+    # K1 rungs — all arch-guarded with `#if __CUDA_ARCH__`, so inert rather than broken off-arch.
+    (str(_CSRC / "gemm" / "h_r1_wgmma_bf16_sm90.cu"), None),
+    (str(_CSRC / "gemm" / "h_r2_tma_bf16_sm90.cu"), None),
+    (str(_CSRC / "gemm" / "h_r3_ws_bf16_sm90.cu"), None),
+    (str(_CSRC / "gemm" / "h_r4_persistent_bf16_sm90.cu"), None),
+    (str(_CSRC / "gemm" / "b_r6_nvfp4_sm120.cu"), None),
     (str(_CSRC / "gemm" / "wgmma_sm90.cu"), {"90"}),
     (str(_CSRC / "gemm" / "tcgen05_sm100.cu"), {"100"}),
     (str(_CSRC / "attention" / "fa3_hopper.cu"), {"90"}),

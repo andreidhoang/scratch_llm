@@ -132,6 +132,12 @@ exclude = [
     "src/scratch_llm/kernels/gemm/cuda/stream_k.py",
     "src/scratch_llm/kernels/gemm/cuda/persistent.py",
     "src/scratch_llm/kernels/attention/prefill/fa3.py",
+    # CuTe DSL (K1 B-R5): the kernel is Python decorated with @cute.experimental.jit/.kernel, and
+    # `cute` is imported lazily inside the function so the module stays importable on a box with no
+    # nvidia-cutlass-dsl. pyright then sees a module-typed VARIABLE in the annotations
+    # (`mA: cute.Tensor`) and an opaque compiled object at the call site — the same thing it cannot
+    # model for Triton's `kernel[grid](...)`. Type-checked there by execution, on a B200.
+    "src/scratch_llm/kernels/gemm/cute_dsl/b_r5.py",
     # GPU benches: Triton launch + runtime sys.path resolution of bench/_harness.py
     "bench/kernels",
     # GPU tests that drive the above

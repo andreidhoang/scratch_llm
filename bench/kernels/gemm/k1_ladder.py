@@ -44,6 +44,18 @@ SHAPES: dict[str, tuple[int, int, int]] = {
     "rect8192": (8192, 8192, 4096),
     "skinny16": (16, 4096, 4096),
     "npot": (257, 1023, 512),
+    # H-R1 can measure npot; no TMA rung can, and the TMA rungs do not all agree on a replacement
+    # — because they do not build the same tensor map, so they do not have the same constraint.
+    #   npot   N=1023 -> a 2046-byte row stride; cuTensorMapEncodeTiled needs a multiple of 16, so
+    #          no tensor map for B exists at all. Every TMA rung rejects this shape by name.
+    #   ntail  N=1032 = 8*129 satisfies the 16-byte stride rule, which is all H-R2's scheme needs:
+    #          it maps B as TWO rank-2 {64,64} boxes rather than one rank-3 box.
+    #   ntail64 N=1088 = 64*17 is a whole number of 64-element swizzle atoms, which is what a
+    #          single-box scheme (H-R3) requires. 1032 is NOT (1032/64 = 16.125).
+    # Both are kept. A rung declares which shapes it can run in `default_shapes`; forcing one shape
+    # on both schemes would mean one of them measuring a ValueError instead of an epilogue.
+    "ntail": (257, 1032, 512),
+    "ntail64": (257, 1088, 512),
     "untuned": (1536, 6144, 2560),
 }
 
@@ -71,6 +83,57 @@ RUNGS: dict[str, Rung] = {
         "cublas",
         "pct_of_cublas",
         "wgmma from smem, single stage, 128x128 tile, 1 warpgroup",
+        default_shapes=("sq4096", "rect8192", "skinny16", "npot", "untuned"),
+    ),
+    "H-R2": Rung(
+        "H-R2",
+        "scratch_llm.kernels.gemm.cuda.h_r2",
+        "h_r2_gemm",
+        (9, 0),
+        "cublas",
+        "pct_of_cublas",
+        "TMA + mbarrier expect-tx, 2 stages, same 128x128 tile as H-R1",
+        default_shapes=("sq4096", "rect8192", "skinny16", "ntail", "untuned"),
+    ),
+    "H-R3": Rung(
+        "H-R3",
+        "scratch_llm.kernels.gemm.cuda.h_r3",
+        "h_r3_gemm",
+        (9, 0),
+        "cublas",
+        "pct_of_cublas",
+        "warp-specialised producer/consumer, multistage, 128x256 tile",
+        default_shapes=("sq4096", "rect8192", "skinny16", "ntail64", "untuned"),
+    ),
+    "H-R4": Rung(
+        "H-R4",
+        "scratch_llm.kernels.gemm.cuda.h_r4",
+        "h_r4_gemm",
+        (9, 0),
+        "cublas",
+        "pct_of_cublas",
+        "persistent + grouped-raster scheduler, cluster of 2, TMA multicast",
+        default_shapes=("sq4096", "rect8192", "skinny16", "ntail64", "untuned"),
+    ),
+    "B-R5": Rung(
+        "B-R5",
+        "scratch_llm.kernels.gemm.cute_dsl.b_r5",
+        "b_r5_gemm",
+        (10, 0),
+        "cublaslt",
+        "pct_of_cublaslt",
+        "CuTe DSL tcgen05.mma + TMEM accumulator, TMA, 128x256x64",
+        default_shapes=("sq4096", "rect8192", "skinny16", "ntail"),
+    ),
+    "B-R6": Rung(
+        "B-R6",
+        "scratch_llm.kernels.gemm.cuda.b_r6",
+        "b_r6_gemm",
+        (12, 0),
+        "sol",
+        "pct_of_sol",
+        "NVFP4 block-scaled mma.sync, swizzled e4m3 scales (sm120 path)",
+        default_shapes=("sq4096",),
     ),
 }
 
@@ -79,6 +142,9 @@ RUNGS: dict[str, Rung] = {
 FLOORS: dict[str, str] = {
     "cublas": "torch.matmul on bf16 operands — cuBLAS's own bf16 kernel selection",
     "cublaslt": "torch._scaled_mm / cuBLASLt epilogue path (B200 rungs; see B-R5's spec)",
+    "sol": "speed of light — the arch's own NVFP4 tensor-core roof. B-R6 has no library floor: "
+    "there is no production NVFP4 GEMM to call at matched dtype, so the comparison is to "
+    "the roof, and the exit is a MULTIPLE of it (<= 2x SoL) rather than a fraction",
 }
 
 
@@ -88,6 +154,11 @@ def _list() -> int:
     for r in RUNGS.values():
         print(
             f"{r.name:<8} sm_{r.arch[0] * 10 + r.arch[1]:<5} {r.floor:<10} {r.metric:<18} {r.module}.{r.fn}"
+        )
+        blocked = [x for x in SHAPES if x not in r.default_shapes]
+        print(
+            f"{'':<8} runs: {' '.join(r.default_shapes)}"
+            + (f"   | cannot address: {' '.join(blocked)}" if blocked else "")
         )
     print("-" * 100)
     print(f"{'shape':<10} {'M':>7} {'N':>7} {'K':>7}   GFLOP")
@@ -129,6 +200,15 @@ def main() -> int:
         return _list()
     if not args.rung and not args.floor:
         ap.error("one of --rung or --floor is required (or --list)")
+
+    # A rung's tensor map constrains which shapes it can address at all. Refuse here, with the
+    # constraint named, rather than launching and letting the wrapper raise from inside a bench.
+    if args.rung and args.shape not in RUNGS[args.rung].default_shapes:
+        ap.error(
+            f"{args.rung} cannot address shape {args.shape}={SHAPES[args.shape]} — its tensor map "
+            f"has a constraint this shape violates (see the SHAPES comments). It runs: "
+            f"{', '.join(RUNGS[args.rung].default_shapes)}"
+        )
 
     m, n, k = SHAPES[args.shape]
     flops = 2.0 * m * n * k
@@ -178,6 +258,22 @@ def main() -> int:
         return flops / (med * 1e-3) / 1e12, med, spread_pct(med, lo, hi)
 
     floor_key = args.floor or RUNGS[args.rung].floor
+    if floor_key == "sol":
+        # Speed of light is not a library call. There is no production NVFP4 GEMM to time at
+        # matched dtype, so B-R6's floor is the arch's own tensor-core roof for e2m1 — a number
+        # DERIVED from the device table (the dense bf16 rate and the format's throughput ratio),
+        # not measured by running something. Timing torch.matmul here and calling it "SoL" would
+        # be measuring bf16 cuBLAS and labelling it NVFP4, which is the exact class of mislabelled
+        # baseline the maintainer review exists to catch.
+        print("# floor sol       DERIVED, not measured — see experiments/K1/B-R6/spec.md")
+        print("#   NVFP4 SoL = (this device's dense bf16 TFLOP/s from the device table) x (the")
+        print("#   e2m1 : bf16 tensor-core throughput ratio for this arch). Both come from the")
+        print("#   measured device table, and turning them into a roof is the rung's roofline.")
+        print(
+            f'#   record it:  make floor L=K1 R=B-R6 M=nvfp4_sol_tflops V=<your derivation> DEV="{torch.cuda.get_device_name()}"'
+        )
+        print("#   then re-run with --rung B-R6, which reads it back from the ledger.")
+        return 0
     floor_tf, floor_ms, floor_spread = _tflops(lambda a=a, b=b: torch.matmul(a, b))
     print(
         f"# floor {floor_key:<9} {floor_tf:7.1f} TF/s  ({floor_ms:8.3f} ms · IQR {floor_spread:4.1f}%)  {FLOORS[floor_key]}"

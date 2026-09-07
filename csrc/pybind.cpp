@@ -57,6 +57,11 @@ torch::Tensor flash_attention_fa3_forward(
 // Each is arch-guarded internally: off its own architecture the device body compiles to nothing
 // and the host launcher refuses, so a multi-arch build links instead of failing.
 torch::Tensor h_r1_wgmma_bf16(torch::Tensor A, torch::Tensor B);
+torch::Tensor h_r2_tma_bf16(torch::Tensor A, torch::Tensor B);
+torch::Tensor h_r3_ws_bf16(torch::Tensor A, torch::Tensor B);
+torch::Tensor h_r4_persistent_bf16(torch::Tensor A, torch::Tensor B);
+// B-R6 takes packed e2m1 operands plus their swizzled e4m3 scale tensors (kernels/gemm/nvfp4_layout.py).
+torch::Tensor b_r6_nvfp4_mma_sync(torch::Tensor A, torch::Tensor SFA, torch::Tensor B, torch::Tensor SFB);
 
 // --- Frontier stubs (WS-C) — bodies are the learning rep, unimplemented ----
 // Each throws a C++ runtime_error until you implement the mainloop. Declared
@@ -79,6 +84,14 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // --- K1 ladder rungs (experiments/K1/<rung>/spec.md) ---
     m.def("h_r1_wgmma_bf16", &h_r1_wgmma_bf16,
           "K1/H-R1: wgmma from smem, single stage, 128x128 tile (sm_90a, bf16->fp32)");
+    m.def("h_r2_tma_bf16", &h_r2_tma_bf16,
+          "K1/H-R2: TMA + mbarrier expect-tx, 2 stages (sm_90a, bf16->fp32)");
+    m.def("h_r3_ws_bf16", &h_r3_ws_bf16,
+          "K1/H-R3: warp-specialised multistage, 128x256 tile (sm_90a, bf16->fp32)");
+    m.def("h_r4_persistent_bf16", &h_r4_persistent_bf16,
+          "K1/H-R4: persistent + tile scheduler, cluster of 2 (sm_90a, bf16->fp32)");
+    m.def("b_r6_nvfp4_mma_sync", &b_r6_nvfp4_mma_sync,
+          "K1/B-R6: NVFP4 block-scaled mma.sync, swizzled e4m3 scales (sm_120a, e2m1->fp32)");
 
     // --- Stubs (WS-C) — raise at runtime until the mainloop is implemented ---
     m.def("fp8_gemm_sm90", &fp8_gemm_sm90, "Hopper FP8 GEMM (STUB — learning rep)");

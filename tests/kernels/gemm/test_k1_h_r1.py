@@ -180,8 +180,11 @@ def test_wrapper_reports_an_open_hole_as_such() -> None:
 # =============================================================================================
 
 
+_STEM = SOURCE.removesuffix(".cu")
+
+
 def _sass() -> str:
-    p = _DRYDOCK / "sass.sm_90a.txt"
+    p = _DRYDOCK / f"{_STEM}.sm_90a.sass.txt"
     if not p.is_file():
         pytest.skip(f"no SASS at {p} — run: infra/drydock.sh compile {SOURCE}")
     if hole_is_open(SOURCE):
@@ -216,7 +219,7 @@ def test_sass_has_no_local_memory_traffic() -> None:
 @pytest.mark.drydock
 def test_ptxas_report_is_clean() -> None:
     """0 spill bytes, and shared memory within the arch limit — read from the ptxas report."""
-    p = _DRYDOCK / "ptxas.sm_90a.txt"
+    p = _DRYDOCK / f"{_STEM}.sm_90a.ptxas.txt"
     if not p.is_file():
         pytest.skip(f"no ptxas report at {p} — run: infra/drydock.sh compile {SOURCE}")
     report = p.read_text(encoding="utf-8", errors="replace")
