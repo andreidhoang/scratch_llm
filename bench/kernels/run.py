@@ -108,6 +108,13 @@ _BENCHES: list[Bench] = [
         "A3 R3.4",
         "kernels.gemm.cuda.persistent (Hopper persistent GEMV, sm_90a; STUB — learning rep)",
     ),
+    # --- K1 GEMM ladder (ladders plan §05; one entry point, six rungs + their floors) ---
+    Bench(
+        "gemm/k1_ladder",
+        "bench/kernels/gemm/k1_ladder.py",
+        "K1 H-R1..B-R6",
+        "kernels.gemm.cuda.<rung> vs cuBLAS bf16 — see --list; measured via infra/bench.sh",
+    ),
     # --- Attention (FA2 Triton fwd/bwd + the sm120 measurement sweep) ---
     Bench(
         "attention/fa2_fwd_roofline",

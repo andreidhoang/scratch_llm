@@ -80,6 +80,8 @@ endforeach()
 # C++ kernel = drop the .cu here + bind it in csrc/pybind.cpp.
 set(_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/pybind.cpp
+    # K1 rungs (arch-guarded with #if __CUDA_ARCH__, so inert rather than broken off-arch)
+    ${CMAKE_CURRENT_SOURCE_DIR}/csrc/gemm/h_r1_wgmma_bf16_sm90.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/gemm/wgmma_sm90.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/gemm/tcgen05_sm100.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/attention/fa3_hopper.cu

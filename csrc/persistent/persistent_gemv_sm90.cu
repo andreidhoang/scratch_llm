@@ -55,6 +55,7 @@
 // =============================================================================
 
 #include <cuda.h>
+#include <cuda_fp16.h>   // __half — the kernel's operand type
 #include <cstdint>
 
 // GEMV: x [K] @ A [K, N] = y [N]. One CTA per SM, each processes N_PER_SM cols.

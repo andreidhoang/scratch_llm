@@ -52,6 +52,12 @@ torch::Tensor tcgen05_gemm_sm100(torch::Tensor A, torch::Tensor B);
 torch::Tensor flash_attention_fa3_forward(
     torch::Tensor Q, torch::Tensor K, torch::Tensor V, bool is_causal);
 
+// --- K1 ladder rungs (ladders plan §05; one .cu per rung, one hole per rung) ----
+// bf16 in, fp32 accumulate, fp32 out — the K1 floor is cuBLAS bf16, so bf16 is not a variant.
+// Each is arch-guarded internally: off its own architecture the device body compiles to nothing
+// and the host launcher refuses, so a multi-arch build links instead of failing.
+torch::Tensor h_r1_wgmma_bf16(torch::Tensor A, torch::Tensor B);
+
 // --- Frontier stubs (WS-C) — bodies are the learning rep, unimplemented ----
 // Each throws a C++ runtime_error until you implement the mainloop. Declared
 // here so dispatch + Python loaders wire NOW; bodies land as learning reps.
@@ -69,6 +75,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
           "Blackwell tcgen05 GEMM (sm_100a, compile-gated; rental-day runtime)");
     m.def("flash_attention_fa3_forward", &flash_attention_fa3_forward,
           "Hopper FlashAttention-3 fwd (sm_90a, compile-gated; rental-day runtime)");
+
+    // --- K1 ladder rungs (experiments/K1/<rung>/spec.md) ---
+    m.def("h_r1_wgmma_bf16", &h_r1_wgmma_bf16,
+          "K1/H-R1: wgmma from smem, single stage, 128x128 tile (sm_90a, bf16->fp32)");
 
     // --- Stubs (WS-C) — raise at runtime until the mainloop is implemented ---
     m.def("fp8_gemm_sm90", &fp8_gemm_sm90, "Hopper FP8 GEMM (STUB — learning rep)");

@@ -51,6 +51,7 @@
 // =============================================================================
 
 #include <cuda.h>
+#include <cuda_fp16.h>   // __half — the kernel's operand type
 #include <cstdint>
 
 // Tile shape (match the wgmma GEMM so the K-partition math is consistent).

@@ -37,17 +37,46 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 _REPO_ROOT = Path(__file__).resolve().parent
 _CSRC = _REPO_ROOT / "csrc"
 
-# Every frontier .cu under csrc/ — the same list CMakeLists.txt::_SOURCES uses.
-# Adding a new C++ kernel = drop the .cu here AND in CMakeLists.txt.
-_CUDA_SOURCES = [
-    str(_CSRC / "pybind.cpp"),
-    str(_CSRC / "gemm" / "wgmma_sm90.cu"),
-    str(_CSRC / "gemm" / "tcgen05_sm100.cu"),
-    str(_CSRC / "attention" / "fa3_hopper.cu"),
-    str(_CSRC / "gemm" / "fp8_gemm_sm90.cu"),
-    str(_CSRC / "gemm" / "stream_k_sm90.cu"),
-    str(_CSRC / "persistent" / "persistent_gemv_sm90.cu"),
+# Every frontier .cu under csrc/, WITH the archs whose ISA it uses. The arch column is load
+# bearing: WGMMA is sm_90a-only and ptxas rejects it elsewhere ("Instruction 'wgmma.fence' not
+# supported on .target 'sm_100a'", verified 2026-09-07), so building every source for every arch in
+# TORCH_CUDA_ARCH_LIST cannot work. infra/drydock.sh carries the same table; keep the two in step.
+# `None` = every requested arch: host code, or a device body guarded by `#if __CUDA_ARCH__`.
+_CUDA_SOURCES: list[tuple[str, set[str] | None]] = [
+    (str(_CSRC / "pybind.cpp"), None),
+    (str(_CSRC / "gemm" / "h_r1_wgmma_bf16_sm90.cu"), None),  # arch-guarded: inert off sm_90a
+    (str(_CSRC / "gemm" / "wgmma_sm90.cu"), {"90"}),
+    (str(_CSRC / "gemm" / "tcgen05_sm100.cu"), {"100"}),
+    (str(_CSRC / "attention" / "fa3_hopper.cu"), {"90"}),
+    (str(_CSRC / "gemm" / "fp8_gemm_sm90.cu"), {"90"}),
+    (str(_CSRC / "gemm" / "stream_k_sm90.cu"), {"90"}),
+    (str(_CSRC / "persistent" / "persistent_gemv_sm90.cu"), {"90"}),
 ]
+
+
+def _sources_for(arch_flags: list[str]) -> list[str]:
+    """The sources buildable for the requested archs; others are dropped, not built and hoped for.
+
+    A dropped source's symbol is absent from the extension, which the loaders handle by JIT-
+    compiling that one rung. Building it anyway fails the extension and takes every rung down.
+    """
+    requested = {f.rsplit("sm_", 1)[-1].rstrip("a") for f in arch_flags}
+    restricted = [Path(s).name for s, a in _CUDA_SOURCES if a is not None]
+    if len(requested) > 1 and restricted:
+        raise SystemExit(
+            f"setup.py: one CUDAExtension applies one -arch to every source, and {restricted[0]} "
+            f"does not assemble off its own arch. Build one arch per pass — a rented box has "
+            f"exactly one:\n    TORCH_CUDA_ARCH_LIST=\"9.0a\" pip install -e '.[gpu-aot]'\n"
+            f"  (infra/bootstrap.sh derives this from nvidia-smi.)"
+        )
+    out = []
+    for src, archs in _CUDA_SOURCES:
+        if archs is None or (archs & requested):
+            out.append(src)
+        else:
+            print(f"setup.py: skipping {Path(src).name} — needs sm_{'/'.join(sorted(archs))}a, "
+                  f"requested sm_{'/'.join(sorted(requested))}a")
+    return out
 
 
 def _cuda_arch_flags() -> list[str]:
@@ -76,7 +105,7 @@ setup(
     ext_modules=[
         CUDAExtension(
             name="_scratch_llm_kernels",
-            sources=_CUDA_SOURCES,
+            sources=_sources_for(_cuda_arch_flags()),
             extra_compile_args={
                 "cxx": ["-O3"],
                 "nvcc": [
