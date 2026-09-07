@@ -33,6 +33,7 @@ never reaches a measurement: ``infra/bench.sh`` refuses to run while it is set.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -40,7 +41,16 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # The sentinels the hole convention writes into a source. Either one present => hole still open.
-_OPEN_SENTINELS = ('NotImplementedError("HUY:', '#error "HUY:')
+#
+# Matched as a REGEX across whitespace, not as a fixed substring. `ruff format` wraps a long
+# `raise NotImplementedError("HUY: ...")` onto two lines, which deletes the literal substring
+# `NotImplementedError("HUY:` from the file — and a substring check then reports the hole CLOSED,
+# so the guard test stops xfailing and fails instead. That is the worst direction for this check
+# to be wrong in: the formatter, not the author, decides whether an unwritten kernel looks done.
+_OPEN_SENTINELS = (
+    re.compile(r'NotImplementedError\(\s*(?:#[^\n]*\n\s*)?"HUY:'),
+    re.compile(r'#\s*error\s+"HUY:'),
+)
 
 
 def hole_is_open(source: str) -> bool:
@@ -53,7 +63,8 @@ def hole_is_open(source: str) -> bool:
     p = _REPO_ROOT / source
     if not p.is_file():
         return True
-    return any(s in p.read_text(encoding="utf-8", errors="replace") for s in _OPEN_SENTINELS)
+    text = p.read_text(encoding="utf-8", errors="replace")
+    return any(pat.search(text) for pat in _OPEN_SENTINELS)
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
