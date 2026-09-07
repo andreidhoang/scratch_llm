@@ -63,6 +63,22 @@ torch::Tensor h_r4_persistent_bf16(torch::Tensor A, torch::Tensor B);
 // B-R6 takes packed e2m1 operands plus their swizzled e4m3 scale tensors (kernels/gemm/nvfp4_layout.py).
 torch::Tensor b_r6_nvfp4_mma_sync(torch::Tensor A, torch::Tensor SFA, torch::Tensor B, torch::Tensor SFB);
 
+// --- K2 ladder rungs (ladders plan §05) ------------------------------------
+// Both return {O, LSE}: upstream gates the log-sum-exp as well as the output (flashinfer
+// tests/attention/test_hopper.py:55-56), and an O-only comparison is weaker than the floor's.
+// <vector> comes in with torch/extension.h; named here because these two depend on it directly.
+#include <vector>
+std::vector<torch::Tensor> fa3_hopper_v2_fwd(torch::Tensor Q, torch::Tensor K, torch::Tensor V,
+                                             bool is_causal, bool heads_last);
+std::vector<torch::Tensor> a_r3_paged_decode(torch::Tensor q, torch::Tensor k_cache,
+                                             torch::Tensor v_cache, torch::Tensor kv_indptr,
+                                             torch::Tensor kv_indices, torch::Tensor last_page_len,
+                                             torch::Tensor request_indices,
+                                             torch::Tensor chunk_indices, torch::Tensor o_indptr,
+                                             int64_t chunk_size_pages, double sm_scale);
+std::vector<torch::Tensor> a_r3_merge_states(torch::Tensor tmp_o, torch::Tensor tmp_lse,
+                                             torch::Tensor o_indptr);
+
 // --- Frontier stubs (WS-C) — bodies are the learning rep, unimplemented ----
 // Each throws a C++ runtime_error until you implement the mainloop. Declared
 // here so dispatch + Python loaders wire NOW; bodies land as learning reps.
@@ -92,6 +108,16 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
           "K1/H-R4: persistent + tile scheduler, cluster of 2 (sm_90a, bf16->fp32)");
     m.def("b_r6_nvfp4_mma_sync", &b_r6_nvfp4_mma_sync,
           "K1/B-R6: NVFP4 block-scaled mma.sync, swizzled e4m3 scales (sm_120a, e2m1->fp32)");
+
+    // --- K2 ladder rungs (experiments/K2/<rung>/spec.md) ---
+    m.def("fa3_hopper_v2_fwd", &fa3_hopper_v2_fwd,
+          "K2/A-R2: TMA + warp-specialised ping-pong FA3-shaped fwd (sm_90a, bf16) -> {O, LSE}",
+          py::arg("Q"), py::arg("K"), py::arg("V"), py::arg("is_causal"),
+          py::arg("heads_last") = false);
+    m.def("a_r3_paged_decode", &a_r3_paged_decode,
+          "K2/A-R3: paged split-KV decode partials + merge (sm_90a, bf16) -> {O, LSE}");
+    m.def("a_r3_merge_states", &a_r3_merge_states,
+          "K2/A-R3: the log-sum-exp merge alone, so the reduce can be tested without the partials");
 
     // --- Stubs (WS-C) — raise at runtime until the mainloop is implemented ---
     m.def("fp8_gemm_sm90", &fp8_gemm_sm90, "Hopper FP8 GEMM (STUB — learning rep)");

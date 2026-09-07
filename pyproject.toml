@@ -114,6 +114,7 @@ include = ["src", "tests"]
 exclude = [
     # Triton @jit kernel bodies + launchers (attention, gemm/triton, norm, reduce)
     "src/scratch_llm/kernels/attention/prefill/fa2.py",
+    "src/scratch_llm/kernels/attention/prefill/fa2_tuned_triton.py",
     "src/scratch_llm/kernels/attention/decode/paged.py",
     "src/scratch_llm/kernels/gemm/triton/tiled.py",
     "src/scratch_llm/kernels/gemm/triton/gemv.py",

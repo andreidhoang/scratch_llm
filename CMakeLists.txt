@@ -89,6 +89,8 @@ set(_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/gemm/wgmma_sm90.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/gemm/tcgen05_sm100.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/attention/fa3_hopper.cu
+    ${CMAKE_CURRENT_SOURCE_DIR}/csrc/attention/fa3_hopper_v2.cu
+    ${CMAKE_CURRENT_SOURCE_DIR}/csrc/attention/a_r3_paged_decode_sm90.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/gemm/fp8_gemm_sm90.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/gemm/stream_k_sm90.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/csrc/persistent/persistent_gemv_sm90.cu

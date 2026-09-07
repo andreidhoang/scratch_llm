@@ -53,6 +53,13 @@ _CUDA_SOURCES: list[tuple[str, set[str] | None]] = [
     (str(_CSRC / "gemm" / "wgmma_sm90.cu"), {"90"}),
     (str(_CSRC / "gemm" / "tcgen05_sm100.cu"), {"100"}),
     (str(_CSRC / "attention" / "fa3_hopper.cu"), {"90"}),
+    # K2 rungs. `None`, like the K1 rows: both are arch-guarded internally
+    # (`#if __CUDA_ARCH__ == 900`), so on another arch the Hopper ISA is preprocessed away and the
+    # file still links. Verified in the dry dock on 2026-09-07 — both compile clean for sm_100a and
+    # sm_120a — with A-R2's hole open, i.e. against its stub. When that hole is filled, the
+    # mainloop must stay inside the SCRATCH_LLM_HAS_TMA_WGMMA guard or this row becomes {"90"}.
+    (str(_CSRC / "attention" / "fa3_hopper_v2.cu"), None),
+    (str(_CSRC / "attention" / "a_r3_paged_decode_sm90.cu"), None),
     (str(_CSRC / "gemm" / "fp8_gemm_sm90.cu"), {"90"}),
     (str(_CSRC / "gemm" / "stream_k_sm90.cu"), {"90"}),
     (str(_CSRC / "persistent" / "persistent_gemv_sm90.cu"), {"90"}),
