@@ -52,7 +52,10 @@ jobs:
         run: pyright
 
       - name: Pytest (CPU gate — mirrors the commit hook)
-        run: pytest -m "not gpu and not slow" --cov=scratch_llm
+        # `hole` = a block deliberately left unimplemented for Huy (tests/conftest.py); it is a
+        # strict xfail, not a failure, but excluding it keeps the CI signal about regressions.
+        # `drydock` asserts on ptxas/SASS artifacts produced by infra/drydock.sh, which needs nvcc.
+        run: pytest -m "not gpu and not slow and not hole and not drydock" --cov=scratch_llm
 
   # Optional GPU-AOT build job — verifies the CMake / setup.py AOT build compiles
   # for the rental frontier archs (sm_90a, sm_100a). Runs ONLY when the `gpu-aot`

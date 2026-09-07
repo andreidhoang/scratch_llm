@@ -155,4 +155,6 @@ markers = [
     "gpu: requires a GPU / heavy deps (skipped in CI)",
     "slow: long-running ablation, not part of the smoke gate",
     "network: needs internet (self-skips unless SCRATCH_LLM_NETWORK_TESTS=1)",
+    "hole: guards one `# HUY:` hole — strict-xfail while the hole is open (tests/conftest.py)",
+    "drydock: asserts on ptxas/SASS captured by infra/drydock.sh; skips when the file is absent",
 ]
