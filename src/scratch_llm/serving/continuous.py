@@ -101,6 +101,8 @@ def serve(
     paged_n_blocks: int | None = None,
     paged_use_kernel: bool = False,
     prefill_chunk_size: int | None = None,
+    arrivals_s: Sequence[float] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> ServeResult:
     """Run ``requests`` to completion over ``n_slots`` static KV slots under one of two policies.
 
@@ -111,7 +113,12 @@ def serve(
     per-request pause-prefill would stall ≈ ``n_slots/mean_len`` of the run) → one lockstep decode
     step over all ``n_slots`` rows (static shapes: inactive rows compute masked, discarded work).
     All requests are treated as arriving at t₀, so TTFT includes queue wait — the number that shows
-    what wave scheduling does to a queued request.
+    what wave scheduling does to a queued request. ``arrivals_s`` (S1 S-R1) replaces that closed
+    batch with an **open loop**: offsets in seconds from t₀ at which each request is *submitted*.
+    This is the client boundary, not a scheduling policy — an un-arrived request is simply not in
+    the queue yet, and FCFS admission below is untouched — and it makes ``RequestRecord.start_s``
+    the request's own arrival, so TTFT is queue-inclusive per request rather than per run.
+    ``sleep`` is the idle wait used when nothing is admissible (injectable for a fake clock).
 
     ``prefill_model`` (default: ``model``) runs the admission prefills. Pass the UNCOMPILED module
     here when ``model`` is ``torch.compile``d: at steady state admissions arrive in dribbles
@@ -204,7 +211,16 @@ def serve(
             torch.cuda.synchronize()
         return clock()
 
-    queue: deque[Request] = deque(requests)
+    arrival_of: dict[int, float] = dict.fromkeys(ids, 0.0)
+    if arrivals_s is not None:
+        if len(arrivals_s) != len(requests):
+            raise ValueError("arrivals_s must carry one offset per request")
+        if any(a < 0 for a in arrivals_s):
+            raise ValueError("arrivals_s offsets must be ≥ 0 (they are offsets from t₀)")
+        arrival_of = {r.request_id: float(a) for r, a in zip(requests, arrivals_s, strict=True)}
+    order = sorted(requests, key=lambda r: (arrival_of[r.request_id], r.request_id))
+    pending: deque[Request] = deque(order if arrivals_s is not None else ())
+    queue: deque[Request] = deque(() if arrivals_s is not None else requests)
     slot_req: list[Request | None] = [None] * n_slots
     slot_tokens: list[list[int]] = [[] for _ in range(n_slots)]
     slot_times: list[list[float]] = [[] for _ in range(n_slots)]
@@ -236,7 +252,7 @@ def serve(
                 token_ids=tuple(slot_tokens[slot]),
                 record=RequestRecord(
                     prompt_len=len(req.prompt_ids),
-                    start_s=t0,
+                    start_s=t0 + arrival_of[req.request_id],
                     token_times_s=tuple(slot_times[slot]),
                 ),
                 admitted_at_step=slot_admit_step[slot],
@@ -247,7 +263,16 @@ def serve(
         slot_times[slot] = []
         cache.free_slot(slot)
 
-    while queue or any(r is not None for r in slot_req):
+    while pending or queue or any(r is not None for r in slot_req):
+        # 0) open-loop arrivals (S-R1): submit whatever has arrived, then idle if nothing can run.
+        # `clock()`, not `now()` — an arrival is a client-side fact and must not buy a device sync
+        # per scheduler iteration.
+        while pending and clock() - t0 >= arrival_of[pending[0].request_id]:
+            queue.append(pending.popleft())
+        if pending and not queue and all(r is None for r in slot_req):
+            sleep(max(0.0, t0 + arrival_of[pending[0].request_id] - clock()))
+            continue
+
         # 1) evict rows that hit their budget — frees slots for THIS step's admission
         for b, req in enumerate(slot_req):
             if req is not None and len(slot_tokens[b]) >= req.max_new_tokens:
@@ -396,11 +421,14 @@ def serve_continuous(
     paged_n_blocks: int | None = None,
     paged_use_kernel: bool = False,
     prefill_chunk_size: int | None = None,
+    arrivals_s: Sequence[float] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> ServeResult:
     """Iteration-level (Orca) scheduling: freed slots are refilled every decode step.
 
     ``prefill_chunk_size`` (A1 R4.2) interleaves ⌈L/C⌉-token prefill chunks with decode steps so a
-    long prompt does not head-of-line-block the decode stream; ``None`` = one-shot admission."""
+    long prompt does not head-of-line-block the decode stream; ``None`` = one-shot admission.
+    ``arrivals_s`` (S1 S-R1) turns the closed request list into an open-loop arrival stream."""
     return serve(
         model,
         requests,
@@ -413,6 +441,8 @@ def serve_continuous(
         paged_n_blocks=paged_n_blocks,
         paged_use_kernel=paged_use_kernel,
         prefill_chunk_size=prefill_chunk_size,
+        arrivals_s=arrivals_s,
+        sleep=sleep,
     )
 
 

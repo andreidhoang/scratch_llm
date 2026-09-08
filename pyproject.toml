@@ -119,6 +119,7 @@ exclude = [
     "src/scratch_llm/kernels/gemm/triton/tiled.py",
     "src/scratch_llm/kernels/gemm/triton/gemv.py",
     "src/scratch_llm/kernels/norm/normalize.py",
+    "src/scratch_llm/kernels/moe/grouped_gemm_triton.py",
     "src/scratch_llm/kernels/reduce/softmax.py",
     "src/scratch_llm/kernels/reduce/topk.py",
     # CUDA C++ JIT loaders (mma.sync / smem-tiled via cpp_extension.load; wmma via load_inline)

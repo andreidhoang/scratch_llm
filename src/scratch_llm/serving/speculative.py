@@ -18,7 +18,7 @@ target while doing fewer target forwards, and where does its speedup come from (
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -113,8 +113,14 @@ def speculative_generate(
     max_new_tokens: int,
     device: str = "cpu",
     k: int = 4,
+    on_round: Callable[[int, int], None] | None = None,
 ) -> tuple[list[int], SpecStats]:
     """Greedy speculative decode — token-IDENTICAL to ``sampling.generate(temperature=0)``.
+
+    ``on_round(n_drafted, n_accepted)`` is called once per verification round, if given. It exists
+    so per-position acceptance can be measured without a second copy of the accept loop:
+    ``SpecStats`` carries only run totals, and an average over positions is exactly the summary
+    S1/S-R3 is built to show is insufficient (``serving/acceptance.PositionAcceptance``).
 
     Invariant (the ``pending`` token): at the top of every round ``pending`` is the next committed
     token whose K/V is NOT yet in the cache and which equals the target's greedy argmax (correct by
@@ -163,6 +169,8 @@ def speculative_generate(
             else:
                 break
         n_accepted += accepted
+        if on_round is not None:
+            on_round(len(drafts), accepted)
 
         generated.append(pending)
         generated.extend(drafts[:accepted])
