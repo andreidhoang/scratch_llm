@@ -788,6 +788,15 @@ def test_split_and_unsplit_agree_with_each_other() -> None:
     pages = table.pages_per_request()
     one, _ = a_r3_paged_decode(q, k, v, table, plan=PartitionPlan.from_chunk_size(pages, 4096))
     many, _ = a_r3_paged_decode(q, k, v, table, plan=PartitionPlan.from_chunk_size(pages, 8))
+
+    # Report the split's own contribution BEFORE the gate. spec.md:6 designates this test as the
+    # thing that supplies half of TOL_ABS's argument — the re-association error the split introduces,
+    # separated from the bf16 output quantum. Asserting first made that circular: `_require_tolerance()`
+    # is eager, so on the sealed run the test failed with "set TOL_ABS first" and measured nothing.
+    # The measuring device must not require its own answer.
+    err = (one.float() - many.float()).abs().max().item()
+    print(f"# split re-association: max|Δo| between chunk=4096 and chunk=8 = {err:.4e}")
+
     torch.testing.assert_close(one.float(), many.float(), rtol=2e-2, atol=_require_tolerance())
 
 

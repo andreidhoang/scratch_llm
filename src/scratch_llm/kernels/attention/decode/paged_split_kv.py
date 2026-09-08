@@ -1,6 +1,6 @@
 """K2/A-R3 — paged decode, split-KV: partial (m, l, o) per chunk + a log-sum-exp reduce.
 
-At B=64, ctx 8192, one query token, there is no arithmetic intensity: the kernel reads 512 MiB of
+At B=64, ctx 8192, one query token, there is no arithmetic intensity: the kernel reads 1 GiB of
 KV cache and writes 512 KiB of output. It is a streaming problem wearing an attention costume, and
 the exit is stated as a fraction of **measured HBM bandwidth** for exactly that reason. Two things
 decide whether the bandwidth is reachable at all:
@@ -109,7 +109,7 @@ MERGE_ELEMS_PER_THREAD = HEAD_DIM // MERGE_THREADS  # 4
 #: this buffer in f32 and then writes it as ``DTypeO`` (``scheduler.cuh:486`` vs
 #: ``csrc/batch_decode.cu:231``), which is a wart the map flags — this rung does not copy it.
 #: The cost is 4 B/elem on ``num_chunks * num_qo_heads * head_dim``, ~4 MiB at 4 chunks/request on
-#: the plan shape, against 512 MiB of KV read. Free.
+#: the plan shape, against 1 GiB of KV read. Free.
 PARTIAL_DTYPE = torch.float32
 
 #: Hopper per-SM occupancy ceilings, CUDA C Programming Guide "Compute Capabilities" table.

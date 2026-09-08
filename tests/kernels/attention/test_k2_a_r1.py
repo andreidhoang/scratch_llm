@@ -87,7 +87,12 @@ TOL_BWD: float | None = None
 
 def _hole_is_open() -> bool:
     """True while the rescale core still carries the sentinel (same rule as tests/conftest.py)."""
-    return 'NotImplementedError("HUY:' in (_REPO / SOURCE).read_text(encoding="utf-8")
+    # Regex across whitespace, not a fixed substring: `ruff format` wraps a long
+    # `raise NotImplementedError("HUY: ...")` onto two lines, which deletes that substring and makes
+    # an unwritten kernel report as CLOSED — the one failure this convention exists to prevent.
+    # Same rule as tests/conftest.py::hole_is_open.
+    text = (_REPO / SOURCE).read_text(encoding="utf-8")
+    return re.search(r'NotImplementedError\(\s*(?:#[^\n]*\n\s*)?"HUY:', text) is not None
 
 
 def _tuned_source() -> str:

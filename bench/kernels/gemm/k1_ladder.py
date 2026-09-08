@@ -258,7 +258,29 @@ def main() -> int:
         return flops / (med * 1e-3) / 1e12, med, spread_pct(med, lo, hi)
 
     floor_key = args.floor or RUNGS[args.rung].floor
+    # The derived SoL, read back rather than timed. `make floor L=K1 R=B-R6 M=nvfp4_sol_tflops`
+    # records Huy's derivation; this finds it. Without this read the `--floor sol` branch below
+    # returned before the rung was ever measured, so B-R6 could not produce its number at all —
+    # its own message promised "re-run with --rung B-R6, which reads it back from the ledger",
+    # and nothing did.
+    sol_tf: float | None = None
     if floor_key == "sol":
+        import json as _json
+
+        # workspace_root(), not _REPO_ROOT.parent: scratch_llm is a SYMLINK inside the workspace,
+        # so `.resolve()` lands on the link target's parent and the ledger is not there.
+        from scratch_llm._workspace import workspace_root  # noqa: PLC0415
+
+        _led = workspace_root() / "ledger" / "ledger.jsonl"
+        try:
+            for _ln in _led.read_text().splitlines():
+                _r = _json.loads(_ln)
+                if _r.get("kind") == "measure" and _r.get("metric") == "nvfp4_sol_tflops":
+                    sol_tf = float(_r["value"])  # last one wins: the most recent derivation
+        except (OSError, ValueError, KeyError):
+            sol_tf = None
+
+    if floor_key == "sol" and (args.rung is None or sol_tf is None):
         # Speed of light is not a library call. There is no production NVFP4 GEMM to time at
         # matched dtype, so B-R6's floor is the arch's own tensor-core roof for e2m1 — a number
         # DERIVED from the device table (the dense bf16 rate and the format's throughput ratio),
@@ -273,11 +295,24 @@ def main() -> int:
             f'#   record it:  make floor L=K1 R=B-R6 M=nvfp4_sol_tflops V=<your derivation> DEV="{torch.cuda.get_device_name()}"'
         )
         print("#   then re-run with --rung B-R6, which reads it back from the ledger.")
+        if args.rung is not None:
+            print(
+                "# REFUSED — --rung B-R6 needs that ledger row and there is none. Record the "
+                "derivation first; this harness will not invent a roof."
+            )
+            return 3
         return 0
-    floor_tf, floor_ms, floor_spread = _tflops(lambda a=a, b=b: torch.matmul(a, b))
-    print(
-        f"# floor {floor_key:<9} {floor_tf:7.1f} TF/s  ({floor_ms:8.3f} ms · IQR {floor_spread:4.1f}%)  {FLOORS[floor_key]}"
-    )
+    if sol_tf is not None:
+        # Derived, never timed: no ms and no IQR exist for a roof nobody ran.
+        floor_tf, floor_ms, floor_spread = sol_tf, float("nan"), 0.0
+        print(
+            f"# floor {floor_key:<9} {floor_tf:7.1f} TF/s  (DERIVED from the device table, not timed)"
+        )
+    else:
+        floor_tf, floor_ms, floor_spread = _tflops(lambda a=a, b=b: torch.matmul(a, b))
+        print(
+            f"# floor {floor_key:<9} {floor_tf:7.1f} TF/s  ({floor_ms:8.3f} ms · IQR {floor_spread:4.1f}%)  {FLOORS[floor_key]}"
+        )
 
     row: dict[str, object] = {
         "ladder": "K1",

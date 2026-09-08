@@ -327,7 +327,14 @@ def main() -> int:
     ap.add_argument("--rung", choices=sorted(RUNGS) or None, help="which K2 rung to measure")
     ap.add_argument("--floor", choices=sorted(FLOORS), help="measure a floor instead of a rung")
     ap.add_argument("--shape", choices=sorted(SHAPES), default="s4096")
-    ap.add_argument("--dtype", default="bf16", choices=["bf16", "fp16"])
+    ap.add_argument(
+        "--dtype",
+        default="bf16",
+        choices=["bf16"],
+        help="bf16 only. Every K2 floor — SDPA-FLASH, FA3, FlashInfer — is measured at bf16, "
+        "and every tensor this harness allocates is bf16. fp16 was accepted, stamped into the "
+        "provenance line and the JSON row, and silently ignored.",
+    )
     ap.add_argument("--backward", action="store_true", help="measure the backward pass (A-R1 only)")
     ap.add_argument("--warmup", type=int, default=20, help="workspace invariant 4: >= 20")
     ap.add_argument("--iters", type=int, default=50, help="workspace invariant 4: >= 50")
@@ -560,7 +567,7 @@ def main() -> int:
 
     # =========================================================================================
     # Decode: A-R3 and the flashinfer floor. The metric is % of measured HBM, because at one query
-    # token there is no arithmetic intensity — 512 MiB of KV read against 512 KiB written.
+    # token there is no arithmetic intensity — 1 GiB of KV read against 512 KiB written.
     # =========================================================================================
     else:
         q, k_cache, v_cache, table = _alloc_decode(sh, args.seed)

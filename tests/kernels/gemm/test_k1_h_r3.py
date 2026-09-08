@@ -24,11 +24,11 @@ import os
 import re
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 import torch
 
+from scratch_llm._workspace import workspace_root
 from scratch_llm.kernels.common.hopper_contracts import (
     ARCH,
     SwizzleMode,
@@ -69,7 +69,11 @@ from scratch_llm.kernels.gemm.cuda.h_r3 import (
     tma_tensor_map,
 )
 
-_WORKSPACE = Path(__file__).resolve().parents[3].parent  # scratch_llm/tests/kernels/gemm -> ladders
+# workspace_root(), not a `parents[]` walk: scratch_llm is a SYMLINK inside the workspace, so
+# `.resolve()` lands on the link target's parent and every path built from it points OUTSIDE the
+# workspace. The drydock assertions below then find no artifacts, skip, and report green while
+# checking nothing — which is exactly what they were doing: 4 skipped, 0 run.
+_WORKSPACE = workspace_root()
 _DRYDOCK = _WORKSPACE / "experiments" / "K1" / "H-R3" / "drydock"
 #: infra/drydock.sh names its artifacts per SOURCE, not per rung — a rung may own several .cu
 #: and per-rung names let the last one compiled overwrite the evidence for all the others.

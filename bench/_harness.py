@@ -49,7 +49,13 @@ def bench_ms(fn, *, warmup: int = 20, rep: int = 50) -> tuple[float, float, floa
 
 
 def spread_pct(med: float, lo: float, hi: float) -> float:
-    """(p80 − p20) / median, in percent — the row's measurement noise. >5% ⇒ distrust (unstable clocks)."""
+    """(p80 − p20) / median, in percent — the row's measurement noise. >5% ⇒ distrust (unstable clocks).
+
+    Printed as "IQR" by the ladders, which is a misnomer worth knowing: a true interquartile range is
+    p75 − p25, and `bench/iqr_probe.py` reports that one. This band is WIDER, so a row that passes the
+    >5% rule here would pass it on the true IQR too — the gate errs strict, not loose. Do not compare
+    a number from this against one from iqr_probe and conclude anything about stability.
+    """
     return 100.0 * (hi - lo) / med
 
 

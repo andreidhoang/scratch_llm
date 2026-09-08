@@ -83,7 +83,12 @@ TMA_LEGAL = [name for name, mnk in SHAPES.items() if not tma_alignment_violation
 
 def _hole_is_open() -> bool:
     """True while the kernel body still carries the hole sentinel (same rule as tests/conftest.py)."""
-    return 'NotImplementedError("HUY:' in (_REPO / SOURCE).read_text(encoding="utf-8")
+    # Regex across whitespace, not a fixed substring: `ruff format` wraps a long
+    # `raise NotImplementedError("HUY: ...")` onto two lines, which deletes that substring and makes
+    # an unwritten kernel report as CLOSED — the one failure this convention exists to prevent.
+    # Same rule as tests/conftest.py::hole_is_open.
+    text = (_REPO / SOURCE).read_text(encoding="utf-8")
+    return re.search(r'NotImplementedError\(\s*(?:#[^\n]*\n\s*)?"HUY:', text) is not None
 
 
 def _dsl_installed() -> bool:
