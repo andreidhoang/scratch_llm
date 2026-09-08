@@ -283,6 +283,7 @@ def train(
     val_data: np.ndarray | None = None,
     eval_hook: Callable[[int, float], None] | None = None,
     optimizer_out: list[torch.optim.Optimizer | CombinedOptimizer] | None = None,
+    batch_fn: Callable[[int], tuple[Tensor, Tensor]] | None = None,
 ) -> list[tuple[int, float]]:
     """Run the training loop. Returns the loss history as (step, loss) pairs.
 
@@ -291,6 +292,13 @@ def train(
     ``eval_every`` steps and at the final step (the iso-FLOP endpoint); ``optimizer_out``, if a
     list, receives the built optimizer so callers can read instruments (Muon NS counters) after
     the run — the loop's return type stays unchanged.
+
+    ``batch_fn`` (T1 A/B seam, optional): when given, it OWNS the data stream — ``batch_fn(step)``
+    replaces ``get_batch`` and with it the global-numpy draw, so the batch order becomes a function
+    of the caller's seed alone and cannot be shifted by anything else an arm consumes randomness
+    for (see ``scratch_llm.training.run_matrix.batch_schedule``). It also owns per-rank sharding:
+    the ``cfg.seed + 1000*rank`` offset below no longer reaches the data. ``None`` is byte-identical
+    to the pre-seam behaviour.
 
     Same plumbing an RL fine-tune warm-starts from: cosine LR per step, global-ℓ₂ grad clip,
     periodic checkpointing (state snapshots only — a reload starts again at step 0 with a
@@ -392,7 +400,11 @@ def train(
         for group in optimizer.param_groups:
             group["lr"] = lr
 
-        inputs, targets = get_batch(train_data, cfg.batch_size, cfg.context_length, cfg.device)
+        inputs, targets = (
+            batch_fn(step)
+            if batch_fn is not None
+            else get_batch(train_data, cfg.batch_size, cfg.context_length, cfg.device)
+        )
         optimizer.zero_grad()
         amp_ctx = (
             torch.autocast(device_type=device_type, dtype=amp_dtype)
