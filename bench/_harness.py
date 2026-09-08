@@ -18,17 +18,69 @@ import torch
 import triton
 
 
-def bench_ms(fn, *, warmup: int = 50, rep: int = 200) -> tuple[float, float, float]:
-    """Median, p20, p80 milliseconds. do_bench times with CUDA events and flushes the L2 between
-    reps, so this is cold-L2 steady state — not a cache-resident fantasy. Report the median (typical),
-    flag the p20–p80 spread (measurement trust); never the mean (interrupt-contaminated)."""
-    med, lo, hi = triton.testing.do_bench(fn, warmup=warmup, rep=rep, quantiles=[0.5, 0.2, 0.8])
+def bench_ms(fn, *, warmup: int = 20, rep: int = 50) -> tuple[float, float, float]:
+    """Median, p20, p80 milliseconds over at least ``rep`` timed calls after ``warmup`` warm-ups.
+
+    ``warmup`` and ``rep`` are ITERATION COUNTS here. ``triton.testing.do_bench``'s same-named
+    parameters are TIME BUDGETS IN MILLISECONDS — it divides each budget by an estimate of the
+    per-call cost to get its counts. Passing 50 straight through therefore asks for 50 ms of
+    measurement, which on a 2 ms GEMM is twenty-five reps and on an 8 ms attention kernel is six.
+    Workspace invariant 4 requires >= 20 warm-ups and >= 50 iterations, so every number this harness
+    produced under the old call was quietly sampled below the standard it claimed. The counts are
+    what the invariant is about — a median over six reps has an IQR that means nothing — so this
+    converts: estimate the per-call cost once, then ask do_bench for count x estimate milliseconds.
+
+    do_bench still does the timing, because its methodology is the part worth keeping: CUDA events
+    (not the host clock) and an L2 flush between reps, so this is cold-L2 steady state rather than a
+    cache-resident fantasy. Report the median (typical) and flag the p20-p80 spread (measurement
+    trust); never the mean, which one interrupt contaminates.
+    """
+    # A short timed burst to size the budgets. do_bench makes its own estimate internally from 5
+    # calls; this one only has to be the right order of magnitude for the counts to land.
+    est_ms = float(triton.testing.do_bench(fn, warmup=1, rep=1, return_mode="median"))
+    est_ms = max(est_ms, 1e-4)  # a sub-100ns kernel would otherwise ask for a zero budget
+    med, lo, hi = triton.testing.do_bench(
+        fn,
+        warmup=max(1.0, warmup * est_ms),
+        rep=max(1.0, rep * est_ms),
+        quantiles=[0.5, 0.2, 0.8],
+    )
     return float(med), float(lo), float(hi)
 
 
 def spread_pct(med: float, lo: float, hi: float) -> float:
     """(p80 − p20) / median, in percent — the row's measurement noise. >5% ⇒ distrust (unstable clocks)."""
     return 100.0 * (hi - lo) / med
+
+
+def wallclock_ms(fn, *, warmup: int = 20, iters: int = 50) -> tuple[float, float, float]:
+    """Median, p20, p80 milliseconds of a whole-engine call, timed on the host clock.
+
+    :func:`bench_ms` is the kernel methodology: CUDA events, an L2 flush between reps, microseconds.
+    A serving step is none of those things — it is hundreds of kernels behind a Python loop, its
+    working set is the entire model (there is no L2 to flush; the weights evict it themselves), and
+    the host-side scheduling a CUDA-event window hides is part of what a client waits for. So it is
+    timed end to end, with the device synchronized inside the window. Same reporting contract as
+    :func:`bench_ms` — median, p20, p80 — so :func:`spread_pct` reads either one."""
+    import statistics
+    import time
+
+    def _one() -> float:
+        t0 = time.perf_counter()
+        fn()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        return (time.perf_counter() - t0) * 1e3
+
+    for _ in range(warmup):
+        _one()
+    xs = sorted(_one() for _ in range(iters))
+    last = len(xs) - 1
+    return (
+        statistics.median(xs),
+        xs[min(last, int(0.2 * len(xs)))],
+        xs[min(last, int(0.8 * len(xs)))],
+    )
 
 
 def smi(fields: str) -> list[float]:
