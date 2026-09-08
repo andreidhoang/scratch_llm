@@ -32,8 +32,9 @@ Both facts belong in the rung's write-up; neither is inferable from the number.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import cast
 
 import torch
 from torch import nn
@@ -205,7 +206,14 @@ class QualityArm:
         return [_Item(question=r["question"], gold=gsm8k_gold(r["answer"])) for r in rows]
 
 
-def _load_dataset(name: str, config: str | None, split: str):
+def _load_dataset(name: str, config: str | None, split: str) -> Iterable[Mapping[str, str]]:
+    """The rows, narrowed to what this module reads: named string fields, nothing else.
+
+    `datasets` is an optional-at-import dependency here (it is installed on the box, not on
+    the laptop), so the concrete Dataset type is not resolvable during static checking. The
+    cast states the contract the two call sites actually rely on rather than leaving the row
+    type unknown — which is what made pyright read `row["text"]` as a slice.
+    """
     try:
         from datasets import load_dataset
     except ImportError as exc:  # pragma: no cover - exercised on the box, not the laptop
@@ -213,7 +221,7 @@ def _load_dataset(name: str, config: str | None, split: str):
             "the `datasets` package is required for S-R2's quality gate (declared in "
             "scratch_llm/pyproject.toml). infra/bootstrap.sh installs it on the box."
         ) from exc
-    return load_dataset(name, config, split=split)
+    return cast(Iterable[Mapping[str, str]], load_dataset(name, config, split=split))
 
 
 def build_quality_arms(
