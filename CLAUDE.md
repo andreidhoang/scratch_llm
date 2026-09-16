@@ -68,7 +68,7 @@ wrapper's successful exit or a raw speedup into a validated quality/performance 
 ## Historical references and remote context
 
 `PLAN.md`, `MASTERY_LEDGER.md`, `docs/KERNEL_MASTERY_SPEC.md`, `docs/k3/*`,
-`docs/assignment_guides/*`, `performance/*.md`, `deploy/runbooks/*` and
+`performance/*.md`, `deploy/runbooks/*` and
 `docs/CONTEXT_ENGINEERING.md` stay historical. `AGENTS.md`, this file, nested kernel instructions,
 README files and live `.claude/agents|commands` route current work to v5. Old FOP numbers,
 execution-mode switches, deadlines and automatic push rules do not override the workspace.

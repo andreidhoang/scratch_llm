@@ -72,7 +72,8 @@ The statuses below are the earlier course inventory, not completed v5 mastery or
 | **A4** Data | filter → quality-classify → exact + MinHash/LSH dedup | `data/` | ✅ |
 | **A5** Alignment | SFT · Expert Iteration · GRPO/Dr.GRPO · DPO | `algos/`, `rewards/`, `envs/` | ✅ (graded GPU runs rental-gated) |
 
-See [`docs/assignment_guides/`](docs/assignment_guides/) for the per-assignment guides — every
+The per-assignment build guides were retired on 2026-09-16 (`git log -- docs/assignment_guides` recovers them);
+`../ladders/CURRICULUM.md` is the current map from role line to mechanism to module. Every
 deliverable tagged **LOAD-BEARING / COURSE-ROTE / SKIP** and mapped to a source file. These guides
 and [`PLAN.md`](PLAN.md) are historical. **Current priorities and gates are the
 [workspace v5 plan](../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md); the active pointer is
