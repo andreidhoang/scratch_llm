@@ -81,3 +81,11 @@ _to_delete/
 # verdicts. Untracked 2026-08-31: this repo is public, and the derived verdicts (not the
 # source prose) are the work product. Keep a local copy if you want to re-verify.
 artifacts/k3_book_crossread/
+
+# ---- noise guard (2026-09-14): enforced by scripts/noise_guard.sh via git hooks ----
+# Study shelves, books and rendered page images are reference material, never source.
+# These repos are PUBLIC and git keeps blobs after deletion, so this is a one-way door.
+mastery/
+*.epub
+*.mobi
+tmp/

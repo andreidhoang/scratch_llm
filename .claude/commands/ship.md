@@ -1,15 +1,15 @@
 ---
-description: Pre-commit gate — review the diff via ship-reviewer + green-CI, then hand me the commit command
+description: Review the current diff against the active v5 contract and required checks; report readiness and prepare a commit message.
 argument-hint: "(optional) short note on what this change is"
 ---
 Ship review for the current change. $ARGUMENTS
 
-1. Show me the diff — run `git diff` and `git diff --staged` (read-only).
-2. Route the diff to the **ship-reviewer** subagent: correctness + design/scope against the
-   layer target (the `CLAUDE.md` layer→file map and the relevant `docs/assignment_guides/*`).
-3. If **ACCEPT**: run the green-CI checks (`ruff check src tests`, `ruff format --check src tests`,
-   `pyright`, `pytest -m "not gpu"`) and report results. Then commit per `.claude/execution-mode`
-   (ADR-0013): in `delegate` mode (current) run `git commit` (message `<area>: <imperative>`) and
-   `git push` yourself — the green-ci-gate hook re-checks on commit; in `learn` mode present the
-   `git commit` command for the human to run — do NOT run it yourself.
-4. If **REJECT**: list the ordered fixes and stop. Do not proceed to commit.
+1. Read repository AGENTS.md/CLAUDE.md and the active ladders v5 contract. Inspect git diff and
+   git diff --staged.
+2. Route to ship-reviewer for correctness, evidence and requested scope.
+3. Run the checks appropriate to the change, using CLAUDE.md's actual CI commands and the active
+   rung's runtime gates. Distinguish executed checks, skips and unmet requirements. Existing
+   hooks have missing-tool and marker-scope limitations; their presence is not a test result.
+4. Report ACCEPT or the concrete fix list, and prepare a commit message. Commit/push only when
+   authorized by the current task; this review command and an old execution-mode label do not
+   automatically grant publication authority. Respect ownership when implementing any fixes.

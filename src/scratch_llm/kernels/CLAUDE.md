@@ -92,60 +92,35 @@ has (a) an oracle-first correctness test, (b) a measured roofline line in
 
 ---
 
-> **MODE SWITCH ([ADR-0013](../../../docs/adr/ADR-0013-execution-mode-full-delegation.md)).** This
-> file describes the **`learn`-mode** contract. When `.claude/execution-mode` is **`delegate`**,
-> agents implement kernel bodies end-to-end; what survives is oracle-first tests written by an
-> independent context (bench-writer), the adversarial kernel-ship-reviewer gate, and the
-> profile-DoD. The sections below apply as written only in `learn` mode; in `delegate` mode read
-> them as the *study syllabus* for the post-hoc mastery pass.
->
-> **Current mode: `learn`** (root `CLAUDE.md`; `.claude/execution-mode` verified 30/08). The line
-> here previously read "`delegate` (current since 2026-07-03)", which contradicted the root
-> constitution — corrected 30/08. Read the file, never this sentence, if they disagree again.
+## Active ownership and measurement policy — v5
 
-> **Why this file exists.** In the CUDA-for-Deep-Learning kernel sprint, **you reconstruct the kernel
-> from blank; agents do everything *around* it.** This isn't a preference: copying a kernel — from the
-> book OR from an agent — builds nothing (the "illusion of fluency"), and the live interview rounds are
-> AI-free. Guardrailed AI (hints, not answers) is the only kind that doesn't atrophy the skill you're
-> here to build (PNAS 2025; Lancet endoscopist study 2025).
+The authority is `../ladders/CLAUDE.md` and `../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md`
+(paths from the repository root), followed by root `AGENTS.md` and `CLAUDE.md`.
+The old ADR-0013 mode switch is historical. Neither `.claude/execution-mode` nor
+`.claude/hooks/kernel-write-guard.sh` exists in the reviewed checkout. No write guard enforces
+ownership; the existing lint/CI hooks have a different purpose.
 
-## The meat — HUMAN-only in `learn` mode. (In `delegate` mode: agent-built, reviewer-gated.)
+Huy writes the first core kernel, loss math and memory model, derives the tolerance and makes the
+prediction. Agents may build scaffolds, independent references, tests, benchmark adapters and maps.
+They may review profiles and propose mechanisms; Huy owns the diagnosis, and agents implement a
+selected fix after he names it. The stricter `src/scratch_llm/k3/core/` boundary is unaffected.
 
-- The `@triton.jit` kernel bodies and the rung implementations: `matmul_tiled`, the FlashAttention
-  reconstruct, reductions, the GDN / NVFP4 decode kernel — anything that is the *learning rep*.
-- The from-blank RL-math derivations (R5).
+A kernel experiment starts with its active rung contract: supported shapes/strides, dtype and
+accumulation behavior, numerical oracle, baseline, performance hypothesis and stop rule. Write tests
+against the intended semantics, not a copied implementation. Tests collected or skipped on CPU
+do not demonstrate that an empty or wrong kernel fails on GPU.
 
-You write these in **your own editor**. If asked to implement one, Claude refuses and switches to
-tutor mode ("write it yourself first; describe what you tried"). A hard hook
-(`.claude/hooks/kernel-write-guard.sh`) blocks Edit/Write to kernel files as a backstop.
+Measure a matched baseline on the target GPU and record the actual runner protocol. Profiling helps
+explain a bottleneck; low arithmetic intensity alone does not exclude launch, synchronization,
+dependency or occupancy limits. State a cache policy and distinguish p20–p80 spread from IQR.
+The legacy shared harness is reusable infrastructure, not automatic compliance with v5.
 
-## What agents DO (everything around the meat)
+Record results and raw artifacts in the ladders campaign, with local `bench/RESULTS.md` links
+where useful. A correct but slower kernel or a falsified optimization hypothesis is an interpretable
+result; it does not earn an unmet speed target. A source's promotion into `kernels/` or `csrc/`
+does not certify its runtime correctness, architecture coverage or production suitability.
 
-- **Scaffold** the failing test + the benchmark *before* you implement — `bench-writer` (so you have a
-  target + a DoD).
-- **Profile & diagnose** — run the bench / `ncu`, read the roofline, hand you "bound by X, fix = Y" —
-  `roofline-analyst`. Never the fixed kernel.
-- **Review** the kernel *after* you wrote it — correctness, numerics, "is the speedup real?" —
-  `kernel-ship-reviewer`.
-- **Teach** the concept Socratically, citing the book — `kernel-tutor`. Will not paste code.
-- Write docs / the `bench.py` harness / tests / non-kernel modules.
-
-## The loop — every kernel day (`/kernel-day`)
-
-1. **Predict** the % of cuBLAS/SDPA before any code (the rep starts here).
-2. **Reconstruct** the kernel from blank — *you*, in your editor.
-3. **Profile** — `/profile`; the DoD is the roofline line, **not** a green test.
-4. **Break it** — remove tiling/coalescing, watch it degrade.
-5. **Review** — `/kreview`; then **Variant** — re-implement from the algorithm.
-
-## The switch (learning → shipping)
-
-Learning mode (this sprint): agents advise, you implement. Once you can **predict a kernel's roofline
-before running it**, you've earned shipping mode — then leverage agents fully per your Agentic
-Engineering Playbook: *rent the model, engineer the loop, own the verification.*
-
-## Reliance drill (weekly)
-
-One session/week, work read-only (`claude --permission-mode plan`): read the profiler output and form
-**your own** bottleneck hypothesis *before* asking `roofline-analyst`. That's the off-AI check that
-catches quiet skill erosion.
+For a mastery rep: derive → predict → implement → test → profile → explain the failed prediction →
+make one controlled variant. A cold defence and an independent reproduction strengthen the evidence.
+No claim about Anthropic's private interview format or automatic transition to unrestricted
+delegation follows from completing the drill.

@@ -1,41 +1,81 @@
-# scratch_llm
+# scratch_llm — GPU and numerical substrate
 
-Substrate for ladders **K1 GEMM · K2 attention · K3 KDA/GDN · S1 serving · T1 training** of the sixty-day plan at
-`~/Desktop/ladders` (its `CLAUDE.md` governs every session; this file is repo facts only).
-Rewritten 2026-09-03 from a 21 KB constitution; the old text is in `git log`. Nothing binding was lost — the invariants
-(predict → measure → mechanism; floors at matched dtype; correctness before perf; one variable) now live in the workspace.
+Repository context reviewed 2026-09-14. The active plan is
+`../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md` **v5**; `../ladders/CLAUDE.md` governs campaign work.
+Read those and `AGENTS.md` before selecting a unit. One spine: KDA (Kimi Linear / K3 linear
+attention) from the equation to upstream PRs (A1), a Kimi-Linear-class miniature trained on the
+existing spine with one honest ablation (A2), then the trusted grader and RL pilot (A3).
+K1/K2/S1/T1 material is archive (plan §7), not execution order.
 
 ## What lives here
-| path | what | ladder |
+
+| Path | Substrate and evidence boundary | Ladder (v5: K3 live · K1/K2/S1/T1/L0 archive, plan §7) |
 |---|---|---|
-| `src/scratch_llm/kernels/gemm/cuda/mma_sync.cu` (+ `smem_tiled.cu`) | CUDA GEMM ladder — 81.9% of cuBLAS on sm120, element-exact | K1 start |
-| `csrc/wgmma_sm90.cu · tcgen05_sm100.cu · fa3_hopper.cu` | Hopper/Blackwell kernels, **never executed** (compile-only); 3 stubs beside them | L0 → K1/K2 |
-| `src/scratch_llm/kernels/attention/prefill/fa2.py` | FA2 in Triton — 50% of SDPA on sm120, backward smem overflow | K2 A-R1 |
-| `src/scratch_llm/kernels/`, `bench/kernels/` | norms, reduce, roofline benches | K1/K2 |
-| `src/scratch_llm/serving/` + `bench/{continuous,cudagraph_decode,speculative,kv_memory}.py` | continuous batching, paged KV, CUDA-graph decode, spec decode | S1 |
-| `src/scratch_llm/train.py`, `utils/` (monitors), `data/`, `scaling/` | FSDP/ZeRO substrate, entropy/KL monitors, shards, IsoFLOP fits | T1 |
-| `src/scratch_llm/linear_attn.py`, `mastery/{reference,paths,divergence}.py`, `experiments/e001_gate_sweep.py`, `tests/test_e001_regression.py` | GDN reference (explicit-matrix) + oracle (rank-1 apply) + chunked-WY divergence harness | K3 |
-| `bench/RESULTS.md`, `src/scratch_llm/bench/{gpu_specs,harness,roofline}.py` | ledger of measured `[FACT]` rows; measurement apparatus | all |
+| `src/scratch_llm/kernels/gemm/cuda/` | CUDA GEMM learning path; historical sm120 results require matched-baseline audit before reuse | K1 |
+| `csrc/gemm/`, `csrc/attention/`, `csrc/persistent/` | Hopper/Blackwell sources; compile-only reports and remaining stubs do not prove runtime correctness | L0/K1/K2 |
+| `src/scratch_llm/kernels/attention/prefill/fa2.py` | Triton FA2; historical sm120 forward and backward limitations are recorded in `bench/RESULTS.md` | K2 |
+| `src/scratch_llm/kernels/`, `bench/kernels/` | Norms, reductions, dispatch and kernel benchmarks | K1/K2 |
+| `src/scratch_llm/serving/`, `bench/` | Serving/cache/graphs/speculation substrate; S1 is killed under v5 — the serving evidence is A1c, the vLLM memory-profiling PR | S1 · archive |
+| `src/scratch_llm/train.py`, `src/scratch_llm/training/`, `src/scratch_llm/utils/`, `src/scratch_llm/data/`, `src/scratch_llm/scaling/` | Training, monitoring, data and scaling-study substrate; fixtures are distinct from real distributed runs | T1 |
+| `src/scratch_llm/linear_attn.py`, `src/scratch_llm/mastery/`, `experiments/e001_gate_sweep.py`, `tests/test_e001_regression.py` | GDN reference, independent paths and divergence studies | L0/K3 |
+| `src/scratch_llm/k3/` | **The v5 spine.** `config.py` + `param_count.py` are done and exact; `core/` is Huy's hand-written lane (agents read-only; templates there are deleted before the v0, not filled); `tests/test_kda_parity_fla.py` is A1a's instrument (FLA naive loaded by path from `../ladders/oss/fla`, needs `einops` in the venv) | K3 · A1/A2 |
+| `bench/RESULTS.md`, `src/scratch_llm/bench/` | Historical result index and measurement utilities; retain raw provenance | All |
 
-## Commands
+The active unit under v5 is `K3/kda-v0` (E001's sweep is its step 3; E001's oracle passed
+`--self-test` on this Mac on 2026-09-14). The campaign ledger has no measurements; this does not
+erase earlier work in this repository. R1/R-R5 remains a planning contract, not an implemented
+kernel-RL system. Audit the actual measured code, inputs,
+baseline and raw artifacts before reusing local historical percentages. The `134.3% of
+cuBLAS-proxy` result has a known baseline debt and is not evidence of beating matched cuBLAS.
+
+## Verification commands and actual hooks
+
+```bash
+uv pip install -e ".[dev,scaling]"   # CI also installs CPU torch separately
+ruff check src tests bench/kernels experiments/plot_e001.py
+ruff format --check src tests bench/kernels experiments/plot_e001.py
+pyright
+pytest -m "not gpu and not slow and not hole and not drydock" --cov=scratch_llm
 ```
-uv venv && source .venv/bin/activate && uv pip install -e ".[dev]"     # CPU
-uv pip install -e ".[gpu]"                                               # on a GPU box (torch/transformers)
-ruff check src tests && ruff format --check src tests && pyright         # the commit gate (hook runs it)
-pytest -m "not gpu"                                                      # CPU suite; mirrors CI
-python -m experiments.e001_gate_sweep --self-test | --smoke | --run      # K3 numerics
-PYTHONPATH=src python -m scratch_llm.bench.gpu_specs                     # measured device table
-```
-Measurements go through `~/Desktop/ladders/infra/bench.sh` (clock lock, ncu, provenance, prediction gate), then a
-`[FACT]` row in `bench/RESULTS.md` with torch · sm · seed · commit.
 
-## Conventions
-- Correctness before perf: oracle + stated tolerance in a test before a benchmark runs. Numbers without a floor at matched dtype/shape do not enter `RESULTS.md`.
-- The first version of a rung's kernel core is Huy's; agents write harness, oracle adapters, tests, maps, and fixes after he names the diagnosis (workspace rule 4). No write-guard hooks enforce this — say it instead.
-- Known ledger debts to clear in K1/K2: the "134.3% of cuBLAS-proxy" row (`RESULTS.md:531`, mis-baselined) and the FA2 50%/backward rows.
-- Hooks: `lint-on-edit` (ruff on save), `green-ci-gate` (lint+types on commit, +tests on push). Nothing blocks writes.
+These are the observed main CI commands, not a claim they were rerun by this documentation edit.
+Use the pinned GPU environment from the active rung for silicon work. The broader local test
+sets, GPU tests and drydock have distinct prerequisites.
 
-## Frozen — history, not law (read-only until 2026-11-02)
-`PLAN.md` · `MASTERY_LEDGER.md` · `AGENTS.md` · `docs/KERNEL_MASTERY_SPEC.md` · `docs/k3/*` · `docs/assignment_guides/*` ·
-`performance/*.md` · `deploy/runbooks/*` · `docs/CONTEXT_ENGINEERING.md`. Predictions live in the workspace ledger and in
-`tests/test_e001_regression.py::PREDICTED`, not in Markdown. If any frozen file contradicts the workspace plan, the workspace wins.
+Inspected 2026-09-12: `.claude/settings.json` registers `session-start`, `lint-on-edit` and
+`green-ci-gate`. `.git/hooks/pre-commit` and `pre-push` point to `green-ci-gate.sh`, with
+`core.hooksPath=.git/hooks`. The edit hook lints/formats Python; the CI hook attempts lint/types
+on commits and adds `pytest -m "not gpu and not slow"` on pushes. It skips tools that are absent;
+its test markers are not identical to CI's exclusion of `hole` and `drydock`. These are actual
+mechanisms with limitations, not proof that every command path or missing dependency is gated.
+No `oracle-guard.sh`, `kernel-write-guard.sh` or `.claude/execution-mode` exists here. No hook,
+setting, symlink or implementation was changed by this context alignment.
+
+## Ownership and measurement
+
+Huy owns the first kernel core / loss math / memory model, derivations, predictions, tolerance
+design and causal diagnosis. Agents write harnesses, independent references, adapters, tests,
+maps and reproductions, and fixes after Huy names the diagnosis. `src/scratch_llm/k3/core/`
+retains the stricter read-only agent boundary in `src/scratch_llm/k3/HANDCRAFTED.md`; `AGENTS.md` explains it.
+
+Campaign measurements use `../ladders/infra/bench.sh` and the active rung's result/ledger path.
+The wrapper attempts clocks, profiling and provenance; runners must implement the declared
+correctness, cache, warm-up, timing and sample protocol. The wrapper's commit-path/provenance
+defect was fixed on 2026-09-14 (commit + dirty flag recorded for ladders, scratch_llm and
+reasoningLLM); T-R2 is killed under v5, so its unevaluated quality gate is moot. Do not turn a
+wrapper's successful exit or a raw speedup into a validated quality/performance claim.
+
+## Historical references and remote context
+
+`PLAN.md`, `MASTERY_LEDGER.md`, `docs/KERNEL_MASTERY_SPEC.md`, `docs/k3/*`,
+`docs/assignment_guides/*`, `performance/*.md`, `deploy/runbooks/*` and
+`docs/CONTEXT_ENGINEERING.md` stay historical. `AGENTS.md`, this file, nested kernel instructions,
+README files and live `.claude/agents|commands` route current work to v5. Old FOP numbers,
+execution-mode switches, deadlines and automatic push rules do not override the workspace.
+
+`deploy/`, `docs/VASTAI_BOOTSTRAP.md` and `scripts/bootstrap-pod.sh` are legacy helpers/references:
+they still point to archived PLAN context and the scripts do not provide the ladders plan/checkouts.
+Their blanket container-profiling claims must be replaced by an actual counter-permission probe
+on the chosen host, and their historical dependency recipes do not replace active rung pins.
+Stage the workspace context and active experiment before use. This documentation edit leaves
+those deployment scripts and historical runbooks unchanged.

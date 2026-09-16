@@ -29,7 +29,7 @@ A :class:`CheckpointCard` carries three things:
 numbers: same protocol, same architecture, monotone tokens, byte-identical vibe re-run) and
 threshold checks against a :class:`D20Target`. **The thresholds are not defined here.** They are
 loaded (``D20Target.from_mapping``) and every field is mandatory — a null is an error naming the
-field. The sixty-day plan states T-R4's target as the word "checkpoint" and no number, so the
+field. The (killed under plan v5) T1 spec stated T-R4's target as the word "checkpoint" and no number, so the
 numbers are Huy's to write, once, in one place, before the run.
 
 Comparisons are exact. ``>=`` passes at equality and fails one ulp below; there is no epsilon,

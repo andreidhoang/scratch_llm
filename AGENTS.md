@@ -1,48 +1,50 @@
-# AGENTS.md — rules for AI agents working in this repo
+# AGENTS.md — active workspace bridge
 
-## What this repo is
+Reviewed 2026-09-12. `scratch_llm` supplies the kernels, numerical references, serving and
+training substrate for the GPU systems + coding-RL research campaign.
 
-`scratch_llm` — the production vehicle for linear-attention numerics & determinism
-(`src/scratch_llm/mastery/`, a live vLLM review), sitting on a from-scratch CS336 stack that
-stays green. **Spec of record: `PLAN.md` (the ONLY plan — it wins every contradiction), then
-`CLAUDE.md` (constitution) and `docs/KERNEL_MASTERY_SPEC.md` (§12.5 = the session ladder).**
-K3 (build & host Kimi K3 from scratch): `docs/k3/ROADMAP.md` + `docs/k3/FACTS.md` — the claim
-ledger; where a secondary source and the K3 tech report arXiv:2607.24653 disagree, the tech
-report wins and the disagreement is logged in FACTS.md.
+## Authority and orientation
 
-## THE SEAL — four things agents never write
+Read `../ladders/CLAUDE.md` and `../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md` v5 first, then this
+file and `CLAUDE.md` for repository facts. The workspace plan controls priorities, units, exit
+criteria and the kill list; there is no calendar. `../ladders/experiments/CURRENT`, the active
+rung contract and raw results identify the current experiment; a pointer is not readiness.
 
-`src/scratch_llm/mastery/reference.py` · the measurement harness · RL loss math (advantage,
-KL estimators, IS ratio, clipping) · verifier logic and tolerances. Hook-enforced by
-`.claude/hooks/oracle-guard.sh`. Execution mode is `learn` (`.claude/execution-mode`):
-offer failing tests, a critique, or a post-hoc review instead. Everything else is delegable.
+`PLAN.md`, `MASTERY_LEDGER.md`, `docs/KERNEL_MASTERY_SPEC.md`, `docs/k3/`, the assignment guides,
+`performance/*.md`, `deploy/runbooks/` and `docs/CONTEXT_ENGINEERING.md` are historical references,
+not competing plans. Preserve them; consult a relevant scientific mechanism without reviving its
+old schedule, ownership mode or shipping rule. **KDA / the Kimi Linear lineage is v5's spine**
+(A1 upstream, A2 miniature); `docs/k3/ROADMAP.md §0` is still the argument for building it here,
+its sequencing is not. R1/R-R5 kernel-coding RL is planned in the workspace (A3); its
+integrated implementation is pending.
 
-## Build / verify
+On a remote host, locate the matching ladders checkout and recorded revision before choosing
+work. The legacy provisioning scripts do not install that workspace automatically. Missing
+workspace context does not promote the archived `PLAN.md` to authority.
 
-```bash
-uv pip install -e ".[dev]"
-ruff check src tests && ruff format --check src tests
-pyright
-pytest -m "not gpu"          # CPU gate, mirrors CI — must stay green
-```
+## Ownership
 
-Engineering disciplines that are the point of the repo: loss-at-init ≈ log(vocab) ·
-overfit-one-batch · fixed-seed reproducibility · predict-before-you-run · every measured
-number lands in `bench/RESULTS.md` with hardware + method.
+Huy owns derivations, predictions, the first kernel core / loss-math / memory-model implementation,
+tolerance design, causal diagnosis and technical defence. Agents may write harnesses, independent
+reference oracles, adapters, adversarial tests, maps and reproductions, and implement fixes after
+Huy names the diagnosis. Independence requires a separate derivation or trusted reference, not
+copying the candidate implementation. No additional planning Markdown is needed.
 
-## THE BOUNDARY — `src/scratch_llm/k3/core/` is hand-built
+**Stricter boundary: agents never create, edit, move or delete files under
+`src/scratch_llm/k3/core/`.** Read `src/scratch_llm/k3/HANDCRAFTED.md` before work touching the K3
+surface. For core modules, only adversarial tests after human authorship and prose proposals for
+the human are allowed; no implementation diffs. Its dated scaffolding waiver is not blanket
+permission to write the core. Preserve the paired ownership of K3 math outside `core/` as well.
 
-**Agents never create, edit, move, or delete files under `src/scratch_llm/k3/core/`.**
-Those modules encode the mechanisms the human is mastering; a silent bug there is exactly
-what the human must learn to catch. For core modules agents may ONLY:
-- write adversarial tests in `tests/` after the human authors a module (red team, no fixes);
-- write proposals as markdown for the human to retype — never as diffs to apply.
+## Verification and evidence
 
-Full rules + per-module mastery bars: `src/scratch_llm/k3/HANDCRAFTED.md`.
-Everything outside `core/` follows the paired/delegated split defined there.
+Use `CLAUDE.md` for actual CI commands and installed hook behavior. Correctness precedes timing;
+match the baseline's semantics, dtype, shape and execution protocol. Record campaign measurements
+and raw artifacts in ladders; `bench/RESULTS.md` retains local historical measurements and links.
+Label claims measured, reported, reproduced or unverified with their exact scope. Compile success,
+fixture tests, historical `[FACT]` labels and a green process exit do not certify GPU performance.
+Document null results and unmet gates without inventing a speedup or capability improvement.
 
-## Honesty ledger
-
-Claims are labelled **measured by us / reported / not verified** (FACTS.md, bench/RESULTS.md).
-Never dress an unverified number up as measured; never silently "fix" a failing gate —
-report it.
+The old oracle/kernel write-guard hooks and `.claude/execution-mode` are absent in this checkout.
+Ownership is policy; existing lint/CI hooks are separate mechanisms and stay installed. Review
+commands do not automatically authorize a commit, push, rental or publication.

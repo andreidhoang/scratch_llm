@@ -1,6 +1,6 @@
 """The hole contract — how a rung's one un-delegated function is represented in the test suite.
 
-A *hole* is the single block the sixty-day plan (§08) never delegates: a kernel core body, the
+A *hole* is the single block plan v5 (§6, Ownership) never delegates: a kernel core body, the
 loss/KL math, a memory model, a tolerance constant. Everything around it — harness, oracle,
 launch glue, build wiring, the test itself — is written ahead of time, so that the moment Huy
 fills the hole the rung runs end to end. Marking it in the test suite has two requirements that

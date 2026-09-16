@@ -1,23 +1,29 @@
 # scratch_llm
 
-> A from-scratch, production-grade implementation of the **CS336** stack
-> ("Language Modeling from Scratch", Stanford) — every layer owned end to end,
-> from the byte to the RL update.
+From-scratch language-model, kernel, serving and training substrate for the
+[ladders v5 GPU systems + coding-RL campaign](../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md).
+The active objective connects AI foundations and mathematics to measured GPU optimization,
+trusted coding evaluations and controlled learning experiments. Read [AGENTS.md](AGENTS.md)
+and [CLAUDE.md](CLAUDE.md) for current ownership, evidence boundaries and repository facts.
+The proposed R1/R-R5 kernel-coding RL capstone is not implemented by the planning revision.
 
-## Measured results
+## Historical reported results
 
-All numbers below are `[FACT]` rows from [`bench/RESULTS.md`](bench/RESULTS.md) — measured under
-`cuda.synchronize`, fixed seed, with warm-ups, on one consumer card. The discipline is
+The table preserves reports from [`bench/RESULTS.md`](bench/RESULTS.md), not freshly verified
+v5 results. Audit raw artifacts, precision, shapes, hardware and baselines before reusing a claim.
+In particular, the 134.3% cuBLAS-proxy comparison is mis-baselined and cannot support a speedup
+against matched cuBLAS. The historical measurement discipline is
 **predict the number and the roofline bound first, then measure, then log the gap and the root cause.**
 Unmeasured expectations are marked `[INFERENCE]` and are kept out of the ledger.
 
-**Hardware baseline —** RTX PRO 4000 Blackwell (sm120): **72 TF/s** bf16 · **0.55 TB/s** HBM ·
-ridge ≈ **130 FLOP/byte** (measured, not from a spec sheet).
+**Reported hardware baseline —** RTX PRO 4000 Blackwell (sm120): **72 TF/s** bf16 ·
+**0.55 TB/s** device-memory bandwidth · ridge ≈ **130 FLOP/byte**. These reported ceilings
+must be measured again for a new device/protocol; they are not v5 campaign results.
 
 | Artifact | Measured | Bound |
 |---|---|---|
 | CUDA GEMM ladder (naive → WMMA → mma.sync + XOR swizzle) | **4.1% → 38.9% → 81.9% of cuBLAS**, rel err 6.6e-6 | compute |
-| Triton tiled GEMM, autotuned @4096³ | **134.3% of cuBLAS-proxy** (101.9 TF/s) | compute |
+| Triton tiled GEMM, autotuned @4096³ | **134.3% of cuBLAS-proxy** (101.9 TF/s), **known baseline defect; not a validated cuBLAS win** | comparator needs repair |
 | FlashAttention-2 (Triton) fwd @ seq 4k | **50.0% of SDPA**; **44× leaner peak memory @ 8K** | memory |
 | Decode @B=1: eager → `torch.compile` → CUDA graphs | **51 → 173 → 253 tok/s** = **16% → 53% → 77%** of the memory roofline | overhead → memory |
 | CUDA-graph decode step time | **15.38 → 3.96 ms (−74.3%)**; ~955 kernel launches/token collapsed | overhead |
@@ -47,13 +53,16 @@ Stated up front rather than buried:
 - **The S3 scaling sweep failed its own gate** — R² 0.77/0.83 against a pre-registered ≥0.98 — so the
   fit was **rejected** and no extrapolation is quoted. A failed pre-registered gate is logged, not hidden.
 
-This is the **mastery vehicle**: built by hand to the engineering standard a frontier lab
-screens for, not glued together from libraries. The official course — lecture code plus the
-five assignment scaffolds with their `tests/adapters.py` — lives in [`../lectures/`](../lectures/)
-and is the **spec + test oracle**: the PDFs define each deliverable, the adapter tests verify
-your implementation is correct.
+This is a **mastery vehicle** whose current evidence gates live in the workspace plan.
+Historical course docs reference lecture code and five assignment scaffolds, including
+`tests/adapters.py`, in a separate `../lectures/` checkout. That checkout is absent here at the
+2026-09-12 review; locate/provision its exact version before claiming course-test execution.
+Course adapter tests check their declared cases and do not certify all runtime, numerical or
+research claims.
 
-## The five assignments → this repo
+## Historical CS336 implementation inventory
+
+The statuses below are the earlier course inventory, not completed v5 mastery or GPU gates.
 
 | CS336 assignment | What you build (load-bearing core) | Source | Status |
 |---|---|---|---|
@@ -64,16 +73,20 @@ your implementation is correct.
 | **A5** Alignment | SFT · Expert Iteration · GRPO/Dr.GRPO · DPO | `algos/`, `rewards/`, `envs/` | ✅ (graded GPU runs rental-gated) |
 
 See [`docs/assignment_guides/`](docs/assignment_guides/) for the per-assignment guides — every
-deliverable tagged **LOAD-BEARING / COURSE-ROTE / SKIP** and mapped to a source file. **The plan and
-the live state are [`PLAN.md`](PLAN.md); measured numbers are [`bench/RESULTS.md`](bench/RESULTS.md).**
+deliverable tagged **LOAD-BEARING / COURSE-ROTE / SKIP** and mapped to a source file. These guides
+and [`PLAN.md`](PLAN.md) are historical. **Current priorities and gates are the
+[workspace v5 plan](../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md); the active pointer is
+[`experiments/CURRENT`](../ladders/experiments/CURRENT).** Local historical numbers remain in
+[`bench/RESULTS.md`](bench/RESULTS.md); campaign results and raw trials live in ladders.
 The 2026 planning generations that used to be linked here (`FRONTIER_2026_*`, `IMPLEMENTATION_PLAN`,
 `STATUS`) were collapsed into PLAN.md and deleted on 2026-08-31 — `git log` holds them.
-The K3 track (chartered 2026-07-31): **K3** — build & host **Kimi K3** from scratch, reusing this
+The historical K3 track (chartered 2026-07-31): build & host **Kimi K3** from scratch, reusing this
 repo's substrate (GDN→KDA, MLA→Gated MLA-NoPE, MoE→Stable LatentMoE). Roadmap + verified-facts ledger:
 [`docs/k3/ROADMAP.md`](docs/k3/ROADMAP.md) + [`docs/k3/FACTS.md`](docs/k3/FACTS.md) (K3 tech report
-arXiv:2607.24653 is the spec of record).
+arXiv:2607.24653 is that historical study's technical reference). This does not activate the full
+K3 roadmap under v5. The human-only `src/scratch_llm/k3/core/` boundary remains in force.
 
-**Capstone — DELTA** (the barbell *spike*, sitting on the A2/A5 base): a fused **GatedDeltaNet-2
+**Historical capstone — DELTA** (deferred extension, not v5's capstone): a fused **GatedDeltaNet-2
 decode-step** kernel (target ≥85% of the H100 memory roofline; the "erase/write decoupling is free at
 decode" thesis). The design RFC was retired 31/08 — the field closed the original gap (FlashInfer
 shipped production GDN decode) and its own banner said Part II must be re-derived. What survives is
@@ -86,18 +99,20 @@ DELTA's GDN-2 base; see `docs/k3/ROADMAP.md`.)
 ## Engineering disciplines (baked into the tests)
 
 loss-at-init ≈ `log(vocab)` · overfit-one-batch · fixed-seed reproducibility · mandatory RL logging
-(entropy + KL divergences + reward/length stats) · predict-before-you-run. These *are* the hiring
-signal — clean, reproducible code that you can defend from first principles.
+(entropy + named KL estimators + reward/length stats) · predict-before-you-run. The v5 plan adds
+matched controls, held-out tasks, uncertainty and compute accounting. Demonstrated understanding
+and reproducible contributions are the evidence; these exercises are not a lab's hiring rubric.
 
 ## Develop
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"      # CPU core: numpy/pydantic/pyyaml/regex
+uv pip install -e ".[dev,scaling]"   # main CI also installs CPU torch separately
 # uv pip install -e ".[gpu]"    # on a rented GPU: torch/transformers
-ruff check src tests && ruff format --check src tests
+ruff check src tests bench/kernels experiments/plot_e001.py
+ruff format --check src tests bench/kernels experiments/plot_e001.py
 pyright
-pytest -m "not gpu"             # the CPU gate (mirrors CI)
+pytest -m "not gpu and not slow and not hole and not drydock" --cov=scratch_llm
 ```
 
 ## Layout

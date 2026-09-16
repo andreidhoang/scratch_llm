@@ -1,10 +1,15 @@
 ---
-description: Run the kernel's bench/roofline (or import an ncu report) and get a structured bottleneck diagnosis — bound, why, the single next experiment. No code fixes.
+description: Inspect a kernel benchmark or profiler report and propose one controlled experiment; diagnosis only.
 argument-hint: "(optional) kernel name or path to an ncu/nsys report"
 ---
-Profile + diagnose. $ARGUMENTS
+Profile and diagnose. $ARGUMENTS
 
-1. **Measure.** Prefer `bench/kernels/run.py <name>` (or the per-family script under `bench/kernels/<family>/`); print the DoD line. Use `ncu --set full -o profile/ncu_$(date +%F).ncu-rep <cmd>` only when a full trace is wanted.
-2. **Diagnose.** Route the result to the **roofline-analyst** subagent → BOUND / WHY / NEXT EXPERIMENT / PREDICT. (It returns a short summary, not the raw report.)
-3. Hand over the next experiment — per `.claude/execution-mode` (ADR-0013): `delegate` (current) →
-   Claude implements it; `learn` → the human implements it, do not write the fix.
+1. Read repository AGENTS.md/CLAUDE.md and the active ladders v5 contract. Identify the existing
+   prediction, numerical contract, matched baseline and measurement budget.
+2. Inspect an existing report or use the active rung benchmark when its prerequisites and
+   authorization are satisfied. Reuse bench/kernels/run.py for the selected backend as appropriate.
+   Record actual cache/timing/profiling behavior; a full ncu trace is not always needed.
+3. Route to roofline-analyst for the suspected bound, supporting evidence, uncertainty and one
+   discriminating experiment. Huy owns the prediction and causal diagnosis.
+4. A profile request does not authorize a core rewrite. Agents may implement a fix after Huy names
+   it within an implementation task. The archived execution-mode switch is not active.

@@ -1,9 +1,16 @@
 # `csrc/` — the AOT CUDA C++ source tree
 
-The production kernel build. Every `.cu` here compiles into ONE torch extension
+The AOT kernel-build substrate. The configured `.cu` sources build into ONE torch extension
 (`_scratch_llm_kernels.so` / `.pyd`) via `CMakeLists.txt` (repo root) or `setup.py`
 (the pip path). This is the CUTLASS / xformers / FlashAttention convention — one
 extension, one symbol table, one `pybind.cpp` registration.
+
+Active priorities, ownership and evidence gates come from
+[`../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md`](../../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md)
+and repository [`AGENTS.md`](../AGENTS.md). The source inventory below retains historical
+compile/stub reports; it does not prove a current complete build or GPU execution. Select only
+the active v5 experiment. Architecture-specific compilation and a Python entry point are
+prerequisites for runtime verification, not substitutes for it.
 
 ## What's here
 
@@ -54,10 +61,11 @@ python -c "from scratch_llm import _scratch_llm_kernels as e; print(dir(e))"
 | sm_90a  | H100 / H200    | WGMMA + TMA + mbarrier       | 12.4+        |
 | sm_100a | B200           | tcgen05 + TMEM + cta_group   | 13.0+        |
 
-The `a` suffix is REQUIRED. WGMMA and tcgen05 assemble ONLY under the accelerated ISA
-(`sm_90a` / `sm_100a`); base `sm_90` / `sm_100` silently emit zero `wgmma.*` / `tcgen05.*`
-instructions. The sm_120 dev box (RTX PRO 4000 Blackwell client) has no WGMMA / tcgen05 —
-it is NOT an AOT target.
+These sources target the architecture-specific ISA (`sm_90a` / `sm_100a`). Check the actual
+toolchain, architecture guards and emitted PTX/SASS before interpreting a compile result;
+unsupported targets can fail or compile a guarded fallback, rather than proving the intended
+instructions execute. The table records this repository's target configurations, not universal
+minimum toolkit versions. The sm_120 development configuration is not an AOT target here.
 
 ## Adding a new C++ kernel
 
@@ -73,9 +81,10 @@ See `docs/design/CMAKE_AOT_SPEC.md` §4 and `docs/adr/ADR-0019` for the full rec
 
 Three of these files (wgmma, tcgen05, fa3) are **promoted rental skeletons**: they compile for
 their target archs with documented `nvcc -arch=sm_Xa -ptx` commands and PTX-grep gates, but
-runtime correctness is deferred to the rental measurement day (H100 / H200 / B200). The host
-launchers appended here make them *runnable* from Python; the oracle tests
-(`tests/kernels/test_gemm_wgmma.py` etc.) gate correctness on the rental box.
+runtime correctness is deferred to the selected GPU experiment (H100 / H200 / B200). The host
+launchers expose Python entry points, but availability does not establish a working runtime.
+Run the relevant oracle tests (for example `tests/kernels/test_gemm_wgmma.py`) with the declared
+input/numerical contract and record actual results before timing or claiming correctness.
 
 Three (fp8, stream_k, persistent) are **stubs**: the host launcher raises `runtime_error` and the
 Python loader raises `NotImplementedError` pointing at the exact file + reference. The kernel body

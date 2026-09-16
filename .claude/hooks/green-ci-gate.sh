@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# --- noise guard (chained 2026-09-14; runs BEFORE the CI gate) ---
+R="$(git rev-parse --show-toplevel)"
+case "$(basename "$0")" in pre-push) NG_MODE=prepush;; *) NG_MODE=precommit;; esac
+[ -x "$R/scripts/noise_guard.sh" ] && { "$R/scripts/noise_guard.sh" "$NG_MODE" || exit 1; }
+
 # PreToolUse(Bash git commit) — ENFORCEMENT hook (Lever 4).
 # Blocks a commit (exit 2) if CI is red. A red commit must be impossible, not merely
 # discouraged — that is the whole point of putting this in structure, not in CLAUDE.md prose.

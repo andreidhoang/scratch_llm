@@ -3,8 +3,15 @@
 One roofline bench per kernel, mirroring `src/scratch_llm/kernels/<family>/<backend>/`. Every bench
 targets a **specific backend** (not the dispatch layer) — by policy benches measure one implementation,
 they do not dispatch (see `src/scratch_llm/kernels/CLAUDE.md` §"dispatch contract"). All share one
-measurement methodology (`../_harness.py`: CUDA-event timing, per-rep L2 flush, median + p20–p80
-spread, peaks measured on *this* GPU). The runner (`run.py`) is the single entry point.
+legacy measurement helpers (`../_harness.py`: CUDA-event timing, cache-flush options and
+median/p20–p80 summaries). Verify each runner's actual settings; p20–p80 is not IQR and a
+cache-flush workload is not interchangeable with hot-cache production. The runner (`run.py`)
+is the local inventory entry point.
+
+The [workspace v5 plan](../../../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md) and
+[repository context](../../CLAUDE.md) choose the active experiment, protocol and evidence gates.
+Listing a benchmark or skipping it on CPU does not establish runnable GPU readiness. Historical
+course rung labels below are retained as inventory, not the current campaign order.
 
 ## Run
 
@@ -19,7 +26,8 @@ python -m bench.kernels.run gemm/triton_tiled -- --n 8192   # forward args to th
 ```
 
 GPU benches auto-skip on a CPU box with a clear message (mirrors the `gpu` pytest marker). The runner
-launches each bench as a subprocess so a Triton/nvcc failure in one bench cannot poison another.
+launches each bench as a subprocess to limit process-level failures. This does not isolate
+device/driver faults; invalidate potentially tainted measurements and verify worker health.
 
 ## The ladder
 
@@ -43,8 +51,10 @@ launches each bench as a subprocess so a Triton/nvcc failure in one bench cannot
 | `gemm/cuda_stream_k` | A3 R3.3 | `gemm/cuda_stream_k.py` | `kernels.gemm.cuda.stream_k` — **STUB, raises** | fp16 |
 | `gemm/cuda_persistent` | A3 R3.4 | `gemm/cuda_persistent.py` | `kernels.gemm.cuda.persistent` — **STUB, raises** | fp16 |
 
-Each row's measured numbers live in [`../RESULTS.md`](../RESULTS.md) (the durable ledger — predict-
-before-run, then the measured gap + root cause).
+Historical reports live in [`../RESULTS.md`](../RESULTS.md). Audit their raw inputs, actual dtype
+and baselines before reuse; the 134.3% cuBLAS-proxy entry has a known comparator defect.
+Active v5 predictions, measurements and raw artifacts belong to the ladders rung/ledger, with
+local result links where useful. A compile-only or stub row is not a measured GPU result.
 
 ## Layout convention
 
@@ -76,8 +86,9 @@ The tree mirrors `src/scratch_llm/kernels/<family>/<backend>/` so a kernel and i
 3. **Register** — add a `Bench(...)` row to `_BENCHES` in `bench/kernels/run.py` (name, script, rung,
    kernel-exercised).
 4. **Index** — add the matching row to the table above.
-5. **Ledger** — once measured, append a dated row to `../RESULTS.md` with predicted vs measured + the
-   bound + root cause. The DoD is the profiled number, not a green test (FOP-3).
+5. **Evidence** — follow the active ladders rung: retain raw trials, prediction, matched floor,
+   numerical contract, protocol and diagnosis. Link a dated local result if useful. Correctness,
+   a profile and a speed improvement are separate claims; null/slower results remain reportable.
 
 ## Standing artifacts (committed)
 
@@ -95,8 +106,9 @@ The tree mirrors `src/scratch_llm/kernels/<family>/<backend>/` so a kernel and i
   "implemented ≠ measured" — FOP-4.) The CUDA JIT loaders read the target ISA from
   `kernels/common/arch.arch_name()` at runtime, so a new arch rung is a branch + a `require_cc(...)`
   guard, not a loader rewrite. Roadmap: `docs/GPU_FROM_ZERO.md`.
-- **Nothing here has run on datacenter silicon.** Compile-verified ≠ measured; every sm_90a/sm_100a
-  row is rental-gated (`PLAN.md` § Hardware law).
+- **Datacenter execution is not established by this inventory.** The historical sm_90a/sm_100a
+  rows are compile-only/stub reports. The active workspace plan requires actual runtime tests and
+  matched measurements before a hardware-performance claim; archived `PLAN.md` is not authority.
 - **System / serving benches** (continuous batching, chunked prefill, cudagraph decode, speculative,
   disagg, KV-memory, decode-roofline) live at `bench/` top level — they exercise `scratch_llm.serving`
   and `scratch_llm.model`, not a kernel backend, so they don't belong under `bench/kernels/`.
