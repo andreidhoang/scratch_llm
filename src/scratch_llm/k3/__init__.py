@@ -10,8 +10,8 @@ model is subtly worse — exactly what the human is learning to catch). Loud-bug
 DELEGATED to agents (shape errors crash, tests fail). Three classes:
 
   Class 1 — ``core/``  : hand-built. The 5 mechanisms (situ, kda, gated_mla, latent_moe, attn_res).
-  Class 2 — paired     : human writes the math; agents write plumbing + tests (muon, qat).
-  Class 3 — delegated  : agents own, human reviews (config, param_count, model, serve, docs).
+  Class 2 — paired     : human writes the math; agents write plumbing + tests (muon).
+  Class 3 — delegated  : agents own, human reviews (config, param_count, model, docs).
 
 BUILD ORDER (serial — dependency order; do NOT parallelize hand-builds)
 ----------------------------------------------------------------------
@@ -26,8 +26,6 @@ BUILD ORDER (serial — dependency order; do NOT parallelize hand-builds)
   K4     core/attn_res.py      1       🟡 scaffold   —
   K6     muon.py               2       🟡 scaffold   optim
   K6     model.py              3       ✅ scaffold   all of core/
-  K7     qat.py                2       🟡 scaffold   quant/nvfp4_mxfp4
-  K9     serve.py              3       🟡 scaffold   model + core/
 
 Status legend:
   ✅ DONE     shipped + gate green.

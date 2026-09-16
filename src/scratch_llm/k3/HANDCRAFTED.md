@@ -40,13 +40,12 @@ is the module marked ✅ PROVEN (date recorded here).
 | Module | Human owns | Agents own | Status |
 |---|---|---|---|
 | `muon.py` | per-head NS partitioning on Q/K/V momentum blocks + K2 weight clipping | optimizer plumbing, F1-race harness wiring | 🟡 SCAFFOLD (template, 2026-08-04) |
-| `qat.py` | MXFP4 quantizer + STE derivation (paper-first) | training-loop integration, QAT arms | 🟡 SCAFFOLD (template, 2026-08-04) |
 | `param_count.py` spec | the accounting conventions (already landed, FACTS A18) | the script + gate test ✅ DONE | ✅ DONE |
 
 ## Class 3 — DELEGATED (agents own, human reviews)
 
 `config.py` ✅ DONE · `param_count.py` ✅ DONE · `model.py` assembly (✅ scaffold, 2026-08-04) ·
-`serve.py` (🟡 scaffold, 2026-08-04) · non-core tests · runbooks
+non-core tests · runbooks
 (`deploy/runbooks/k3_8xb300_modal.md`) · `docs/k3/FACTS.md` maintenance · Aug-3 book
 cross-read (log disagreements in FACTS.md) · Modal ops in K9 (human designs the measurements
 and reads every number) · docs formatting.
@@ -57,3 +56,13 @@ and reads every number) · docs formatting.
 2. Human asks an agent to red-team it: adversarial tests only, no fixes.
 3. Human fixes what the red team finds — by hand.
 4. Delete test → module marked PROVEN with the date in the table above.
+
+## Retired 2026-09-16
+
+`qat.py` (K7, MXFP4 QAT) and `serve.py` (K9, hybrid-state serving of the released 2.78T checkpoint on
+rented 8xB300) were agent-authored templates for rungs that neither plan v5 nor `CURRICULUM.md`
+schedules: v5 kills the S-lane and makes A1c (the vLLM memory-profiling PR) the serving evidence, and
+MXFP4 is reached through `quant/nvfp4_mxfp4.py` + `csrc/gemm/b_r6_nvfp4_sm120.cu` (CURRICULUM M12),
+not through a K3 QAT layer. Neither had a test, a spec, or a `# HUY:` hole. `git log --diff-filter=D
+-- src/scratch_llm/k3/qat.py` finds the commit that still holds them. The four `core/` templates stay:
+plan v5 sec.4 names SiTU, gated MLA, latent MoE and AttnRes as A2 stretch after a baseline run.
