@@ -8,7 +8,7 @@ median/p20–p80 summaries). Verify each runner's actual settings; p20–p80 is 
 cache-flush workload is not interchangeable with hot-cache production. The runner (`run.py`)
 is the local inventory entry point.
 
-The [workspace v5 plan](../../../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md) and
+The [workspace v6 plan](../../../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md) and
 [repository context](../../CLAUDE.md) choose the active experiment, protocol and evidence gates.
 Listing a benchmark or skipping it on CPU does not establish runnable GPU readiness. Historical
 course rung labels below are retained as inventory, not the current campaign order.

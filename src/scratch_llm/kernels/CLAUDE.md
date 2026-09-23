@@ -103,7 +103,9 @@ ownership; the existing lint/CI hooks have a different purpose.
 Huy writes the first core kernel, loss math and memory model, derives the tolerance and makes the
 prediction. Agents may build scaffolds, independent references, tests, benchmark adapters and maps.
 They may review profiles and propose mechanisms; Huy owns the diagnosis, and agents implement a
-selected fix after he names it. The stricter `src/scratch_llm/k3/core/` boundary is unaffected.
+selected fix after he names it. The `src/scratch_llm/k3/core/` file-ownership boundary was removed
+2026-09-22 (`AGENTS.md`); the evidence gate — parity tests, three-path equivalence, matched
+baselines — is unaffected.
 
 A kernel experiment starts with its active rung contract: supported shapes/strides, dtype and
 accumulation behavior, numerical oracle, baseline, performance hypothesis and stop rule. Write tests

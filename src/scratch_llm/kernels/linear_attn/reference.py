@@ -31,9 +31,9 @@ chain, three deliberate expressions):
   * ``linear_attn.py``                the CS336 teaching module   -> substrate, batched/heads
   * ``k3/core/kda.py``                scalar alpha -> ``Diag(alpha)``  -> K2, the KDA generalization
 
-``k3/core/kda.py`` is the same five lines with per-channel decay; when it is hand-built
-(HANDCRAFTED.md Class 1) its chunkwise path is scored against THIS oracle, which is what makes
-the K3 lane and the kernel lane one lane instead of two.
+``k3/core/kda.py`` is the same five lines with per-channel decay; once it is built, its
+chunkwise path is scored against THIS oracle, which is what makes the K3 lane and the kernel
+lane one lane instead of two.
 """
 
 from __future__ import annotations

@@ -1,16 +1,22 @@
 # scratch_llm
 
 From-scratch language-model, kernel, serving and training substrate for the
-[ladders v5 GPU systems + coding-RL campaign](../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md).
+[ladders v6 GPU-kernel + coding-RL campaign](../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md).
 The active objective connects AI foundations and mathematics to measured GPU optimization,
 trusted coding evaluations and controlled learning experiments. Read [AGENTS.md](AGENTS.md)
 and [CLAUDE.md](CLAUDE.md) for current ownership, evidence boundaries and repository facts.
-The proposed R1/R-R5 kernel-coding RL capstone is not implemented by the planning revision.
+The ordered workshop lives in [`../ladders/experiments/KW`](../ladders/experiments/KW); production
+kernels, call sites, parity tests and reusable benchmarks live here. Raw campaign runs do not: they
+return to `../ladders/experiments/<L>/<R>/results/<timestamp>/`. Run `make -C ../ladders context`
+for the current pointer, planned-next unit and provider gate.
+
+**VI:** Thư mục KW là phòng thí nghiệm; repo này là sản phẩm. Một kernel chỉ “ship” khi model gọi nó,
+test độc lập chứng minh đúng và benchmark toàn bước cho thấy tác động thực.
 
 ## Historical reported results
 
 The table preserves reports from [`bench/RESULTS.md`](bench/RESULTS.md), not freshly verified
-v5 results. Audit raw artifacts, precision, shapes, hardware and baselines before reusing a claim.
+v6 results. Audit raw artifacts, precision, shapes, hardware and baselines before reusing a claim.
 In particular, the 134.3% cuBLAS-proxy comparison is mis-baselined and cannot support a speedup
 against matched cuBLAS. The historical measurement discipline is
 **predict the number and the roofline bound first, then measure, then log the gap and the root cause.**
@@ -18,7 +24,7 @@ Unmeasured expectations are marked `[INFERENCE]` and are kept out of the ledger.
 
 **Reported hardware baseline —** RTX PRO 4000 Blackwell (sm120): **72 TF/s** bf16 ·
 **0.55 TB/s** device-memory bandwidth · ridge ≈ **130 FLOP/byte**. These reported ceilings
-must be measured again for a new device/protocol; they are not v5 campaign results.
+must be measured again for a new device/protocol; they are not v6 campaign results.
 
 | Artifact | Measured | Bound |
 |---|---|---|
@@ -62,7 +68,7 @@ research claims.
 
 ## Historical CS336 implementation inventory
 
-The statuses below are the earlier course inventory, not completed v5 mastery or GPU gates.
+The statuses below are the earlier course inventory, not completed v6 mastery or GPU gates.
 
 | CS336 assignment | What you build (load-bearing core) | Source | Status |
 |---|---|---|---|
@@ -76,7 +82,7 @@ The per-assignment build guides were retired on 2026-09-16 (`git log -- docs/ass
 `../ladders/CURRICULUM.md` is the current map from role line to mechanism to module. Every
 deliverable tagged **LOAD-BEARING / COURSE-ROTE / SKIP** and mapped to a source file. These guides
 and [`PLAN.md`](PLAN.md) are historical. **Current priorities and gates are the
-[workspace v5 plan](../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md); the active pointer is
+[workspace v6 plan](../ladders/plan/SIXTY_DAYS_SIX_LADDERS.md); the active pointer is
 [`experiments/CURRENT`](../ladders/experiments/CURRENT).** Local historical numbers remain in
 [`bench/RESULTS.md`](bench/RESULTS.md); campaign results and raw trials live in ladders.
 The 2026 planning generations that used to be linked here (`FRONTIER_2026_*`, `IMPLEMENTATION_PLAN`,
@@ -85,9 +91,11 @@ The historical K3 track (chartered 2026-07-31): build & host **Kimi K3** from sc
 repo's substrate (GDN→KDA, MLA→Gated MLA-NoPE, MoE→Stable LatentMoE). Roadmap + verified-facts ledger:
 [`docs/k3/ROADMAP.md`](docs/k3/ROADMAP.md) + [`docs/k3/FACTS.md`](docs/k3/FACTS.md) (K3 tech report
 arXiv:2607.24653 is that historical study's technical reference). This does not activate the full
-K3 roadmap under v5. The human-only `src/scratch_llm/k3/core/` boundary remains in force.
+K3 roadmap under v6. The `core/` ownership boundary was removed on 2026-09-22; the K3 text model is
+now built and CPU-gated against Moonshot's HF reference, with no quality claim yet. Live state and
+next steps: the docstring of [`src/scratch_llm/k3/__init__.py`](src/scratch_llm/k3/__init__.py).
 
-**Historical capstone — DELTA** (deferred extension, not v5's capstone): a fused **GatedDeltaNet-2
+**Historical capstone — DELTA** (deferred extension, not v6's capstone): a fused **GatedDeltaNet-2
 decode-step** kernel (target ≥85% of the H100 memory roofline; the "erase/write decoupling is free at
 decode" thesis). The design RFC was retired 31/08 — the field closed the original gap (FlashInfer
 shipped production GDN decode) and its own banner said Part II must be re-derived. What survives is
@@ -100,7 +108,7 @@ DELTA's GDN-2 base; see `docs/k3/ROADMAP.md`.)
 ## Engineering disciplines (baked into the tests)
 
 loss-at-init ≈ `log(vocab)` · overfit-one-batch · fixed-seed reproducibility · mandatory RL logging
-(entropy + named KL estimators + reward/length stats) · predict-before-you-run. The v5 plan adds
+(entropy + named KL estimators + reward/length stats) · predict-before-you-run. The v6 plan adds
 matched controls, held-out tasks, uncertainty and compute accounting. Demonstrated understanding
 and reproducible contributions are the evidence; these exercises are not a lab's hiring rubric.
 
