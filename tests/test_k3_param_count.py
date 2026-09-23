@@ -23,8 +23,10 @@ NON_ROUTED = 57_191_006_976  # census BF16 57,179,884,544 + F32 11,122,432
 VISION_ENCODER = 401_214_464  # patch + pos-emb + 27 blocks + final norm; report: "401M"
 ROUTED_EXPERTS = 2_722_740_830_208  # 92 layers × 896 × 3 × 3584 × 3072; U8-packed ×2 exact
 
-MINI_TOTAL = 370_303_424
-MINI_ACTIVE = 142_107_072
+# mini keeps K3's shared rope key part (qk_rope_head_dim=32, 2026-09-22): +3 MLA layers ×
+# (q_b 256·16·32 + kv_a 1024·32) = +491,520 over the rope=0 preset (370,303,424 / 142,107,072).
+MINI_TOTAL = 370_794_944
+MINI_ACTIVE = 142_598_592
 
 
 def test_layer_pattern_full_scale():

@@ -1,13 +1,9 @@
-"""K3 track (delegated) — Kimi K3 configuration of record + mini-K3 presets.
+"""K3 configuration of record + mini-K3 presets.
 
 Every full-scale value is lifted verbatim from the released checkpoint's ``config.json``
-(huggingface.co/moonshotai/Kimi-K3, 2026-07-27) and cross-checked against the tech report
-(arXiv:2607.24653) Table 1 — see ``docs/k3/FACTS.md`` A1–A17. Nothing here is invented;
-where the checkpoint carries a vestigial field (``qk_rope_head_dim=64`` under full NoPE) we
-keep it and mark it, because parity with the checkpoint beats elegance.
-
-This is a DELEGATED-track module (see ``src/scratch_llm/k3/HANDCRAFTED.md``): agent-authored,
-human-reviewed. Pure stdlib so it imports in the CPU core env (no torch).
+(huggingface.co/moonshotai/Kimi-K3, 2026-07-27), cross-checked against the tech report
+(arXiv:2607.24653) Table 1 — see ``docs/k3/FACTS.md`` A1-A17. Parity with the checkpoint beats
+elegance. Pure stdlib; imports without torch.
 """
 
 from __future__ import annotations
@@ -25,10 +21,11 @@ class KDAConfig:
     gate_lower_bound: float = -5.0  # scaled-sigmoid log-decay floor (K3 change vs Kimi Linear)
     full_rank_gate: bool = True  # K3: full-rank sigmoid output gate (Kimi Linear was low-rank)
     decay_rank: int = 128  # low-rank decay projection width (f_a: H->128, f_b: 128->proj)
-    # A_log size per KDA layer. CHECKPOINT OF RECORD: [128] (= head_dim) in all 69 layers.
-    # The HF reference code constructs A_log as [num_heads=96] — a genuine code-vs-checkpoint
-    # mismatch discovered by the R0 census (the −2,208 in the pre-census accounting).
-    # Semantics for our hand-build (per-head vs per-dim scale) resolved in core/kda.py.
+    # A_log storage per KDA layer is [128] in the checkpoint, but only the first [num_heads=96]
+    # entries are live — every kernel and loader (vLLM, FLA) indexes A_log per-head, and
+    # [96:128] is a dead zero-init tail with no gradient path (docs/k3/KDA_ALOG_MAPPING.md).
+    # Keep a_log_size=128 here for checkpoint-total accounting (param_count.py); core/kda.py's
+    # KDALayer should allocate and load only the live [0:96].
     a_log_size: int = 128
 
     @property
@@ -44,7 +41,10 @@ class MLAConfig:
     q_lora_rank: int
     kv_lora_rank: int  # cached latent dim
     qk_nope_head_dim: int  # content head dim
-    qk_rope_head_dim: int  # VESTIGIAL under NoPE (params still exist in the checkpoint)
+    # Named "rope" for DeepSeek heritage, but K3 never rotates it. The dims are still live: HF
+    # KimiMLAAttention concatenates an unrotated q part per head and one k part shared by all
+    # heads into the dot product, and the softmax scale is (nope + rope)^-1/2.
+    qk_rope_head_dim: int
     v_head_dim: int
     use_nope: bool = True  # K3 is NoPE everywhere (tech report §2.1.2); False = K2 heritage
     output_gate: bool = True  # full-rank sigmoid gate on attention output (arXiv:2505.06708)
@@ -65,6 +65,7 @@ class MoEConfig:
     latent_size: int  # routed latent width ℓ (dispatch happens here; 0.5× hidden at full scale)
     dense_intermediate: int  # layer-1 dense MLP width (first_k_dense_replace=1)
     renormalize: bool = True  # top-k weights renormalized (bias excluded from weights)
+    routed_scaling_factor: float = 1.0  # config.json; multiplies the renormalized top-k weights
 
     @property
     def shared_intermediate(self) -> int:
@@ -139,7 +140,7 @@ def build_layer_pattern(
     terminal MLA layer at the end of the backbone (tech report §2.1).
 
     Full scale: 93 layers → MLA {4,8,…,92,93} (24), KDA = the remaining 69 (69:24 = 2.875:1,
-    not exactly 3:1 — FACTS A2). Layer ids are 1-indexed, matching config.json.
+    not exactly 3:1).
     """
     mla = [i for i in range(1, num_layers + 1) if i % period == 0]
     if terminal_mla and num_layers not in mla:
@@ -164,7 +165,7 @@ def k3_full() -> K3Config:
             q_lora_rank=1536,
             kv_lora_rank=512,
             qk_nope_head_dim=128,
-            qk_rope_head_dim=64,  # vestigial: mla_use_nope=true, rotary_emb=None
+            qk_rope_head_dim=64,  # unrotated (rotary_emb=None) but live, shared across heads
             v_head_dim=128,
         ),
         moe=MoEConfig(
@@ -182,10 +183,11 @@ def k3_full() -> K3Config:
 
 
 def mini_k3_d12() -> K3Config:
-    """mini-K3 d12 — the trainable miniature (ROADMAP §3 K6). Ratios kept from full scale:
-    3:1+terminal layer pattern, 0.5× latent MoE, 2 shared experts, same gates/decay/SiTU.
-    Deliberate substitutions: vocab 32768 (our BPE, not K3's tiktoken 160K), qk_rope_head_dim=0
-    (clean NoPE — the full checkpoint's 64 is vestigial anyway), context 8K.
+    """mini-K3 d12 — the trainable miniature. Ratios kept from full scale: 3:1+terminal layer
+    pattern, 0.5× latent MoE, 2 shared experts, same gates/decay/SiTU. Deliberate substitutions:
+    vocab 32768 (our BPE, not K3's tiktoken 160K), context 8K. The MLA keeps K3's shared unrotated key
+    part at the full-scale ratio (rope = nope / 2: 32 of 96 score dims per head, as 64 of 192 in
+    K3) — those dims are live in the dot product, so dropping them would change the architecture.
     """
     kda_layers, mla_layers = build_layer_pattern(12)
     assert kda_layers == (1, 2, 3, 5, 6, 7, 9, 10, 11) and mla_layers == (4, 8, 12)
@@ -201,7 +203,7 @@ def mini_k3_d12() -> K3Config:
             q_lora_rank=256,
             kv_lora_rank=128,
             qk_nope_head_dim=64,
-            qk_rope_head_dim=0,  # clean NoPE
+            qk_rope_head_dim=32,  # unrotated, head-shared key part; nope:rope = 2:1 as full
             v_head_dim=64,
         ),
         moe=MoEConfig(

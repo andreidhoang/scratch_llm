@@ -1,74 +1,77 @@
-"""core/situ.py — SiTU-GLU activation + the layer-1 dense MLP (K5 prep, TEMPLATE).
+"""core/situ.py — SiTU-GLU activation + the layer-1 dense MLP.
 
-TEMPLATE NOTICE (agent-authored scaffold, 2026-08-04). HANDCRAFTED.md Class 1 makes this
-hand-built territory; the user waived the boundary for scaffolding. This file is a scaffold
-to build on: docstring, signatures, and source anchors are reference; the activation math
-bodies raise ``NotImplementedError`` for the human to author from the derivation. The
-delete-test still applies — once your hand-build is PROVEN, ``rm`` this and confirm you can
-rewrite it from the docstring alone.
+    SiTU-GLU(g, u) = [ β1 · tanh(g / β1) ⊙ σ(g) ] ⊙ [ β2 · tanh(u / β2) ],   g = W_g x, u = W_u x
 
-WHAT (FACTS A10; report §2.3.2):
-  SiTU-GLU(x) = [ β1 · tanh(W_g x / β1) ⊙ σ(W_g x) ] ⊙ [ β2 · tanh(W_u x / β2) ]
-  β1 = 4.0 (gate-branch softcap), β2 = 25.0 (up-branch softcap), bound |f| ≤ β1·β2 = 100.
-  ``hidden_act: "situ"`` in config.json. Used by every LatentMoE expert AND by the layer-1
-  dense MLP.
+β1 = 4 (``activation_situ_beta``), β2 = 25 (``activation_situ_linear_beta``), so |f| ≤ β1·β2 = 100
+for every input. Moonshot's reference (HF ``modeling_kimi_linear.SituAndMul``, vLLM
+``SituAndMul.forward_native``) computes both branches in fp32 and casts the product back; this
+module does the same, except fp64 inputs stay fp64 so equivalence tests can run at 1e-10.
 
-WHY SOFTCAPS: bf16 has ~3 significant digits; activations drifting past ~1e3 lose all
-precision and create the outlier channels that wreck downstream attention logits. The tanh
-softcaps bound each branch independently so the activation can NEVER exceed β1·β2, killing the
-outlier-generation failure mode at the source. A wrong β (say β2=2.5) still trains fine on
-short context — the model is just silently worse. That is why this is hand-built: the bound
-must be PROVEN, not hoped.
+Why two soft caps: bf16 keeps ~3 significant digits, and SwiGLU's two factors are both unbounded,
+so coincident large coordinates make activation outliers. The gate branch is capped tight (β1 = 4:
+it decides how much passes); the up branch keeps a wider range (β2 = 25: it carries magnitude).
+Near the origin β·tanh(z/β) = z − z³/(3β²) + …, so SiTU-GLU is SwiGLU to first order and recovers
+it as β → ∞. The sigmoid reads the *uncapped* g — capping it too still trains, but changes the gate
+away from the origin (g = 6 is the test point).
 
-MASTERY BAR (HANDCRAFTED.md):
-  - delete-test (rewrite from this docstring);
-  - bound proof: |SiTU-GLU(x)| ≤ β1·β2 = 100 for all x (hand-derive, then test);
-  - bf16 saturation: fp32 tanh-saturation test on |x| → 1e4 (no precision loss in the caps).
-
-SILENT-BUG SURFACES:
-  - wrong β value: trains, worse model;
-  - softcap applied to the wrong branch (gate vs up swapped): trains, asymmetric saturation;
-  - computing tanh in bf16 instead of fp32: loses the cap's precision exactly when it matters.
-
-INTERVIEW QUESTION: why TWO different β's (4 and 25), not one shared softcap? — the gate
-branch multiplies the output directly (β1=4 keeps σ·tanh tightly scaled so the gate never
-saturates the output); the up branch carries the signal magnitude (β2=25 lets the FFN express
-a wide dynamic range while still capped). Asymmetric because the two branches play different
-roles: one decides "how much", the other decides "what".
-
-UPGRADE OF: nothing in repo (net-new). Wires into k3/model.py via ``DenseSiTUMLP`` (layer-1
-FFN) and into core/latent_moe.py (every routed + shared expert).
+Used by the layer-1 dense MLP (``DenseSiTUMLP``) and by every routed and shared expert in
+``core/latent_moe.py``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+import torch
 from torch import Tensor, nn
 
 from scratch_llm.k3.config import K3Config
 
+__all__ = ["SiTUConfig", "SiTUGLU", "DenseSiTUMLP", "situ_gate", "soft_cap", "situ_glu"]
+
 
 @dataclass(frozen=True)
 class SiTUConfig:
-    """The two softcaps — frozen so a wrong value fails loudly at construction."""
+    """The two softcaps."""
 
-    beta_gate: float = 4.0  # β1 on the gate branch (W_g)
-    beta_up: float = 25.0  # β2 on the up branch (W_u)
+    beta_gate: float = 4.0  # β1, gate branch (W_g)
+    beta_up: float = 25.0  # β2, up branch (W_u)
 
     @property
     def bound(self) -> float:
         return self.beta_gate * self.beta_up  # |f| ≤ 100
 
 
+def _math_dtype(*xs: Tensor) -> torch.dtype:
+    """fp32 for every low-precision input, fp64 if any input is fp64."""
+    dtype = torch.float32
+    for x in xs:
+        dtype = torch.promote_types(dtype, x.dtype)
+    return dtype
+
+
+def soft_cap(x: Tensor, beta: float) -> Tensor:
+    """β·tanh(x/β): odd, monotone, |·| < β, and |x − β·tanh(x/β)| ≤ |x|³/(3β²)."""
+    return beta * torch.tanh(x / beta)
+
+
+def situ_gate(g: Tensor, beta: float) -> Tensor:
+    """Gate branch β·tanh(g/β)·σ(g); the sigmoid reads the uncapped g. |·| ≤ β."""
+    return soft_cap(g, beta) * torch.sigmoid(g)
+
+
+def situ_glu(x_gate: Tensor, x_up: Tensor, beta_gate: float, beta_up: float) -> Tensor:
+    """SiTU-GLU in fp32 (fp64 for fp64 inputs), cast back to ``x_gate.dtype``."""
+    dtype = _math_dtype(x_gate, x_up)
+    with torch.autocast(x_gate.device.type, enabled=False):
+        f = situ_gate(x_gate.to(dtype), beta_gate) * soft_cap(x_up.to(dtype), beta_up)
+    return f.to(x_gate.dtype)
+
+
 class SiTUGLU(nn.Module):
-    """SiTU-GLU gated activation, applied to two pre-activation tensors.
+    """SiTU-GLU gated activation over the two pre-activation tensors.
 
-    f(x_gate, x_up) = [ β1 · tanh(x_gate / β1) ⊙ σ(x_gate) ] ⊙ [ β2 · tanh(x_up / β2) ]
-
-    Stateless: the W_g / W_u projections live in the caller (the expert or the dense MLP);
-    this module owns ONLY the gated activation. Computes the tanh branches in fp32 (the caps
-    are where precision matters most) and casts back.
+    Stateless: the W_g / W_u projections live in the caller; this module owns the activation.
     """
 
     def __init__(self, cfg: SiTUConfig | K3Config) -> None:
@@ -81,37 +84,26 @@ class SiTUGLU(nn.Module):
             self.beta_up = cfg.beta_up
 
     def forward(self, x_gate: Tensor, x_up: Tensor) -> Tensor:
-        # TODO(hand-build): author the activation. Derive the bound AS you write it:
-        #   β1·tanh(z/β1) ≤ β1 pointwise; σ ∈ [0,1]; so bracket_g ≤ β1, bracket_u ≤ β2;
-        #   product ≤ β1·β2. Compute the tanh branches in fp32, cast back to input dtype.
-        raise NotImplementedError(
-            "SiTU-GLU math — hand-build per the docstring derivation "
-            "(bound |f| ≤ β1·β2 = 100 must be proven, not assumed)."
-        )
+        return situ_glu(x_gate, x_up, self.beta_gate, self.beta_up)
+
+    def extra_repr(self) -> str:
+        return f"beta_gate={self.beta_gate}, beta_up={self.beta_up}"
 
 
 class DenseSiTUMLP(nn.Module):
-    """The layer-1 dense FFN: w_down( SiTU-GLU(w_gate x, w_up x) ). No biases.
+    """``down_proj(SiTU-GLU(gate_proj x, up_proj x))``, no biases — HF ``KimiMLP``.
 
-    This is the FFN for every layer ≤ ``cfg.first_k_dense`` (layer 1 at full scale; FACTS A2).
-    Same SiTU-GLU activation as the LatentMoE experts, just dense — no routing, no latent
-    down-project. Returns the delta only; the K3Block adds the residual.
-
-    Assembly swap-in (k3/model.py K3Block, the dense-FFN branch):
-        from scratch_llm.k3.core.situ import DenseSiTUMLP
-        self.ffn = DenseSiTUMLP(cfg.hidden_size, cfg.moe.dense_intermediate, cfg)
+    The FFN of every layer before ``cfg.first_k_dense`` (layer 1 at full scale) and the shape of
+    the LatentMoE shared experts. Parameter names match the checkpoint
+    (``mlp.{gate,up,down}_proj``). Returns the delta; the block adds the residual.
     """
 
-    def __init__(self, hidden_size: int, intermediate: int, cfg: K3Config) -> None:
+    def __init__(self, hidden_size: int, intermediate: int, cfg: SiTUConfig | K3Config) -> None:
         super().__init__()
-        self.w_gate = nn.Linear(hidden_size, intermediate, bias=False)  # W_g
-        self.w_up = nn.Linear(hidden_size, intermediate, bias=False)  # W_u
-        self.w_down = nn.Linear(intermediate, hidden_size, bias=False)  # W_o
+        self.gate_proj = nn.Linear(hidden_size, intermediate, bias=False)  # W_g
+        self.up_proj = nn.Linear(hidden_size, intermediate, bias=False)  # W_u
+        self.down_proj = nn.Linear(intermediate, hidden_size, bias=False)  # W_o
         self.act = SiTUGLU(cfg)
 
     def forward(self, x: Tensor) -> Tensor:
-        # TODO(hand-build): project gate & up → SiTU-GLU → project down. Trivial once SiTUGLU
-        #   lands; the whole point is exercising the activation's bound, not this plumbing.
-        raise NotImplementedError(
-            "DenseSiTUMLP.forward — depends on SiTUGLU.forward (build that first)."
-        )
+        return self.down_proj(self.act(self.gate_proj(x), self.up_proj(x)))

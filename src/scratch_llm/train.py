@@ -14,6 +14,9 @@ Correctness invariants (tested in tests/test_train.py):
 - **Checkpoint round-trip:** save → load restores the step and every parameter.
 - **Reproducibility:** two runs with the same seed produce an identical loss history.
 - **It learns:** on a structured corpus the loss drops well below log(vocab_size).
+
+The same loop trains K3 (``k3.model.K3Model``); see :func:`train` for the three K3 branches and
+:func:`build_k3_from_checkpoint` for its checkpoints (gates: tests/test_k3_train.py).
 """
 
 from __future__ import annotations
@@ -23,12 +26,17 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
 import torch.distributed as dist
 from torch import Tensor
 
+from scratch_llm.k3 import config as k3_config
+from scratch_llm.k3.core.gated_mla import GatedMLA
+from scratch_llm.k3.model import K3Model
+from scratch_llm.k3.muon import apply_k3_qk_clip, build_k3_optimizer
 from scratch_llm.model import ModelConfig, TransformerLM, cross_entropy
 from scratch_llm.moe import MoEConfig
 from scratch_llm.optim import (
@@ -71,30 +79,49 @@ def get_batch(
     )
 
 
+#: ``model_config["family"]`` of a K3 checkpoint. A ModelConfig payload has no "family" key, so
+#: TransformerLM checkpoints are byte-identical to the pre-K3 format and a payload without the key
+#: is a TransformerLM.
+_K3_FAMILY = "k3"
+
+
+def _config_payload(model: torch.nn.Module) -> dict[str, Any] | None:
+    """The checkpoint's ``model_config``: ``asdict(model.cfg)`` for a ``ModelConfig``, the same
+    tagged ``family=_K3_FAMILY`` for a ``K3Config``, None for anything else. ``asdict`` recurses
+    into the nested dataclasses and keeps tuples as tuples, so the payload is plain dicts, tuples
+    and scalars: ``torch.load(weights_only=True)`` reads it."""
+    cfg = getattr(model, "cfg", None)
+    if isinstance(cfg, ModelConfig):
+        return asdict(cfg)
+    if isinstance(cfg, k3_config.K3Config):
+        return {"family": _K3_FAMILY, **asdict(cfg)}
+    return None
+
+
 def save_checkpoint(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer | CombinedOptimizer | None,
     step: int,
     out: str | Path,
 ) -> None:
-    """Persist model + optimizer + step, and — when the module carries a ``ModelConfig`` at
-    ``.cfg`` (TransformerLM does) — the config itself, so ``build_model_from_checkpoint``
-    can rebuild the model from the file alone (A2 checkpoint chaining).
+    """Persist model + optimizer + step, and — when the module carries a ``ModelConfig`` or a
+    ``K3Config`` at ``.cfg`` (TransformerLM and K3Model do) — the config itself, so
+    ``build_model_from_checkpoint`` / ``build_k3_from_checkpoint`` can rebuild the model from the
+    file alone (A2 checkpoint chaining).
 
     ``optimizer=None`` writes a **stage-boundary** snapshot (model+config+step only): the
-    pinned stage-transition policy — each speedrun stage starts a FRESH optimizer with its
-    own LR warmup, because resuming Adam/Muon moments across an ``adamw↔muon_adamw`` switch
-    is undefined. Intra-run snapshots (same stage, same optimizer) keep optimizer state via
+    pinned stage-transition policy — each speedrun stage starts a FRESH optimizer (pretrain:
+    cosine LR with warmup; SFT: constant lr), because resuming Adam/Muon moments across an
+    ``adamw↔muon_adamw`` switch is undefined. Intra-run snapshots (same stage, same optimizer) keep optimizer state via
     the ``checkpoint_every`` path in ``train()`` — a warm-start, not an exact resume (no
     RNG/start-step restore; see the module docstring).
     """
-    cfg = getattr(model, "cfg", None)
     torch.save(
         {
             "model": model.state_dict(),
             "optim": optimizer.state_dict() if optimizer is not None else None,
             "step": step,
-            "model_config": asdict(cfg) if isinstance(cfg, ModelConfig) else None,
+            "model_config": _config_payload(model),
         },
         out,
     )
@@ -121,6 +148,19 @@ def load_checkpoint(
     return int(ckpt["step"])
 
 
+def _read_model_config(src: str | Path, map_location: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load a checkpoint and a copy of its ``model_config`` payload (the caller pops fields);
+    a checkpoint without one fails loud."""
+    ckpt = torch.load(src, map_location=map_location, weights_only=False)
+    cfg_dict = ckpt.get("model_config")
+    if cfg_dict is None:
+        raise ValueError(
+            f"{src} carries no 'model_config' (pre-A2 format): construct the ModelConfig "
+            "yourself and use load_checkpoint, or re-save with save_checkpoint."
+        )
+    return ckpt, dict(cfg_dict)  # don't mutate the loaded dict
+
+
 def build_model_from_checkpoint(
     src: str | Path,
     map_location: str = "cpu",
@@ -131,18 +171,47 @@ def build_model_from_checkpoint(
     This is the rental safety-net and the joint the stage spine (A4 midtrain / A5 SFT /
     A6 chat) chains from. The strict ``load_state_dict`` is the kill-switch: a
     reconstructed config that shape-mismatches the weights fails loud here, never truncates.
+    A K3 checkpoint raises: it rebuilds with :func:`build_k3_from_checkpoint`.
     """
-    ckpt = torch.load(src, map_location=map_location, weights_only=False)
-    cfg_dict = ckpt.get("model_config")
-    if cfg_dict is None:
-        raise ValueError(
-            f"{src} carries no 'model_config' (pre-A2 format): construct the ModelConfig "
-            "yourself and use load_checkpoint, or re-save with save_checkpoint."
-        )
-    cfg_dict = dict(cfg_dict)  # don't mutate the loaded dict
+    ckpt, cfg_dict = _read_model_config(src, map_location)
+    if cfg_dict.get("family") == _K3_FAMILY:
+        raise ValueError(f"{src} holds a K3Model: rebuild it with build_k3_from_checkpoint")
     moe = cfg_dict.pop("moe", None)
     cfg = ModelConfig(**cfg_dict, moe=MoEConfig(**moe) if moe is not None else None)
     model = TransformerLM(cfg)
+    model.load_state_dict(ckpt["model"])
+    return model, int(ckpt["step"])
+
+
+def build_k3_from_checkpoint(
+    src: str | Path,
+    map_location: str = "cpu",
+) -> tuple[K3Model, int]:
+    """:func:`build_model_from_checkpoint` for a ``K3Model`` checkpoint; returns ``(model,
+    step)``. A separate entry point so that each returns one concrete type: the TransformerLM
+    callers (chat, vibe evals, serving) keep theirs.
+
+    The nested ``KDAConfig``, ``MLAConfig``, K3 ``MoEConfig`` and ``VisionConfig`` (None in the
+    mini presets) are rebuilt from their dicts. The tuple fields (``kda_layers``, ``mla_layers``,
+    ``vision.merge_kernel``) need nothing: ``asdict`` and pickle both keep tuples, so the rebuilt
+    frozen config equals the saved one field for field. The strict ``load_state_dict`` then
+    overwrites the whole init, the Quantile-Balancing bias included (a parameter, so it is in the
+    state dict).
+    """
+    ckpt, fields = _read_model_config(src, map_location)
+    if fields.pop("family", None) != _K3_FAMILY:
+        raise ValueError(
+            f"{src} holds a TransformerLM: rebuild it with build_model_from_checkpoint"
+        )
+    kda, mla, moe, vision = (fields.pop(name) for name in ("kda", "mla", "moe", "vision"))
+    cfg = k3_config.K3Config(
+        **fields,
+        kda=k3_config.KDAConfig(**kda),
+        mla=k3_config.MLAConfig(**mla),
+        moe=k3_config.MoEConfig(**moe),
+        vision=k3_config.VisionConfig(**vision) if vision is not None else None,
+    )
+    model = K3Model(cfg)
     model.load_state_dict(ckpt["model"])
     return model, int(ckpt["step"])
 
@@ -169,13 +238,12 @@ def save_consolidated_checkpoint(
     consolidated = optimizer.consolidated_state_dict()  # collective; rank 0 gets the dict
     if dist.is_available() and dist.is_initialized() and dist.get_rank() != 0:
         return
-    cfg = getattr(model, "cfg", None)
     torch.save(
         {
             "model": model.state_dict(),
             "optim_consolidated": consolidated,
             "step": step,
-            "model_config": asdict(cfg) if isinstance(cfg, ModelConfig) else None,
+            "model_config": _config_payload(model),
             "world_size": optimizer.world_size,
             "format": "consolidated",
         },
@@ -224,6 +292,7 @@ class TrainConfig:
     verbose: bool = False
     # F1/F4 — close-the-loop knobs (defaults reproduce the A1 AdamW/fp32 path exactly).
     optimizer: str = "adamw"  # "adamw" | "muon_adamw" (Muon on block matrices + AdamW on the rest)
+    # | "k3_muon" (K3Model only: k3.muon.build_k3_optimizer, Per-Head Muon + AdamW, one lr).
     muon_momentum: float = 0.95
     amp_dtype: str | None = None  # None ⇒ fp32; "bf16" ⇒ bf16 autocast (no GradScaler needed)
     compile: bool = False  # torch.compile the forward (the cheap-MFU win on the GPU box)
@@ -242,7 +311,7 @@ class TrainConfig:
 
 
 def _val_loss(
-    model: TransformerLM,
+    model: TransformerLM | K3Model,
     val_data: np.ndarray,
     context_length: int,
     eval_batches: int,
@@ -279,7 +348,7 @@ def _val_loss(
 def train(
     cfg: TrainConfig,
     train_data: np.ndarray,
-    model: TransformerLM,
+    model: TransformerLM | K3Model,
     val_data: np.ndarray | None = None,
     eval_hook: Callable[[int, float], None] | None = None,
     optimizer_out: list[torch.optim.Optimizer | CombinedOptimizer] | None = None,
@@ -314,16 +383,56 @@ def train(
     optimizer becomes :class:`~scratch_llm.utils.dist_train.DistMuonAdamW` (optimizer-embedded
     ZeRO-2 — the grad clip moves inside its step), the NaN guard is collective (all ranks
     raise together), and logging/eval/checkpointing are rank-0-only.
+
+    K3 (a ``K3Model``) takes the same loop, with three branches keyed on the model type:
+
+    - ``optimizer="k3_muon"`` builds ``k3.muon.build_k3_optimizer`` (Per-Head Muon on the
+      matrices, AdamW on embeddings, head, norms, convs and AttnRes queries) with ONE learning
+      rate for both halves: the schedule below writes the same lr into every group. That is the
+      Kimi K2 / Moonlight recipe as torchtitan runs it (``kimi_k2_7/config_registry.py``:334-348
+      passes the same ``lr`` to Muon, with ``match_rms_adamw``, and to AdamW). Per unit lr, Muon's
+      update has element RMS 0.2 (0.2·√max(rows, cols) times an orthogonal factor, ``k3.muon``),
+      the low end of AdamW's typical 0.2-0.4 (Moonlight §2.2), so one lr moves both halves at a
+      matched per-element rate.
+      ``"muon_adamw"`` is refused: its split keys on TransformerLM names and would put
+      ``embed_tokens`` and the AttnRes pseudo-queries on Muon. ``"adamw"`` is the plain baseline.
+    - ``qk_clip`` switches on every ``GatedMLA``'s max-logit observer (a module flag, not a config
+      field; it stays on after ``train()`` returns) and applies ``k3.muon.apply_k3_qk_clip`` after
+      the step. KDA is never clipped: its q and k are L2-normalized.
+    - The MoE branch runs as it does for a TransformerLM MoE: ``aux.total`` is a zero (Quantile
+      Balancing has no auxiliary loss) and ``moe_update_biases()`` then assigns every router bias
+      from the step's routing statistics. The order is weights, clip, bias. Only weights → clip
+      matters (the clip rescales the stepped weights, as in K2); the bias update commutes with
+      both, since it reads only the forward's statistics and writes only the bias, which neither
+      the optimizer (``requires_grad=False``) nor the clip touches. torchtitan runs the bias as a
+      pre-step hook and the clip as a post-step one (``components/optimizer/optimizer.py``:523,
+      ``kimi_k2_7/qk_clip.py``:198).
+
+    K3 has no MTP head, and distributed K3 is refused by the MoE guard (the QB statistics would
+    need an all-reduce first; ``k3.core.latent_moe.QBStats``).
     """
+    is_k3 = isinstance(model, K3Model)
     if cfg.amp_dtype not in (None, "bf16"):
         raise ValueError(
             f"amp_dtype must be None or 'bf16' (fp16 needs a GradScaler); got {cfg.amp_dtype!r}"
         )
-    if cfg.qk_clip and not model.cfg.track_attn_logits:
+    if cfg.qk_clip and not is_k3 and not model.cfg.track_attn_logits:
         raise ValueError(
             "qk_clip=True requires ModelConfig.track_attn_logits=True — the clip reads the "
             "per-head max-logit observer; without it every step would be a silent no-op"
         )
+    if cfg.optimizer == "k3_muon" and not is_k3:
+        raise ValueError(
+            "optimizer='k3_muon' partitions parameters by K3 module names "
+            "(k3.muon.k3_param_groups): it needs a K3Model"
+        )
+    if is_k3 and cfg.optimizer == "muon_adamw":
+        raise ValueError(
+            "a K3Model trains with optimizer='k3_muon' or 'adamw': 'muon_adamw' splits on "
+            "TransformerLM names and would put embed_tokens and the AttnRes queries on Muon"
+        )
+    if cfg.optimizer == "k3_muon" and cfg.muon_profile_ns:
+        raise ValueError("muon_profile_ns times optim.Muon; PerHeadMuon has no Newton–Schulz timer")
     distributed = dist.is_available() and dist.is_initialized()
     rank = dist.get_rank() if distributed else 0
     if distributed and model.cfg.moe is not None:
@@ -343,6 +452,10 @@ def train(
         # data loss. Torch RNG stays synced (identical init); only the batch sampler diverges.
         np.random.seed(cfg.seed + 1000 * rank + 1)
     model.to(cfg.device)
+    if cfg.qk_clip and is_k3:
+        for module in model.modules():
+            if isinstance(module, GatedMLA):
+                module.track_max_logits = True
     if distributed:
         # Belt-and-suspenders identical init: seeding before construction already makes the
         # replicas identical, but a caller that seeded ranks differently would silently
@@ -374,6 +487,15 @@ def train(
             weight_decay=cfg.weight_decay,
             muon_momentum=cfg.muon_momentum,
             max_l2_norm=cfg.grad_clip,
+        )
+    elif cfg.optimizer == "k3_muon":
+        optimizer = build_k3_optimizer(
+            model,
+            lr=cfg.max_lr,
+            adamw_lr=cfg.max_lr,  # one lr for both halves (docstring); the schedule rewrites it
+            weight_decay=cfg.weight_decay,
+            betas=cfg.betas,
+            momentum=cfg.muon_momentum,
         )
     else:
         optimizer = build_optimizer(
@@ -412,12 +534,13 @@ def train(
             else nullcontext()
         )
         with amp_ctx:
-            if model.cfg.mtp_depth > 0:
+            if not is_k3 and model.cfg.mtp_depth > 0:
                 # F2a MTP: main CE (+ MoE aux if present) + λ·CE one token further ahead.
                 # Reads model.cfg (not forward_model) — the same wrapper-safe pattern as the
                 # MoE branch below (torch.compile / DDP wrappers forward the call but the
-                # ORIGINAL module carries the config).
-                logits, aux, mtp_logits = forward_model.forward_train(inputs, targets)
+                # ORIGINAL module carries the config). forward_train too: torch.compile compiles
+                # forward only, and its wrapper resolves forward_train to this same bound method.
+                logits, aux, mtp_logits = model.forward_train(inputs, targets)
                 loss = cross_entropy(logits, targets) + cfg.mtp_loss_weight * cross_entropy(
                     mtp_logits[:, :-1], targets[:, 1:]
                 )
@@ -425,6 +548,7 @@ def train(
                     loss = loss + aux.total
             elif model.cfg.moe is not None:
                 # MoE: add the sparse-regularization terms (seq-wise balance + router z-loss) to CE.
+                # K3 is aux-loss-free: its aux.total is a zero.
                 logits, aux = forward_model(inputs, return_aux=True)
                 loss = cross_entropy(logits, targets) + aux.total
             else:
@@ -439,7 +563,10 @@ def train(
             # F9 QK-Clip: rescale any head whose observed max logit exceeded τ this step. The
             # observer recorded S_max on this step's forward (pre-update weights); the clip lands
             # post-step, in weight space — exactly the Kimi-K2 MuonClip ordering.
-            apply_qk_clip(model, cfg.qk_clip_tau)
+            if is_k3:
+                apply_k3_qk_clip(model, cfg.qk_clip_tau)
+            else:
+                apply_qk_clip(model, cfg.qk_clip_tau)
         if model.cfg.moe is not None:
             # Aux-loss-free load balancing: nudge the router biases after the weight update.
             model.moe_update_biases()
@@ -505,6 +632,7 @@ def train(
 
 __all__ = [
     "TrainConfig",
+    "build_k3_from_checkpoint",
     "build_model_from_checkpoint",
     "get_batch",
     "load_checkpoint",

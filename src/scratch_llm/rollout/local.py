@@ -14,15 +14,14 @@ from collections.abc import Sequence
 import torch
 from torch import Tensor
 
-from scratch_llm.model import TransformerLM
 from scratch_llm.rollout.types import Rollout
-from scratch_llm.sampling import SamplingParams, generate_with_logprobs
+from scratch_llm.sampling import CausalLM, SamplingParams, generate_with_logprobs
 
 
 class LocalBackend:
     """A :class:`~scratch_llm.rollout.types.RolloutClient` backed by the local model."""
 
-    def __init__(self, model: TransformerLM, device: str = "cpu") -> None:
+    def __init__(self, model: CausalLM, device: str = "cpu") -> None:
         self.model = model
         self.device = device
 

@@ -14,8 +14,7 @@ from dataclasses import dataclass
 import torch
 
 from scratch_llm.eval.protocols import TextTokenizer
-from scratch_llm.model import TransformerLM
-from scratch_llm.sampling import SamplingParams, generate
+from scratch_llm.sampling import CausalLM, SamplingParams, generate
 
 
 @dataclass(frozen=True)
@@ -26,7 +25,7 @@ class GenResult:
 
 @torch.no_grad()
 def evaluate_generative(
-    model: TransformerLM,
+    model: CausalLM,
     tokenizer: TextTokenizer,
     examples: Sequence[tuple[str, str]],
     grade_fn: Callable[[str, str], bool],

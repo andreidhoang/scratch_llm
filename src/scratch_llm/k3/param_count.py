@@ -1,35 +1,31 @@
-"""K3 track (delegated) — parameter accounting from a K3Config.
+"""Parameter accounting for a K3Config.
 
-The K0 gate (ROADMAP §3): reproduce the released checkpoint's parameter count from config
-fields alone, and pin Moonshot's "activated parameters" convention. Verified 2026-07-31
-against the HF reference code (modeling_kimi_linear.py / modeling_kimi_k3.py) and the HF
-API dtype breakdown. Ledger entry: docs/k3/FACTS.md A18.
+Reproduces the released checkpoint's parameter count from config fields alone, and pins
+Moonshot's "activated parameters" convention. Verified 2026-07-31 against the HF reference code
+(modeling_kimi_linear.py / modeling_kimi_k3.py) and the HF API dtype breakdown.
 
-Conventions (each one verified against the reference code, not assumed):
+Conventions (each verified against the reference code, not assumed):
 
-- **No biases anywhere.** Every nn.Linear in the text model is bias=False; the KDA short
-  convs are created without a bias argument (fla default). Evidence for conv bias=False:
-  with it, the total overshoots the HF count by 2,543,616; without it (and with the
-  census-measured A_log shape, below) the closure is exact.
+- **No biases anywhere.** Every nn.Linear in the text model is bias=False; the KDA short convs
+  are created without a bias argument (fla default). Evidence: with a conv bias, the total
+  overshoots the HF count by 2,543,616; without it, the closure is exact.
 - **Untied embeddings** (tie_word_embeddings=false): embed_tokens and lm_head are separate
   V×H matrices.
 - **AttnRes**: per decoder layer, 2 RMSNorm(H) + 2 Linear(H→1); model level, 1 RMSNorm(H) +
   1 Linear(H→1). Learned pseudo-queries ARE the Linear(H→1) weights (q_l = w_l).
-- **RMSNorm** contributes H per instance; layer norms: input + post-attention per layer,
-  plus the final norm.
-- **Activated params** (Moonshot's 104.2B): text total − inactive routed experts
-  − token embedding. The lm_head IS counted as active (computed for every token); the
-  embedding table is not (sparse lookup). This convention reproduces 104.2B to 4 digits:
-  104.19B.
+- **RMSNorm** contributes H per instance; layer norms: input + post-attention per layer, plus
+  the final norm.
+- **Activated params** (Moonshot's 104.2B): text total − inactive routed experts − token
+  embedding. The lm_head IS counted as active (computed for every token); the embedding table
+  is not (sparse lookup). This convention reproduces 104.2B to 4 digits: 104.19B.
 
 Closure status (k3_full): EXACT — computed total 2,779,931,837,184 == HF safetensors metadata
 total, residual 0, pinned by tests/test_k3_param_count.py. The pre-census residual of 2,208
-(0.00000008%) was A_log: the HF reference code constructs it per-head ([num_heads=96]) but the
-checkpoint measurably carries per-dim [128] tensors in all 69 KDA layers (R0 census), and
-69×(128−96) = 2,208 exactly — only a_log_size=128 closes the accounting. Do NOT "fix"
-a_log_size back to 96: [128] is what the checkpoint carries. The released code's per-head
-framing does not explain the [128] shapes; how A_log maps to the per-channel decay Diag(α) is
-OPEN — a pre-flight requirement for the core/kda.py hand-build (docs/k3/FACTS.md A18).
+(0.00000008%) was A_log: the checkpoint stores [128] per KDA layer but only [0:96] are live —
+entries [96:128] are a dead zero-init tail with no gradient path (docs/k3/KDA_ALOG_MAPPING.md).
+This accounting counts storage (128), matching the checkpoint total; the KDA layer's live
+parameter is 96 (config.py). Do not "fix" a_log_size back to 96 here — that would break the
+checkpoint-total closure.
 Cross-checks that also close EXACTLY: non-routed-expert params = 57.19B (HF API: "BF16 57.2B");
 vision encoder alone = 401.2M (tech report: "401M"); activated = 104.19B (report: "104.2B").
 """
@@ -90,7 +86,7 @@ def _kda_attn_params(cfg: K3Config) -> int:
     total = 5 * h * p  # q_proj, k_proj, v_proj, g_proj (full-rank), o_proj
     total += h * k.decay_rank + k.decay_rank * p  # f_a_proj, f_b_proj
     total += h * k.num_heads  # b_proj (beta, per head)
-    total += k.a_log_size  # A_log (checkpoint [128], NOT num_heads=96 — FACTS A18)
+    total += k.a_log_size  # A_log storage (checkpoint [128]; only [0:96] are live)
     total += p  # dt_bias
     total += k.head_dim  # o_norm (FusedRMSNormGated, per head dim)
     total += 3 * p * k.conv_kernel_size  # short convs on q/k/v, bias=False

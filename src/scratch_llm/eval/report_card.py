@@ -21,8 +21,7 @@ from scratch_llm.eval.generative import GenResult, evaluate_generative
 from scratch_llm.eval.metrics import BpbResult, bits_per_byte
 from scratch_llm.eval.multiple_choice import MCResult, evaluate_multiple_choice
 from scratch_llm.eval.protocols import TextTokenizer
-from scratch_llm.model import TransformerLM
-from scratch_llm.sampling import SamplingParams
+from scratch_llm.sampling import CausalLM, SamplingParams
 
 
 @dataclass(frozen=True)
@@ -83,7 +82,7 @@ class ReportCard:
 
 
 def build_report_card(
-    model: TransformerLM,
+    model: CausalLM,
     tokenizer: TextTokenizer,
     *,
     val_tokens: Sequence[int] | np.ndarray | None = None,
@@ -99,6 +98,10 @@ def build_report_card(
     ``val_tokens`` + ``val_num_bytes`` drive ``val_bpb`` (skip both to omit it). ``mc_tasks`` /
     ``gen_tasks`` are the ARC/MMLU and GSM8K/HumanEval families; the MC tasks' accuracies feed the
     CORE-style aggregate (centered on each task's ``random_baseline``).
+
+    ``context_length`` is the ``val_bpb`` scoring window; None reads ``model.cfg.context_length``,
+    or ``max_position_embeddings`` for a K3Model, which has no positional window
+    (:func:`~scratch_llm.eval.metrics.bits_per_byte`).
     """
     bpb: BpbResult | None = None
     if val_tokens is not None and val_num_bytes is not None:

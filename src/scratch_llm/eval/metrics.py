@@ -58,9 +58,15 @@ def bits_per_byte(
         raise ValueError("need at least 2 tokens to score a transition")
     ctx = context_length
     if ctx is None:
-        ctx = getattr(getattr(model, "cfg", None), "context_length", None)
+        # Dense models carry a RoPE window (cfg.context_length); K3 has no positional encoding,
+        # so its scoring window is the length it was configured for (cfg.max_position_embeddings).
+        cfg = getattr(model, "cfg", None)
+        ctx = getattr(cfg, "context_length", None) or getattr(cfg, "max_position_embeddings", None)
     if ctx is None:
-        raise ValueError("context_length is required (model has no .cfg.context_length)")
+        raise ValueError(
+            "context_length is required (model has no .cfg.context_length or "
+            ".cfg.max_position_embeddings)"
+        )
     ctx = int(ctx)
 
     if hasattr(model, "eval"):

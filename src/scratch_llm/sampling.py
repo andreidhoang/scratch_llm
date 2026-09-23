@@ -11,6 +11,23 @@ Correctness invariants (tested in tests/test_sampling.py):
 - **Nucleus:** top-p keeps the smallest high-probability set and renormalizes.
 - **Stop:** generation halts the moment a ``stop_ids`` token is emitted.
 - **Budget:** without a stop token, exactly ``max_tokens`` tokens are produced.
+
+Two model families decode through the same loop (:data:`CausalLM`). ``use_cache=True`` prefills
+the prompt once and then feeds one token per forward; ``use_cache=False`` recomputes the whole
+window every step and is the oracle the cached path must match.
+
+- **TransformerLM:** the cache is a :class:`~scratch_llm.model.KVCache`; the window is
+  ``cfg.context_length`` (RoPE's table ends there).
+- **K3Model:** the cache is a :class:`~scratch_llm.k3.model.HybridState` (one constant-size KDA
+  state per KDA layer, a growing latent KV per MLA layer), allocated in the embedding's dtype,
+  which is the dtype every activation starts in. K3 has no positional encoding, so nothing in
+  the recurrence caps the length; ``cfg.max_position_embeddings`` plays the window's role. The
+  uncached path crops to it, like the dense one. The cached path cannot: a KDA state is a sum
+  over every token it has read, and no operation removes the oldest one. So a cached K3 decode
+  whose prompt plus budget exceeds the window is refused before the first forward, instead of
+  silently computing something the oracle does not. Past the window, the uncached K3 logprobs
+  score the cropped context, so they no longer equal a teacher-forced re-score of the whole
+  sequence (``LocalBackend.score`` does not crop; on a TransformerLM it raises there instead).
 """
 
 from __future__ import annotations
@@ -21,7 +38,12 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 
+from scratch_llm.k3.model import HybridState, K3Model
 from scratch_llm.model import KVCache, TransformerLM, softmax
+
+#: The models this module decodes. Each carries its own cache type and window; see
+#: :func:`_context_length` and :func:`_decode_cache`.
+CausalLM = TransformerLM | K3Model
 
 
 @dataclass(frozen=True)
@@ -73,9 +95,45 @@ def _logprob_of(logits: Tensor, token_id: int) -> float:
     return float(torch.log_softmax(logits, dim=-1)[token_id])
 
 
+def _context_length(model: CausalLM) -> int:
+    """The most trailing tokens one forward may see: ``context_length`` for a TransformerLM,
+    ``max_position_embeddings`` for a K3Model (module docstring).
+
+    This and :func:`_decode_cache` both test for K3Model and decode every other model as dense,
+    so they agree on every type. A wrapper around a TransformerLM, such as ``torch.compile``'s
+    OptimizedModule, is not an instance of it but forwards ``cfg``, ``blocks`` and the cache
+    argument, and decodes on the dense path as it did before K3 existed."""
+    if isinstance(model, K3Model):
+        return model.cfg.max_position_embeddings
+    return model.cfg.context_length
+
+
+def _decode_cache(
+    model: CausalLM, n_prompt: int, max_tokens: int, device: str
+) -> KVCache | HybridState:
+    """An empty cache for one stream. For K3, refuse up front when ``n_prompt + max_tokens``
+    exceeds the window: the cached loop feeds every generated token back (the last one too), so
+    the state would grow past the window the uncached oracle crops to, and a recurrent state
+    cannot drop its oldest tokens. It is the bound the dense cache hits too, as an IndexError on
+    RoPE's table. The check reads the budget, not the tokens produced, so the refusal never
+    depends on what was sampled (a stop token that would have ended the decode early)."""
+    if isinstance(model, K3Model):
+        limit = model.cfg.max_position_embeddings
+        if n_prompt + max_tokens > limit:
+            raise ValueError(
+                f"a cached K3 decode needs prompt + max_tokens <= max_position_embeddings, got "
+                f"{n_prompt} + {max_tokens} > {limit}: the recurrent state cannot drop its "
+                "oldest tokens the way the uncached window does. Shorten the prompt or the "
+                "budget, or pass use_cache=False."
+            )
+        dtype = model.embed_tokens.weight.dtype
+        return HybridState.empty(model.cfg, 1, torch.device(device), dtype)
+    return KVCache(len(model.blocks))
+
+
 @torch.no_grad()
 def _decode(
-    model: TransformerLM,
+    model: CausalLM,
     prompt_ids: Sequence[int],
     params: SamplingParams,
     device: str,
@@ -92,13 +150,13 @@ def _decode(
         torch.manual_seed(params.seed)
 
     model.eval()
-    context_length = model.cfg.context_length
+    context_length = _context_length(model)
     ids = list(prompt_ids)
     generated: list[int] = []
     logprobs: list[float] = []
 
     if use_cache:
-        cache = KVCache(len(model.blocks))
+        cache = _decode_cache(model, len(ids), params.max_tokens, device)
         x = torch.tensor([ids[-context_length:]], dtype=torch.long, device=device)
         logits = model(x, cache)[0, -1]  # prefill the prompt
         for _ in range(params.max_tokens):
@@ -125,7 +183,7 @@ def _decode(
 
 
 def generate(
-    model: TransformerLM,
+    model: CausalLM,
     prompt_ids: Sequence[int],
     params: SamplingParams,
     device: str = "cpu",
@@ -136,16 +194,18 @@ def generate(
     Returns the generated token ids only (not the prompt). Stops at ``max_tokens`` or as
     soon as a ``stop_ids`` token is emitted (the stop token is included in the output).
 
-    ``use_cache=True`` uses a :class:`KVCache` (prefill the prompt once, then attend each new
-    token against the cache); ``use_cache=False`` recomputes the full prefix each step and is
-    the correctness oracle. The two paths must produce identical output. Both assume the whole
-    sequence stays within ``model.cfg.context_length`` (no sliding-window eviction yet).
+    ``use_cache=True`` uses the model's cache (prefill the prompt once, then feed each new
+    token against it); ``use_cache=False`` recomputes the window each step and is the
+    correctness oracle. The two paths must produce identical output while the whole sequence
+    fits the window. Past it, the uncached path crops to the last window of tokens; the dense
+    cached path has no sliding-window eviction yet, and the K3 cached path refuses the call
+    (module docstring).
     """
     return _decode(model, prompt_ids, params, device, use_cache)[0]
 
 
 def generate_with_logprobs(
-    model: TransformerLM,
+    model: CausalLM,
     prompt_ids: Sequence[int],
     params: SamplingParams,
     device: str = "cpu",

@@ -43,8 +43,9 @@ Contract for the v0 (pure functions, shapes exactly as FLA's naive, so the same 
     scratch_llm.mastery.paths.chunked_wy -- its scalar-gate diff partner -- does.
 
 The equation is the whole spec. Write it from a blank file in ``src/scratch_llm/k3/core/kda.py``
-after reading ``oss/fla/fla/ops/kda/naive.py`` once and closing it; then diff. Agents never
-write under ``k3/core/`` (HANDCRAFTED.md); this file is the agent's half -- the failing tests.
+after reading ``oss/fla/fla/ops/kda/naive.py`` once and closing it; then diff. This file is the
+tests half of the contract -- whoever writes ``kda.py`` (the file-ownership boundary was removed
+2026-09-22; see AGENTS.md) diffs against it.
 """
 
 from __future__ import annotations

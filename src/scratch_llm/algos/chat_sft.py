@@ -25,6 +25,8 @@ the mask but the ``<|assistant|>`` marker outside it?"
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 import torch
 from torch import Tensor
@@ -84,12 +86,18 @@ def chat_sft_step(
     *,
     normalize_constant: float = 1.0,
     grad_clip: float | None = 1.0,
+    after_step: Callable[[], object] | None = None,
 ) -> dict[str, Tensor]:
     """One gradient step on a pre-collated chat batch; returns ``sft_microbatch_train_step`` meta.
 
     Composes the ``algos/sft.py`` primitives unchanged: score labels → masked-NLL microbatch step
     (which calls ``backward()``) → optional global-ℓ₂ grad clip → ``optimizer.step()``. The caller
     reads ``meta["mean_token_nll"]`` — the ``log V``-comparable overfit/underfit signal.
+
+    ``after_step`` runs once right after ``optimizer.step()``, in the slot ``train()`` gives
+    K3's Quantile Balancing: ``K3Model.moe_update_biases`` assigns the router biases from the
+    routing statistics this step's forward recorded, so it must run once per step, not once
+    per epoch.
     """
     optimizer.zero_grad()
     out = get_response_log_probs(model, batch["input_ids"], batch["labels"])
@@ -102,6 +110,8 @@ def chat_sft_step(
     if grad_clip is not None:
         gradient_clipping(model.parameters(), grad_clip)
     optimizer.step()
+    if after_step is not None:
+        after_step()
     return meta
 
 
@@ -116,11 +126,13 @@ def chat_sft_epoch(
     normalize_constant: float = 1.0,
     grad_clip: float | None = 1.0,
     device: str = "cpu",
+    after_step: Callable[[], object] | None = None,
 ) -> list[dict[str, Tensor]]:
     """One pass over ``conversations`` in contiguous batches; returns per-batch metadata.
 
     Deterministic order (no shuffle) so an epoch is reproducible under a fixed seed — the caller
     (speedrun ``stage_sft``) loops epochs until ``sft_steps`` gradient steps are taken.
+    ``after_step`` is handed to every :func:`chat_sft_step`.
     """
     if batch_size < 1:
         raise ValueError(f"batch_size must be ≥ 1, got {batch_size}")
@@ -140,6 +152,7 @@ def chat_sft_epoch(
                 optimizer,
                 normalize_constant=normalize_constant,
                 grad_clip=grad_clip,
+                after_step=after_step,
             )
         )
     return metas

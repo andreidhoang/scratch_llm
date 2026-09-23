@@ -19,6 +19,11 @@ Run it: ``python -m scratch_llm.speedrun --nano`` (or ``scripts/speedrun.sh``).
 Model sizes (git show 07f3de4:docs/archive/FRONTIER_2026_ABLATIONS.md §2): ``--depth 20`` ⇒ d_model 1280 / 10 heads /
 480.4M params measured at vocab 32768 (the oft-quoted 561M holds only at nanochat's old 2^16
 vocab) — the d20 headline; ``--nano`` ⇒ depth 4 in seconds.
+
+``model_family="k3_mini"`` runs the same chain on a K3Model instead of the depth-scaled
+TransformerLM: the ``mini_k3_d12`` preset, or ``SpeedrunConfig.k3_config``. ``train()`` pretrains it
+(``k3_muon`` by default), SFT keeps Quantile Balancing running after every step, and eval, sample
+and chat decode it through ``k3.model.HybridState`` (``sampling``).
 """
 
 from __future__ import annotations
@@ -34,10 +39,20 @@ import numpy as np
 from scratch_llm.chat import CHAT_SPECIAL_TOKENS, EOT, Message
 from scratch_llm.data.shards import load_dataset_tokens, load_tokenizer
 from scratch_llm.eval import ReportCard, build_report_card
+from scratch_llm.k3.config import K3Config, mini_k3_d12
+from scratch_llm.k3.model import K3Model
+from scratch_llm.k3.muon import build_k3_optimizer
 from scratch_llm.model import ModelConfig, TransformerLM
-from scratch_llm.sampling import SamplingParams, generate
+from scratch_llm.sampling import CausalLM, SamplingParams, generate
 from scratch_llm.tokenizer import Tokenizer, train_bpe
-from scratch_llm.train import TrainConfig, build_model_from_checkpoint, save_checkpoint, train
+from scratch_llm.train import (
+    TrainConfig,
+    build_k3_from_checkpoint,
+    build_model_from_checkpoint,
+    save_checkpoint,
+    train,
+)
+from scratch_llm.utils.seeding import seed_everything
 
 # A tiny built-in corpus for the nano pre-flight (no external data needed). Repeated at runtime so
 # the tokenizer has something to merge and the loader has enough tokens for a window.
@@ -59,7 +74,9 @@ class SpeedrunConfig:
     train_steps: int = 1000
     batch_size: int = 32
     lr: float = 3e-3
-    optimizer: str = "muon_adamw"  # F1 default; "adamw" for the A1 baseline
+    # None ⇒ the family's default (_FAMILY_OPTIMIZER): "muon_adamw" (F1) for dense, "k3_muon" for
+    # k3_mini; "adamw" is the A1 baseline for either.
+    optimizer: str | None = None
     amp_dtype: str | None = None  # "bf16" on the GPU (NOT with compile on sm120 — see train.py)
     compile: bool = False
     device: str = "cpu"
@@ -91,6 +108,24 @@ class SpeedrunConfig:
     # becomes a single id inside vocab_size — required by midtrain/SFT/chat, A4–A6).
     # False (default) is byte-identical to the pre-A3 path: no specials anywhere.
     chat: bool = False
+    # "dense" (default): the depth-scaled TransformerLM. "k3_mini": a K3Model; depth is ignored
+    # and k3_config fixes the shape.
+    model_family: str = "dense"
+    # The k3_mini architecture; None ⇒ the mini_k3_d12 preset. Its vocab_size and
+    # max_position_embeddings are replaced by the tokenizer's vocab and context_length, as the
+    # preset's are. A tiny config makes the whole chain take seconds on CPU (tests/test_k3_e2e.py).
+    k3_config: K3Config | None = None
+
+    def __post_init__(self) -> None:
+        """Refuse a family the stages cannot build before any stage runs (BPE training at a real
+        vocab is not free), and a k3_config that would be ignored."""
+        if self.model_family not in _FAMILY_OPTIMIZER:
+            raise ValueError(
+                f"model_family must be one of {sorted(_FAMILY_OPTIMIZER)}, "
+                f"got {self.model_family!r}"
+            )
+        if self.k3_config is not None and self.model_family != "k3_mini":
+            raise ValueError("k3_config sets the k3_mini architecture: pass model_family='k3_mini'")
 
 
 @dataclass
@@ -106,12 +141,23 @@ class SpeedrunResult:
     chat_reply: str | None = None
 
     def summary(self) -> str:
+        family = self.config.model_family
+        shape = f"depth={self.config.depth}" if family == "dense" else f"family={family}"
         return (
-            f"speedrun depth={self.config.depth} | params={self.n_params:,} | "
+            f"speedrun {shape} | params={self.n_params:,} | "
             f"tokens={self.n_tokens:,} | {self.seconds:.1f}s\n"
             f"stages: {' → '.join(self.stages)}\n{self.report_card.to_markdown()}\n"
             f"sample: {self.sample!r}"
         )
+
+
+#: The pretrain optimizer of each model family when ``SpeedrunConfig.optimizer`` is None.
+_FAMILY_OPTIMIZER = {"dense": "muon_adamw", "k3_mini": "k3_muon"}
+
+
+def _pretrain_optimizer(cfg: SpeedrunConfig) -> str:
+    """The optimizer kind pretrain runs: ``cfg.optimizer``, or the family's default."""
+    return _FAMILY_OPTIMIZER[cfg.model_family] if cfg.optimizer is None else cfg.optimizer
 
 
 def model_config_for_depth(depth: int, vocab_size: int, context_length: int) -> ModelConfig:
@@ -160,10 +206,11 @@ def _train_tokenizer(
 # -----------------------------------------------------------------------------------------------
 # A2 — the chained stage functions. Each stage is independently callable; stage boundaries
 # persist config-carrying, optimizer-FREE checkpoints into cfg.work_dir (the pinned
-# stage-transition policy: every stage builds a fresh optimizer with its own LR warmup —
-# resuming Adam/Muon moments across an adamw↔muon_adamw switch is undefined; intra-stage
-# optimizer-state snapshots are train()'s checkpoint_every path, threaded here via
-# SpeedrunConfig.checkpoint_every). A4 midtrain / A5 SFT / A6 chat hang off this spine.
+# stage-transition policy: every stage builds a fresh optimizer — pretrain: cosine LR with
+# warmup; SFT: constant lr — because resuming Adam/Muon moments across an adamw↔muon_adamw
+# switch is undefined; intra-stage optimizer-state snapshots are train()'s checkpoint_every
+# path, threaded here via SpeedrunConfig.checkpoint_every). A4 midtrain / A5 SFT / A6 chat hang
+# off this spine.
 # -----------------------------------------------------------------------------------------------
 
 
@@ -203,20 +250,34 @@ def stage_tokenizer(cfg: SpeedrunConfig) -> tuple[Tokenizer, np.ndarray, list[in
 
 def stage_pretrain(
     cfg: SpeedrunConfig, tokens: np.ndarray, vocab_size: int
-) -> tuple[TransformerLM, str]:
-    """Stage 2 — pretrain, or rebuild from the stage-boundary artifact when resume=True."""
+) -> tuple[CausalLM, str]:
+    """Stage 2 — pretrain, or rebuild from the stage-boundary artifact when resume=True.
+
+    ``model_family="k3_mini"`` builds ``cfg.k3_config`` (None ⇒ ``mini_k3_d12()``) with the
+    tokenizer's vocab and ``max_position_embeddings`` = the context length, and trains it with
+    ``k3_muon`` unless ``cfg.optimizer`` says otherwise. The forward has no positional encoding,
+    so that length is not an architectural limit; it is the decode window (``sampling``). The
+    K3 init is seeded from ``cfg.seed``, so two runs with one seed build the same weights.
+    """
+    k3 = cfg.model_family == "k3_mini"
     ckpt = _work_path(cfg, "pretrain.pt")
     if cfg.resume and ckpt is not None and ckpt.exists():
-        model, _ = build_model_from_checkpoint(ckpt)
+        model, _ = build_k3_from_checkpoint(ckpt) if k3 else build_model_from_checkpoint(ckpt)
         model.to(cfg.device)
         return model, "pretrain[resumed]"
 
-    model_cfg = model_config_for_depth(cfg.depth, vocab_size, cfg.context_length)
-    # GPU training path: fused SDPA avoids materializing the (B,H,S,S) score matrix and OOM'ing;
-    # qk_norm is the F1-run default and bounds attention logits (F9 falsifier regime).
-    sdpa = "cuda" in str(cfg.device)
-    model_cfg = replace(model_cfg, use_sdpa=sdpa, qk_norm=True)
-    model = TransformerLM(model_cfg)
+    if k3:
+        base = mini_k3_d12() if cfg.k3_config is None else cfg.k3_config
+        k3_cfg = replace(base, vocab_size=vocab_size, max_position_embeddings=cfg.context_length)
+        seed_everything(cfg.seed)  # the init draws from torch's global RNG
+        model = K3Model(k3_cfg)
+    else:
+        model_cfg = model_config_for_depth(cfg.depth, vocab_size, cfg.context_length)
+        # GPU training path: fused SDPA avoids materializing the (B,H,S,S) score matrix and
+        # OOM'ing; qk_norm is the F1-run default and bounds attention logits (F9 falsifier regime).
+        sdpa = "cuda" in str(cfg.device)
+        model_cfg = replace(model_cfg, use_sdpa=sdpa, qk_norm=True)
+        model = TransformerLM(model_cfg)
     intra_ckpt = _work_path(cfg, "pretrain_ckpt.pt")
     if cfg.checkpoint_every and intra_ckpt is None:
         raise ValueError(
@@ -231,7 +292,7 @@ def stage_pretrain(
             max_lr=cfg.lr,
             warmup_steps=max(1, cfg.train_steps // 20),
             seed=cfg.seed,
-            optimizer=cfg.optimizer,
+            optimizer=_pretrain_optimizer(cfg),
             amp_dtype=cfg.amp_dtype,
             compile=cfg.compile,
             device=cfg.device,
@@ -246,7 +307,7 @@ def stage_pretrain(
     return model, "pretrain"
 
 
-def stage_midtrain(cfg: SpeedrunConfig, model: TransformerLM) -> TransformerLM:
+def stage_midtrain(cfg: SpeedrunConfig, model: CausalLM) -> CausalLM:
     """Stage 3 slot — chat-mix midtraining. 0 steps = skipped; A4 wires the body."""
     if cfg.midtrain_steps == 0:
         return model
@@ -288,13 +349,23 @@ def _load_chat_set(cfg: SpeedrunConfig) -> list[list[Message]]:
     return conversations
 
 
-def stage_sft(cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer) -> TransformerLM:
+def stage_sft(cfg: SpeedrunConfig, model: CausalLM, tokenizer: Tokenizer) -> CausalLM:
     """Stage 4 — assistant-masked SFT over the chat template (A5). 0 steps = skipped.
 
     Runs ``cfg.sft_steps`` gradient steps, cycling ``chat_sft_epoch`` over the chat set, under the
-    pinned stage-transition policy (a FRESH AdamW with its own warmup — resuming Muon/Adam moments
-    across the pretrain→SFT boundary is undefined). Requires ``chat=True`` so the tokenizer carries
-    the specials; a stage-boundary checkpoint is written to ``work_dir/sft.pt``.
+    pinned stage-transition policy (a FRESH optimizer — resuming Muon/Adam moments across the
+    pretrain→SFT boundary is undefined — at a constant ``cfg.lr``, weight decay 0, no warmup).
+    Requires ``chat=True`` so the tokenizer carries the specials; a stage-boundary checkpoint is
+    written to ``work_dir/sft.pt``.
+
+    The fresh optimizer is AdamW for a TransformerLM. A K3Model fine-tunes with the kind it
+    pretrained with: ``k3_muon`` (``build_k3_optimizer``, one lr for both halves as in
+    ``train()``) or ``adamw``. Moonlight (arXiv:2502.16982 §3.5.1, Table 6) finds Muon-pretrained
+    + Muon-fine-tuned best, and a fine-tuning optimizer that differs from the pretraining one
+    loses Muon's advantage; Kimi K2 (arXiv:2507.20534 §3.1) fine-tunes with Muon for that reason.
+    A K3Model also runs Quantile Balancing (``moe_update_biases``) after every step, as
+    ``train()`` does: the router biases keep balancing on the SFT batches (eval and decode
+    forwards record no statistics, so nothing moves them after training).
     """
     if cfg.sft_steps == 0:
         return model
@@ -303,9 +374,10 @@ def stage_sft(cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer) -
             "sft_steps>0 needs chat=True — the tokenizer must be trained with CHAT_SPECIAL_TOKENS "
             "(the assistant mask is defined by the special positions)."
         )
+    k3 = isinstance(model, K3Model)
     ckpt = _work_path(cfg, "sft.pt")
     if cfg.resume and ckpt is not None and ckpt.exists():
-        model, _ = build_model_from_checkpoint(ckpt)
+        model, _ = build_k3_from_checkpoint(ckpt) if k3 else build_model_from_checkpoint(ckpt)
         model.to(cfg.device)
         return model
 
@@ -314,7 +386,12 @@ def stage_sft(cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer) -
 
     conversations = _load_chat_set(cfg)
     pad_id = tokenizer.encode(EOT)[0]  # eot is inert as pad (always masked off)
-    optimizer = build_optimizer(model, kind="adamw", lr=cfg.lr, weight_decay=0.0)
+    optimizer = (
+        build_k3_optimizer(model, lr=cfg.lr, adamw_lr=cfg.lr, weight_decay=0.0)
+        if k3 and _pretrain_optimizer(cfg) == "k3_muon"
+        else build_optimizer(model, kind="adamw", lr=cfg.lr, weight_decay=0.0)
+    )
+    after_step = model.moe_update_biases if k3 else None
     model.train()
     steps_done = 0
     while steps_done < cfg.sft_steps:
@@ -326,6 +403,7 @@ def stage_sft(cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer) -
             batch_size=min(cfg.batch_size, len(conversations)),
             pad_token_id=pad_id,
             device=cfg.device,
+            after_step=after_step,
         ):
             steps_done += 1
             if steps_done >= cfg.sft_steps:
@@ -336,7 +414,7 @@ def stage_sft(cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer) -
 
 
 def stage_eval(
-    cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer, tokens: np.ndarray
+    cfg: SpeedrunConfig, model: CausalLM, tokenizer: Tokenizer, tokens: np.ndarray
 ) -> ReportCard:
     """Stage 5 — bits-per-byte on a tail slice. NOTE (nano): with the built-in repeated corpus
     this is in-sample — the pre-flight proves the metric computes; a real run supplies a held-out
@@ -355,7 +433,7 @@ def stage_eval(
 
 
 def stage_sample(
-    cfg: SpeedrunConfig, model: TransformerLM, tokenizer: Tokenizer, prompt_ids: list[int]
+    cfg: SpeedrunConfig, model: CausalLM, tokenizer: Tokenizer, prompt_ids: list[int]
 ) -> str:
     """Stage 6 — greedy-ish sample from the trained model (the talking artifact)."""
     budget = max(1, min(cfg.sample_tokens, cfg.context_length - len(prompt_ids) - 1))
@@ -369,7 +447,8 @@ def stage_sample(
 
 
 def run_speedrun(cfg: SpeedrunConfig) -> SpeedrunResult:
-    """Chain the stages: tokens → pretrain → [midtrain] → [sft] → eval → sample."""
+    """Chain the stages: tokens → pretrain → [midtrain] → [sft] → eval → sample → [chat], for
+    either model family."""
     t0 = time.perf_counter()
     stages: list[str] = []
 
@@ -451,7 +530,18 @@ def main() -> None:
     p.add_argument("--steps", type=int, default=1000)
     p.add_argument("--batch", type=int, default=32)
     p.add_argument("--lr", type=float, default=3e-3)
-    p.add_argument("--optimizer", choices=["adamw", "muon_adamw"], default="muon_adamw")
+    p.add_argument(
+        "--optimizer",
+        choices=["adamw", "muon_adamw", "k3_muon"],
+        default=None,
+        help="Pretrain optimizer; default: the family's (muon_adamw dense, k3_muon k3_mini).",
+    )
+    p.add_argument(
+        "--model-family",
+        choices=sorted(_FAMILY_OPTIMIZER),
+        default="dense",
+        help="k3_mini: the mini_k3_d12 preset (--depth is ignored).",
+    )
     p.add_argument("--bf16", action="store_true", help="bf16 autocast (GPU).")
     p.add_argument(
         "--compile", action="store_true", help="torch.compile (not with --bf16 on sm120)."
@@ -483,6 +573,8 @@ def main() -> None:
         "pretrain steps (the d20 spot-preemption safety-net; 0 = never).",
     )
     args = p.parse_args()
+    if args.nano and args.model_family != "dense":
+        p.error("--nano is the dense pre-flight (depth 4); run k3_mini without --nano")
 
     cfg = (
         _nano_config()
@@ -503,6 +595,7 @@ def main() -> None:
             work_dir=args.work_dir,
             resume=args.resume,
             checkpoint_every=args.checkpoint_every,
+            model_family=args.model_family,
         )
     )
     print(run_speedrun(cfg).summary())

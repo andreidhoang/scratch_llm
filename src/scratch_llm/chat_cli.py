@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 
 from scratch_llm.chat import CHAT_SPECIAL_TOKENS, EOT, Message, render_for_completion
 from scratch_llm.model import TransformerLM
-from scratch_llm.sampling import SamplingParams, generate
+from scratch_llm.sampling import CausalLM, SamplingParams, generate
 from scratch_llm.serving.batched import batched_greedy_decode
 from scratch_llm.tokenizer import Tokenizer
 
@@ -55,10 +55,15 @@ def _clean_answer(
 
 @dataclass
 class ChatSession:
-    """A stateful multi-turn chat over a trained model. ``reply`` appends the user turn, generates,
-    appends the assistant turn, and returns the assistant text."""
+    """A stateful multi-turn chat over a trained model. ``reply`` generates the assistant turn to
+    a user turn, appends both, and returns the assistant text.
 
-    model: TransformerLM
+    ``model`` is either family :func:`~scratch_llm.sampling.generate` decodes. Each reply
+    re-renders the whole history and decodes it from an empty cache, so a K3Model needs the
+    rendered history plus ``max_tokens`` to fit its ``max_position_embeddings`` (the cached K3
+    decode refuses otherwise; ``sampling`` module docstring)."""
+
+    model: CausalLM
     tokenizer: Tokenizer
     max_tokens: int = 256
     temperature: float = 0.0
@@ -70,9 +75,12 @@ class ChatSession:
         self._special_ids = _special_ids(self.tokenizer)
 
     def reply(self, user_text: str) -> str:
-        """Add a user turn, greedily generate the assistant turn (stopping at eot), return its text."""
-        self.history.append(Message("user", user_text))
-        prompt = render_for_completion(self.history, self.tokenizer)
+        """Greedily generate the assistant turn to ``user_text`` (stopping at eot), then add both
+        turns to the history and return the assistant text. The history changes only after the
+        decode succeeds, so a refused one (a K3 history past its window) leaves no dangling user
+        turn for the next reply to render."""
+        turn = Message("user", user_text)
+        prompt = render_for_completion([*self.history, turn], self.tokenizer)
         gen = generate(
             self.model,
             prompt,
@@ -84,7 +92,7 @@ class ChatSession:
             device=self.device,
         )
         text = _clean_answer(gen, self.tokenizer, self._eot_id, self._special_ids)
-        self.history.append(Message("assistant", text))
+        self.history += [turn, Message("assistant", text)]
         return text
 
     def reset(self) -> None:
@@ -115,7 +123,7 @@ def batch_reply(
 
 
 def repl(
-    model: TransformerLM, tokenizer: Tokenizer, *, max_tokens: int = 256, device: str = "cpu"
+    model: CausalLM, tokenizer: Tokenizer, *, max_tokens: int = 256, device: str = "cpu"
 ) -> None:  # pragma: no cover - interactive
     """Minimal read-eval-print loop: type a line, get a reply; Ctrl-D / empty EOF to exit."""
     session = ChatSession(model, tokenizer, max_tokens=max_tokens, device=device)

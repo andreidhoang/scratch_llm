@@ -1,14 +1,15 @@
-"""k3.core — HAND-BUILT territory (see ../HANDCRAFTED.md).
+"""k3.core — the K3 mechanisms. Live status and next steps: ``scratch_llm/k3/__init__.py``.
 
-Every module in this package is authored by the human, line by line, from primary sources.
-Agents are READ-ONLY here: adversarial tests and written proposals live outside this
-package; nothing agent-authored lands in `core/`. Mastery bar per module: the delete test —
-`rm` the file, rewrite it from its own derivation docstring.
+No file-ownership boundary (removed 2026-09-22, ``../AGENTS.md``): anyone may implement any
+module here. Build order (later modules depend on earlier ones):
+1. situ.py        — SiTU-GLU (β1=4 gate / β2=25 up, |f| ≤ 100)                      ✅ built
+2. kda.py         — Kimi Delta Attention — critical path                             🟠 FLA tol open
+3. gated_mla.py   — MLA, NoPE with live unrotated rope dims, sigmoid gate pre-o_proj ✅ built
+4. latent_moe.py  — sigmoid router at full width + Quantile Balancing, 0.5× latent   ✅ built
+5. attn_res.py    — Block AttnRes before every sublayer, learned pseudo-queries      ✅ built
+   norm.py        — the one K3 RMSNorm (HF KimiRMSNorm op order), used by all of the above
 
-Build order (serial — do not parallelize hand-builds):
-1. `situ.py`        — SiTU-GLU warmup (β1=4 gate / β2=25 up, |f| ≤ 100)      [K5 prep]
-2. `kda.py`         — Kimi Delta Attention: the critical path (K2 rung)
-3. `gated_mla.py`   — MLA + full-rank output gate, NoPE                      [K3 rung]
-4. `latent_moe.py`  — sigmoid router + Quantile Balancing at 0.5× latent     [K5 rung]
-5. `attn_res.py`    — Block AttnRes, learned pseudo-queries                  [K4 rung]
+Gate per module is its test file ``tests/test_k3_<module>.py`` (parity vs an in-file transcription
+of Moonshot's HF reference, fp64 path equivalence, planted-bug mutations must fail) — not who
+wrote it.
 """
